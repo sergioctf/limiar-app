@@ -1,0 +1,121 @@
+import type { Run } from "@/types";
+import { metersToKm, mpsToSecPerKm } from "@/lib/utils";
+
+const STRAVA_API_BASE = "https://www.strava.com/api/v3";
+
+export interface StravaToken {
+  access_token: string;
+  refresh_token: string;
+  expires_at: number;
+  athlete?: { id: number; firstname: string; lastname: string };
+}
+
+export async function refreshStravaToken(
+  refreshToken: string
+): Promise<StravaToken> {
+  const res = await fetch("https://www.strava.com/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id: process.env.STRAVA_CLIENT_ID,
+      client_secret: process.env.STRAVA_CLIENT_SECRET,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
+  });
+  if (!res.ok) throw new Error("Failed to refresh Strava token");
+  return res.json();
+}
+
+export async function getStravaActivities(
+  accessToken: string,
+  page = 1,
+  perPage = 50,
+  after?: number
+): Promise<unknown[]> {
+  const params = new URLSearchParams({
+    page: String(page),
+    per_page: String(perPage),
+    ...(after ? { after: String(after) } : {}),
+  });
+  const res = await fetch(`${STRAVA_API_BASE}/athlete/activities?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("Failed to fetch Strava activities");
+  return res.json();
+}
+
+export async function getStravaActivity(
+  accessToken: string,
+  activityId: number
+): Promise<unknown> {
+  const res = await fetch(`${STRAVA_API_BASE}/activities/${activityId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error(`Failed to fetch activity ${activityId}`);
+  return res.json();
+}
+
+/** Convert a raw Strava activity JSON to our internal Run type */
+export function stravaActivityToRun(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  activity: any,
+  userId: string
+): Partial<Run> {
+  const distKm = metersToKm(activity.distance ?? 0);
+  const movingTime = activity.moving_time ?? 0;
+  const avgSpeed = activity.average_speed ?? 0;
+  const avgPace = avgSpeed > 0 ? mpsToSecPerKm(avgSpeed) : null;
+
+  return {
+    user_id: userId,
+    strava_activity_id: activity.id,
+    source: "strava",
+    name: activity.name ?? "Corrida",
+    date: activity.start_date_local
+      ? activity.start_date_local.split("T")[0]
+      : new Date().toISOString().split("T")[0],
+    type: detectRunType(activity),
+    distance_km: distKm,
+    duration_seconds: activity.elapsed_time ?? movingTime,
+    moving_time_seconds: movingTime,
+    elapsed_time_seconds: activity.elapsed_time ?? null,
+    avg_pace_seconds_per_km: avgPace ? Math.round(avgPace) : null,
+    avg_speed_mps: avgSpeed || null,
+    max_speed_mps: activity.max_speed ?? null,
+    avg_hr: activity.average_heartrate ?? null,
+    max_hr: activity.max_heartrate ?? null,
+    elevation_gain_m: activity.total_elevation_gain ?? null,
+    avg_cadence: activity.average_cadence
+      ? Math.round(activity.average_cadence * 2)
+      : null,
+    calories: activity.calories ?? null,
+    suffer_score: activity.suffer_score ?? null,
+    map_polyline:
+      activity.map?.summary_polyline ?? activity.map?.polyline ?? null,
+    device_name: activity.device_name ?? null,
+    strava_raw_json: activity,
+  };
+}
+
+function detectRunType(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  activity: any
+): Run["type"] {
+  const name: string = (activity.name ?? "").toLowerCase();
+  const dist = metersToKm(activity.distance ?? 0);
+
+  if (name.includes("prova") || name.includes("race") || name.includes("corrida de rua"))
+    return "race";
+  if (name.includes("regenerat") || name.includes("recup") || name.includes("recovery"))
+    return "recovery";
+  if (name.includes("tiro") || name.includes("interval") || name.includes("repetição"))
+    return "intervals";
+  if (name.includes("tempo") || name.includes("ritmo") || name.includes("limiar"))
+    return "tempo";
+  if (name.includes("longão") || name.includes("longo") || dist >= 14)
+    return "long_run";
+  if (name.includes("leve") || name.includes("easy")) return "easy";
+  if (dist >= 14) return "long_run";
+  return "easy";
+}
