@@ -29,8 +29,8 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // Public paths
-  const publicPaths = ["/auth", "/auth/callback"];
+  // Public paths (não requerem autenticação)
+  const publicPaths = ["/auth", "/auth/callback", "/api/strava/webhook"];
   const isPublic = publicPaths.some((p) => pathname.startsWith(p));
 
   if (!user && !isPublic) {
