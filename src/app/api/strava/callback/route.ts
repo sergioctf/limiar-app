@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
       updated_at:    new Date().toISOString(),
     }, { onConflict: "user_id" });
 
-    return NextResponse.redirect(new URL("/settings?strava_connected=1", request.url));
+    return NextResponse.redirect(new URL("/settings?strava_connected=1", `${request.nextUrl.origin}/`));
   } catch (err) {
     console.error("Strava callback error:", err);
     return NextResponse.redirect(new URL("/settings?strava_error=connection_failed", request.url));
