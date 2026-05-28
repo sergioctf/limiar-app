@@ -221,17 +221,14 @@ export function SettingsContent({
         </div>
       )}
 
-      {/* Strava webhook note */}
-      <div className="card p-5 border-dashed opacity-60">
-        <h3 className="text-sm font-semibold text-surface-400 mb-1">Webhook automático (v2)</h3>
-        <p className="text-xs text-surface-500 leading-relaxed">
-          Para receber novas corridas automaticamente sem precisar sincronizar manualmente,
-          configure o webhook do Strava apontando para{" "}
-          <code className="bg-surface-700 px-1 rounded">
-            {typeof window !== "undefined" ? window.location.origin : "https://seu-app.vercel.app"}
-            /api/strava/webhook
-          </code>.
-          Disponível na v2.
+      {/* Webhook status */}
+      <div className="card p-4 border-green-500/20 bg-green-500/5">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          <span className="text-sm font-semibold text-green-400">Webhook ativo</span>
+        </div>
+        <p className="text-xs text-surface-500 mt-1 leading-relaxed">
+          Novas corridas no Strava aparecem aqui automaticamente, com análise IA gerada na hora.
         </p>
       </div>
     </div>
