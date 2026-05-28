@@ -38,18 +38,13 @@ export async function POST(_request: NextRequest) {
     .lte("date", weekEndStr)
     .order("date", { ascending: true });
 
-  // Fetch recent context (last 4 weeks)
-  const fourWeeksAgo = new Date(weekStart);
-  fourWeeksAgo.setDate(weekStart.getDate() - 28);
+  // Fetch ALL runs for full historical context (Groq 128k window)
   const { data: recentRuns } = await admin
     .from("runs")
     .select("*")
     .eq("user_id", user.id)
     .is("deleted_at", null)
-    .gte("date", fourWeeksAgo.toISOString().slice(0, 10))
-    .lt("date", weekStartStr)
-    .order("date", { ascending: false })
-    .limit(20);
+    .order("date", { ascending: false });
 
   // Fetch next goal for context
   const { data: goals } = await admin

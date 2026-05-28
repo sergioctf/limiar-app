@@ -220,15 +220,13 @@ export async function POST(request: NextRequest) {
     // 5. Análise IA (async — não bloqueia se demorar ou falhar)
     if (savedRunId) {
       try {
-        // Buscar corridas recentes para contexto da IA
-        const { data: recentRuns } = await admin
+        // Buscar TODAS as corridas para contexto completo da IA (128k context window)
+        const { data: allRuns } = await admin
           .from("runs")
           .select("*")
           .eq("user_id", userId)
           .is("deleted_at", null)
-          .neq("id", savedRunId)
-          .order("date", { ascending: false })
-          .limit(8);
+          .order("date", { ascending: false });
 
         // Montar objeto run completo para a IA
         const { data: savedRun } = await admin
@@ -238,7 +236,7 @@ export async function POST(request: NextRequest) {
           .single();
 
         if (savedRun) {
-          const feedback = await analyzeRun(savedRun, recentRuns ?? []);
+          const feedback = await analyzeRun(savedRun, allRuns ?? []);
           if (feedback) {
             await admin
               .from("runs")

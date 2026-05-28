@@ -28,17 +28,15 @@ export async function POST(
 
   if (!run) return NextResponse.json({ error: "Run not found" }, { status: 404 });
 
-  // Fetch recent runs for context (exclude current)
-  const { data: recentRuns } = await admin
+  // Fetch ALL runs for full context — Groq has 128k token window
+  const { data: allRuns } = await admin
     .from("runs")
     .select("*")
     .eq("user_id", user.id)
     .is("deleted_at", null)
-    .neq("id", params.id)
-    .order("date", { ascending: false })
-    .limit(8);
+    .order("date", { ascending: false });
 
-  const feedback = await analyzeRun(run, recentRuns ?? []);
+  const feedback = await analyzeRun(run, allRuns ?? []);
   if (!feedback) {
     return NextResponse.json({ error: "AI analysis failed or API key not set" }, { status: 500 });
   }
