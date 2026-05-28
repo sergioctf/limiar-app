@@ -2,6 +2,10 @@
 -- LIMIAR — Seed inicial
 -- Baseado no BACKUP_PRE_JUNE_26.md (relatório do treinador IA)
 -- Execute APÓS schema.sql no SQL Editor do Supabase
+--
+-- DATAS DINÂMICAS: usa CURRENT_DATE como âncora.
+-- A última corrida fica "3 dias atrás"; todas as anteriores
+-- são calculadas proporcionalmente, cobrindo ~4 meses.
 -- ============================================================
 
 DO $$
@@ -9,6 +13,7 @@ DECLARE
   v_user_id uuid;
   v_goal_meia uuid;
   v_goal_10k  uuid;
+  v_base      date := CURRENT_DATE - 3;   -- "última corrida" = 3 dias atrás
 BEGIN
 
   -- Pega o primeiro usuário cadastrado (o seu, após fazer login uma vez)
@@ -23,153 +28,153 @@ BEGIN
   -- ──────────────────────────────────────────────────────────
   INSERT INTO training_cycles (user_id, name, start_date, end_date, objective, notes, final_assessment)
   VALUES
-    (v_user_id, 'Fase 1 — Início e adaptação', '2024-01-28', '2024-02-08',
+    (v_user_id, 'Fase 1 — Início e adaptação', v_base - 118, v_base - 107,
      'Estabelecer regularidade e aprender a correr com continuidade',
      'Ainda sem divisão clara entre treino leve, moderado e forte. Motor e vontade, mas pouco controle.',
      'Capacidade de correr volumes maiores cedo, mas com FC muito alta. Risco de confundir "aguentar" com "estar adaptado".'),
-    (v_user_id, 'Fase 2 — Primeira melhora de ritmo', '2024-02-09', '2024-02-29',
+    (v_user_id, 'Fase 2 — Primeira melhora de ritmo', v_base - 106, v_base - 86,
      'Melhorar pace geral e começar a entender intensidades',
      'Pace melhora mas com muita oscilação e intensidade excessiva. FC alta em treinos fortes.',
      'Velocidade emergindo mas custo cardíaco ainda alto. Frequência de esforços fortes excessiva.'),
-    (v_user_id, 'Fase 3 — Consolidação dos primeiros longões', '2024-03-01', '2024-03-31',
+    (v_user_id, 'Fase 3 — Consolidação dos primeiros longões', v_base - 85, v_base - 55,
      'Construir base de endurance com longões progressivos',
      'Treinos de 8 km ficaram comuns. Longões passaram de 12 km. Dificuldade com calor.',
      'Ganhou resistência mas ainda sofria com calor e com longões feitos fortes demais.'),
-    (v_user_id, 'Fase 4 — Fase de performance', '2024-04-01', '2024-04-30',
+    (v_user_id, 'Fase 4 — Fase de performance', v_base - 54, v_base - 25,
      'Transição de completar treinos para treinar performance',
-     'Abril: deixou de apenas completar e passou a treinar performance. Tiros, longões com placa e géis.',
+     'Deixou de apenas completar e passou a treinar performance. Tiros, longões com placa e géis.',
      'Ritmo de 5:30–5:40 deixou de ser "prova" e passou a ser "forte controlado". Maior salto de patamar.'),
-    (v_user_id, 'Fase 5 — Consolidação e prova', '2024-05-01', NULL,
-     'Consolidar forma para a Meia Maratona do Rio (07/06/2024)',
+    (v_user_id, 'Fase 5 — Consolidação e prova', v_base - 24, NULL,
+     'Consolidar forma para a Meia Maratona',
      'Prova de 15 km divisor de águas. Longões acima de 17 km com sensação de sobra. Tapering se aproxima.',
      NULL);
 
   -- ──────────────────────────────────────────────────────────
-  -- CORRIDAS (25 treinos históricos + fase 5)
+  -- CORRIDAS (30 treinos históricos)
   -- ──────────────────────────────────────────────────────────
   INSERT INTO runs (user_id, source, name, date, type,
     distance_km, duration_seconds, avg_pace_seconds_per_km,
     avg_hr, elevation_gain_m, conditions, notes, coach_feedback, relevance)
   VALUES
   -- FASE 1
-  (v_user_id,'imported_ai','Primeira rodagem relevante','2024-01-28','easy',
+  (v_user_id,'imported_ai','Primeira rodagem relevante',(v_base - 118),'easy',
     5.04, 2000, 397, 173, 14,'SP',
     'Começou forte, depois quebrou o ritmo',
     'Primeiro registro do ciclo. Mostrou ponto inicial de capacidade.',6),
-  (v_user_id,'imported_ai','Rodagem contínua','2024-01-30','easy',
+  (v_user_id,'imported_ai','Rodagem contínua',(v_base - 116),'easy',
     6.00, 2184, 364, NULL, NULL,'SP',
     'Corrida contínua, mas ainda desorganizada',NULL,4),
-  (v_user_id,'imported_ai','Volume inicial alto','2024-02-02','easy',
+  (v_user_id,'imported_ai','Volume inicial alto',(v_base - 113),'easy',
     10.11, 3706, 366, 181, 42,'SP',
     'Difícil — volume subiu rápido demais para o estágio inicial',
     'Primeiro salto de volume. FC de 181 bpm indica esforço excessivo.',7),
   -- FASE 2
-  (v_user_id,'imported_ai','Treino moderado','2024-02-09','easy',
+  (v_user_id,'imported_ai','Treino moderado',(v_base - 106),'easy',
     8.01, 2988, 373, 163, 20,'SP',
     'Controlado, boa evolução de FC',
     'Primeira melhora de FC. Sinal de adaptação aeróbica.',6),
-  (v_user_id,'imported_ai','Intervalado espontâneo','2024-02-11','intervals',
+  (v_user_id,'imported_ai','Intervalado espontâneo',(v_base - 104),'intervals',
     7.16, 3326, 466, 154, NULL,'SP',
     'Tiros e caminhadas espontâneos — intervalado não planejado',NULL,4),
-  (v_user_id,'imported_ai','Blocos fortes','2024-02-23','tempo',
+  (v_user_id,'imported_ai','Blocos fortes',(v_base - 92),'tempo',
     8.14, 2910, 357, 164, NULL,'SP',
     'Blocos fortes, quase treino de ritmo',NULL,6),
-  (v_user_id,'imported_ai','Treino forte demais','2024-02-25','tempo',
+  (v_user_id,'imported_ai','Treino forte demais',(v_base - 90),'tempo',
     8.01, 2865, 358, 182, 32,'SP',
     'Terminou sem reserva — treino forte demais para o planejado',
     'Exemplo de treino feito além do planejado. FC 182 excessiva.',7),
-  (v_user_id,'imported_ai','Ritmo emergente','2024-02-27','tempo',
+  (v_user_id,'imported_ai','Ritmo emergente',(v_base - 88),'tempo',
     6.00, 2032, 338, 183, 25,'SP',
     'Ritmo forte, quase prova. FC 183.',
     'Mostrou velocidade emergente. Custo cardíaco ainda alto.',7),
   -- FASE 3
-  (v_user_id,'imported_ai','Moderado com FC menor','2024-03-02','easy',
+  (v_user_id,'imported_ai','Moderado com FC menor',(v_base - 84),'easy',
     6.05, 2042, 337, 175, NULL,'SP',
-    'Mesmo pace de 27/02 mas com FC menor — sinal de adaptação',
+    'Mesmo pace de semana anterior mas com FC menor — sinal de adaptação',
     'Comparação importante: mesmo pace (5:37) com FC menor (175 vs 183).',7),
-  (v_user_id,'imported_ai','Primeiro longão de verdade','2024-03-06','long_run',
+  (v_user_id,'imported_ai','Primeiro longão de verdade',(v_base - 80),'long_run',
     12.02, 4326, 360, 179, 43,'SP',
     'Máximo esforço. Primeiro longão expressivo do ciclo.',
     'Primeiro longão real. FC 179 ainda alta. Base de endurance estabelecida.',8),
-  (v_user_id,'imported_ai','Progressivo forte','2024-03-13','progression',
+  (v_user_id,'imported_ai','Progressivo forte',(v_base - 73),'progression',
     8.02, 2652, 330, 173, 33,'SP',
     'Terminou com sensação de que dava para correr +2 km',
     'Primeiro sinal forte de performance. Pace 5:30 com reserva.',9),
-  (v_user_id,'imported_ai','Rodagem leve','2024-03-18','easy',
+  (v_user_id,'imported_ai','Rodagem leve',(v_base - 68),'easy',
     4.86, 1757, 361, 165, NULL,'SP',
     'Controle, mas ainda não tão leve quanto ideal',NULL,4),
-  (v_user_id,'imported_ai','Resenha moderada','2024-03-20','easy',
+  (v_user_id,'imported_ai','Resenha moderada',(v_base - 66),'easy',
     7.19, 2504, 348, 170, NULL,'SP',
     '"Resenha" mas moderado/forte — FC 170',NULL,5),
-  (v_user_id,'imported_ai','Longão no calor','2024-03-21','long_run',
+  (v_user_id,'imported_ai','Longão no calor',(v_base - 65),'long_run',
     12.77, 5079, 398, 172, 29,'Calor, pausas, gel',
     'Muito difícil. Calor afetou muito. Pausas necessárias. Primeiro gel.',
     'Aprendizado sobre calor. Mostrou importância de sair cedo e hidratar.',7),
-  (v_user_id,'imported_ai','Primeiro treino realmente leve','2024-03-23','recovery',
+  (v_user_id,'imported_ai','Primeiro treino realmente leve',(v_base - 63),'recovery',
     6.02, 2326, 387, 163, NULL,'SP',
     'Um dos primeiros treinos realmente leves do ciclo',
     'Excelente exemplo de regenerativo. FC 163 adequada para o ritmo.',6),
-  (v_user_id,'imported_ai','Longão volume recorde','2024-03-28','long_run',
+  (v_user_id,'imported_ai','Longão volume recorde',(v_base - 58),'long_run',
     15.17, 5696, 375, 179, 105,'Casa Branca',
     'Máximo esforço. Grande salto de volume. 105m de altimetria.',
     'Grande salto de volume. Primeiro 15k. Altimetria expressiva.',9),
   -- FASE 4
-  (v_user_id,'imported_ai','Tiros de 1 km','2024-04-01','intervals',
+  (v_user_id,'imported_ai','Tiros de 1 km',(v_base - 54),'intervals',
     8.10, 3527, 435, 155, 29,'SP',
     '4 tiros de 1 km. FC controlada nos recoveries.',
     'Primeiro treino estruturado de tiros. FC 155 boa na recuperação.',8),
-  (v_user_id,'imported_ai','Longão 15k organizado','2024-04-04','long_run',
+  (v_user_id,'imported_ai','Longão 15k organizado',(v_base - 51),'long_run',
     15.00, 5511, 367, 175, NULL,'SP, calor',
     'Difícil por causa do calor. Mais organizado que longões anteriores.',
     'Longão mais organizado apesar do calor. Evolução na gestão.',8),
-  (v_user_id,'imported_ai','Regenerativo perfeito','2024-04-06','recovery',
+  (v_user_id,'imported_ai','Regenerativo perfeito',(v_base - 49),'recovery',
     5.74, 2678, 466, 134, 21,'SP',
     'Regenerativo. FC 134 — excelente para recuperação.',
     'Excelente regenerativo. FC 134 mostra controle real de intensidade.',7),
-  (v_user_id,'imported_ai','Tiros fortes de 1 km','2024-04-08','intervals',
+  (v_user_id,'imported_ai','Tiros fortes de 1 km',(v_base - 47),'intervals',
     8.33, 2960, 355, 166, 24,'SP',
     'Difícil mas controlado — 4 tiros fortes de 1 km',
     '4 tiros fortes de 1 km. FC 166 mostra equilíbrio intensidade x controle.',8),
-  (v_user_id,'imported_ai','Tempo run controlado','2024-04-10','tempo',
+  (v_user_id,'imported_ai','Tempo run controlado',(v_base - 45),'tempo',
     7.00, 2310, 330, 165, 27,'SP',
     'Limiar controlado. FC 165.',
     'Tempo run sustentado. Pace 5:30 com FC 165 mostra melhora de limiar.',8),
-  (v_user_id,'imported_ai','Longão pós-futebol','2024-04-12','long_run',
+  (v_user_id,'imported_ai','Longão pós-futebol',(v_base - 43),'long_run',
     13.00, 4604, 354, 168, 37,'Calor + futebol anterior',
     'Pernas destruídas do futebol. Ainda assim fez 13 km a 5:54/km.',
     'Mostrou força mental. Pernas pesadas mas completou com qualidade.',8),
-  (v_user_id,'imported_ai','Melhor longão até então','2024-04-19','long_run',
+  (v_user_id,'imported_ai','Melhor longão até então',(v_base - 36),'long_run',
     16.00, 5274, 330, 177, 42,'Placa + 2 géis',
     'Forte mas excelente. Placa e géis. Mudou patamar.',
     'Mudança de patamar. 16 km a 5:30/km com placa e géis.',10),
-  (v_user_id,'imported_ai','Recovery pós-longão forte','2024-04-21','recovery',
+  (v_user_id,'imported_ai','Recovery pós-longão forte',(v_base - 34),'recovery',
     8.01, 2905, 363, 165, 40,'Sol/calor',
-    'Tranquilo, absorveu bem o longão forte do dia 19.',
+    'Tranquilo, absorveu bem o longão forte.',
     'Boa recuperação após longão intenso. FC 165 adequada.',7),
-  (v_user_id,'imported_ai','Longão controlado com calor','2024-04-26','long_run',
+  (v_user_id,'imported_ai','Longão controlado com calor',(v_base - 29),'long_run',
     17.01, 6306, 371, 164, 49,'Calor, pausas',
     'Dava para mais. 17 km com sensação de reserva apesar do calor.',
     'Mostrou base consolidada. Maior distância até então.',9),
   -- FASE 5
-  (v_user_id,'imported_ai','Prova 15 km — melhor indicador','2024-05-03','race',
+  (v_user_id,'imported_ai','Prova 15 km — melhor indicador',(v_base - 22),'race',
     15.47, 4973, 321, 178, 36,'Prova',
     'Muito bem, com sobra. Km 15 perto de 5:00/km.',
     'Melhor prova/indicador do ciclo. Terminou forte. Projeção de meia confirmada.',10),
-  (v_user_id,'imported_ai','Prova 10 km — potencial real','2024-05-17','race',
+  (v_user_id,'imported_ai','Prova 10 km — potencial real',(v_base - 8),'race',
     10.13, 3306, 326, 168, 29,'Prova',
     'Sub-50 possível sem as pausas. Acompanhou namorada nos km 5, 6 e 8.',
     'Mostrou potencial real de sub-50. O que faltou foi contexto, não capacidade física.',9),
-  (v_user_id,'imported_ai','Tiros longos 3x2km','2024-05-20','intervals',
+  (v_user_id,'imported_ai','Tiros longos 3x2km',(v_base - 5),'intervals',
     9.50, 3589, 378, 155, 27,'SP',
     '3x2 km a ~5:00/km. Não sofreu nada nos tiros. FC 155.',
     '3x2 km a ~5:00 com sensação tranquila. Confirmou velocidade de ritmo.',9),
-  (v_user_id,'imported_ai','Longão com chuva e subida','2024-05-23','long_run',
+  (v_user_id,'imported_ai','Longão com chuva e subida',(v_base - 2),'long_run',
     17.92, 6401, 357, 172, 80,'Chuva + subida',
     'Dava para ter ido até 21 km. Chuva ajudou na termorregulação.',
     'Maior longão do ciclo. Confiança para a meia confirmada. Km 18 a 5:17/km.',10),
-  (v_user_id,'imported_ai','Steady pós-longão','2024-05-25','steady',
+  (v_user_id,'imported_ai','Steady pós-longão',v_base,'steady',
     8.00, 2682, 335, 166, 30,'SP',
-    'Correu super bem. Bloco central muito consistente. Dois dias após longão de 17,92 km.',
+    'Correu super bem. Bloco central muito consistente. Dois dias após longão.',
     'Mostrou recuperação e consistência. 8 km a 5:35/km com FC 166.',10);
 
   -- ──────────────────────────────────────────────────────────
@@ -178,32 +183,32 @@ BEGIN
   INSERT INTO run_tags (run_id, tag)
   SELECT r.id, t.tag FROM runs r
   CROSS JOIN (VALUES ('calor'),('difícil')) AS t(tag)
-  WHERE r.user_id = v_user_id AND r.date = '2024-03-21' ON CONFLICT DO NOTHING;
+  WHERE r.user_id = v_user_id AND r.date::date = v_base - 65 ON CONFLICT DO NOTHING;
 
   INSERT INTO run_tags (run_id, tag)
   SELECT r.id, t.tag FROM runs r
   CROSS JOIN (VALUES ('placa'),('gel'),('record-pace')) AS t(tag)
-  WHERE r.user_id = v_user_id AND r.date = '2024-04-19' ON CONFLICT DO NOTHING;
+  WHERE r.user_id = v_user_id AND r.date::date = v_base - 36 ON CONFLICT DO NOTHING;
 
   INSERT INTO run_tags (run_id, tag)
   SELECT r.id, t.tag FROM runs r
   CROSS JOIN (VALUES ('prova'),('record-pace'),('best-race')) AS t(tag)
-  WHERE r.user_id = v_user_id AND r.date = '2024-05-03' ON CONFLICT DO NOTHING;
+  WHERE r.user_id = v_user_id AND r.date::date = v_base - 22 ON CONFLICT DO NOTHING;
 
   INSERT INTO run_tags (run_id, tag)
   SELECT r.id, t.tag FROM runs r
   CROSS JOIN (VALUES ('prova'),('sub-50-potencial')) AS t(tag)
-  WHERE r.user_id = v_user_id AND r.date = '2024-05-17' ON CONFLICT DO NOTHING;
+  WHERE r.user_id = v_user_id AND r.date::date = v_base - 8 ON CONFLICT DO NOTHING;
 
   INSERT INTO run_tags (run_id, tag)
   SELECT r.id, t.tag FROM runs r
   CROSS JOIN (VALUES ('chuva'),('record-distancia'),('confiança-meia')) AS t(tag)
-  WHERE r.user_id = v_user_id AND r.date = '2024-05-23' ON CONFLICT DO NOTHING;
+  WHERE r.user_id = v_user_id AND r.date::date = v_base - 2 ON CONFLICT DO NOTHING;
 
   INSERT INTO run_tags (run_id, tag)
   SELECT r.id, t.tag FROM runs r
   CROSS JOIN (VALUES ('recuperação'),('consistente')) AS t(tag)
-  WHERE r.user_id = v_user_id AND r.date = '2024-05-25' ON CONFLICT DO NOTHING;
+  WHERE r.user_id = v_user_id AND r.date::date = v_base ON CONFLICT DO NOTHING;
 
   -- ──────────────────────────────────────────────────────────
   -- METAS
@@ -217,15 +222,15 @@ BEGIN
     status, strategy, notes)
   VALUES
   (v_goal_meia, v_user_id,
-   'Meia Maratona do Rio', 21.1, '2024-06-07',
+   'Meia Maratona', 21.1, (v_base + 13)::text,
    6996, 333, 7023, 6796, 6646, 'active',
    'Estratégia equilibrada: 0–5km a 5:25–5:28, 5–10km a 5:20–5:25, 10–15km a 5:15–5:22, 15–20km a 5:10–5:20, 20–21.1km a 4:55–5:10 se estiver inteiro.',
-   'Meta principal do ciclo. Sub-2h conservador. Alvo real entre 1h52–1h55. Calor do Rio é fator importante.'),
+   'Meta principal do ciclo. Sub-2h conservador. Alvo real entre 1h52–1h55. Calor é fator importante.'),
   (v_goal_10k, v_user_id,
    '10 km Sub-50', 10.0, NULL,
    2950, 295, 3050, 2950, 2850, 'upcoming',
    'km 1–2: 5:00–5:05. km 3–5: 4:55–5:00. km 6–8: 4:50–4:58. km 9: 4:45–4:55. km 10: tudo que sobrar.',
-   'Sub-50 é realista. O que faltou em 17/05 foi contexto, não capacidade.');
+   'Sub-50 é realista. O que faltou foi contexto, não capacidade.');
 
   -- ──────────────────────────────────────────────────────────
   -- ESTRATÉGIAS DE PROVA
@@ -234,21 +239,21 @@ BEGIN
     target_time_seconds, target_pace_seconds_per_km,
     strategy_text, hydration_plan, gel_plan, splits_json)
   VALUES
-  (v_user_id, v_goal_meia, 'Meia do Rio — Conservadora', 'conservative',
+  (v_user_id, v_goal_meia, 'Meia Maratona — Conservadora', 'conservative',
    7080, 334,
    'Alvo 1:56–1:58, pace médio 5:30–5:35/km. Boa se estiver calor, vento ou perna pesada. Não forçar nos primeiros 10 km.',
    'Água em todos os postos. Beber antes de ter sede. Boné se sol.',
    'Gel 1: 30–35 min. Gel 2: 1h05–1h10. Gel 3: 1h35–1h40 se sentir necessidade.',
    '{"splits":[{"range":"0–5km","pace":"5:35–5:40"},{"range":"5–10km","pace":"5:30–5:35"},{"range":"10–15km","pace":"5:25–5:30"},{"range":"15–20km","pace":"5:20–5:30"},{"range":"20–21.1km","pace":"5:05–5:20","note":"se sobrar"}]}'::jsonb),
 
-  (v_user_id, v_goal_meia, 'Meia do Rio — Equilibrada', 'balanced',
+  (v_user_id, v_goal_meia, 'Meia Maratona — Equilibrada', 'balanced',
    6840, 324,
    'Alvo 1:52–1:54, pace médio 5:18–5:24/km. Estratégia mais racional. Aguardar km 10 para soltar.',
    'Água em todos os postos possíveis. Isotônico se disponível.',
-   'Gel 1: 30–35 min. Gel 2: 1h05–1h10. Gel 3: 1h35–1h40 (recomendado no Rio pelo calor/umidade).',
+   'Gel 1: 30–35 min. Gel 2: 1h05–1h10. Gel 3: 1h35–1h40 (recomendado no calor/umidade).',
    '{"splits":[{"range":"0–5km","pace":"5:25–5:28"},{"range":"5–10km","pace":"5:20–5:25"},{"range":"10–15km","pace":"5:15–5:22"},{"range":"15–20km","pace":"5:10–5:20"},{"range":"20–21.1km","pace":"4:55–5:10","note":"se estiver inteiro"}]}'::jsonb),
 
-  (v_user_id, v_goal_meia, 'Meia do Rio — Agressiva', 'aggressive',
+  (v_user_id, v_goal_meia, 'Meia Maratona — Agressiva', 'aggressive',
    6540, 311,
    'Alvo sub-1:50, pace ~5:12/km. Só se: clima bom, descansado, FC controlada nos primeiros 5 km e pernas leves.',
    'Água em todos os postos. Boné obrigatório.',
@@ -292,10 +297,10 @@ BEGIN
     projections, recommendations, full_report)
   VALUES (
     v_user_id,
-    'Relatório Consolidado — Ciclo Jan a Mai 2024',
-    '2024-05-25', 'cycle', '2024-01-28', '2024-05-25',
+    'Relatório Consolidado — Ciclo de 4 meses',
+    v_base, 'cycle', v_base - 118, v_base,
 
-    'Você saiu de um corredor iniciante que corria forte sem muito controle para um corredor já preparado para performar bem em 10 km, 15 km e meia maratona. Nível atual: intermediário forte em construção, com endurance claramente consolidada. Projeção realista para a Meia do Rio: entre 1h52 e 1h56, com cenário agressivo de sub-1h50 se clima, pacing, hidratação e descanso encaixarem.',
+    'Você saiu de um corredor iniciante que corria forte sem muito controle para um corredor já preparado para performar bem em 10 km, 15 km e meia maratona. Nível atual: intermediário forte em construção, com endurance claramente consolidada. Projeção realista para a Meia: entre 1h52 e 1h56, com cenário agressivo de sub-1h50 se clima, pacing, hidratação e descanso encaixarem.',
 
     '1. Evolução rápida de volume: 5–6 km para quase 18 km em poucos meses.
 2. Capacidade de terminar forte: maior diferencial. Km 15 de prova perto de 5:00/km; km 18 a 5:17/km.
@@ -305,7 +310,7 @@ BEGIN
 6. Adaptação a gel e nutrição: já testou timing e hidratação.',
 
     '1. Tendência a começar forte demais: risco de quebra em provas longas.
-2. Calor: maior fator externo negativo (21/03, 04/04, 12/04, 26/04).
+2. Calor: maior fator externo negativo.
 3. FC alta em longões: muitos viraram treino de performance.
 4. Risco de excesso de intensidade: transforma treino leve em moderado/forte.
 5. Fortalecimento: não apareceu no histórico. Panturrilha e joelho em risco.
@@ -315,13 +320,13 @@ BEGIN
 
     'Volume semanal até a meia: semana atual 28–35 km → próxima 22–28 km → semana da prova 12–18 km + prova. Fortalecimento 2x/semana: panturrilha, agachamento unilateral, lunge, glúteo, prancha, mobilidade. Regra de calor: reduzir pace em 10–20 s/km. Beber antes de ter sede.',
 
-    '# Relatório Consolidado do Treinador IA — Jan a Mai 2024
+    '# Relatório Consolidado do Treinador IA
 
 ## Visão Geral
 
-Seu ciclo começou no fim de janeiro. Você tinha muita vontade de se desafiar, frequentemente transformava treinos leves em moderados/fortes. A virada começou em março com os primeiros longões expressivos.
+Seu ciclo começou há cerca de 4 meses. Você tinha muita vontade de se desafiar, frequentemente transformava treinos leves em moderados/fortes. A virada começou com os primeiros longões expressivos.
 
-O maior salto de performance veio entre abril e maio: 16 km a 5:30/km em 19/04 com placa e géis; 15,47 km a 5:21/km em prova em 03/05; 17,92 km a 5:57/km com chuva e subidas em 23/05, sentindo que poderia ter ido até 21 km.
+O maior salto de performance veio nas últimas semanas: 16 km a 5:30/km com placa e géis; 15,47 km a 5:21/km em prova; 17,92 km a 5:57/km com chuva e subidas, sentindo que poderia ter ido até 21 km.
 
 ## Resumo Executivo
 
@@ -334,5 +339,5 @@ Você saiu de um corredor iniciante que corria forte sem muito controle para um 
 - O jogo agora é: qual tempo você consegue fazer se correr com inteligência.'
   );
 
-  RAISE NOTICE 'Seed concluído. Corridas: 29, Ciclos: 5, Metas: 2, Estratégias: 4, Projeções: 15, Relatório: 1';
+  RAISE NOTICE 'Seed concluído. Corridas: 30, Ciclos: 5, Metas: 2, Estratégias: 4, Projeções: 15, Relatório: 1';
 END $$;

@@ -1,16 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, TrendingUp, Heart, Activity } from "lucide-react";
+import { BarChart3, TrendingUp, Heart, Activity, GitCompare } from "lucide-react";
 import { WeeklyVolumeChart } from "./WeeklyVolumeChart";
 import { MonthlyVolumeChart } from "./MonthlyVolumeChart";
 import { PaceTrendChart } from "./PaceTrendChart";
 import { LongRunProgressChart } from "./LongRunProgressChart";
 import { HeartRateTrendChart } from "./HeartRateTrendChart";
+import { EvolutionChart } from "./EvolutionChart";
 import { groupByWeek, groupByMonth, buildPaceTrend } from "@/lib/utils";
 import type { Run } from "@/types";
 
-type Tab = "volume" | "pace" | "heart" | "longrun";
+type Tab = "volume" | "pace" | "heart" | "longrun" | "evolution";
 
 interface Props { runs: Run[] }
 
@@ -25,10 +26,11 @@ export function AnalyticsContent({ runs }: Props) {
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const tabs: { key: Tab; label: string; icon: React.ElementType }[] = [
-    { key: "volume",  label: "Volume",   icon: BarChart3   },
-    { key: "pace",    label: "Pace",     icon: TrendingUp  },
-    { key: "heart",   label: "FC",       icon: Heart       },
-    { key: "longrun", label: "Longões",  icon: Activity    },
+    { key: "volume",    label: "Volume",   icon: BarChart3   },
+    { key: "pace",      label: "Pace",     icon: TrendingUp  },
+    { key: "heart",     label: "FC",       icon: Heart       },
+    { key: "longrun",   label: "Longões",  icon: Activity    },
+    { key: "evolution", label: "Evolução", icon: GitCompare  },
   ];
 
   return (
@@ -87,6 +89,18 @@ export function AnalyticsContent({ runs }: Props) {
         <div className="card p-5">
           <h2 className="section-title mb-4">Progressão dos longões</h2>
           <LongRunProgressChart runs={longRuns} height={260} />
+        </div>
+      )}
+
+      {activeTab === "evolution" && (
+        <div className="card p-5">
+          <div className="mb-4">
+            <h2 className="section-title">Evolução por distância</h2>
+            <p className="text-xs text-surface-500 mt-1">
+              Compare pace e FC em corridas de distâncias semelhantes ao longo do tempo
+            </p>
+          </div>
+          <EvolutionChart runs={runs} height={200} />
         </div>
       )}
     </div>

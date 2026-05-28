@@ -11,8 +11,8 @@ import { PaceBadge, RunTypeBadge } from "@/components/shared/Badges";
 import { WeeklyVolumeChart } from "@/components/charts/WeeklyVolumeChart";
 import {
   totalDistanceKm, totalDurationSeconds, longestRun, bestPace,
-  weeklyVolumeKm, monthlyVolumeKm, secondsToPaceString,
-  secondsToReadable, formatDate, formatDistanceKm, groupByWeek,
+  weeklyVolumeKm, monthlyVolumeKm, bestWeeklyVolumeKm, bestMonthlyVolumeKm,
+  secondsToPaceString, secondsToReadable, formatDate, formatDistanceKm, groupByWeek,
 } from "@/lib/utils";
 import type { Run, Goal, CoachReport, SyncLog } from "@/types";
 
@@ -24,13 +24,15 @@ interface Props {
 }
 
 export function DashboardContent({ runs, latestReport, goals, lastSync }: Props) {
-  const totalDist = totalDistanceKm(runs);
-  const totalDur  = totalDurationSeconds(runs);
-  const longest   = longestRun(runs);
-  const best      = bestPace(runs);
-  const weekly    = weeklyVolumeKm(runs);
-  const monthly   = monthlyVolumeKm(runs);
-  const lastRun   = runs[0] ?? null;
+  const totalDist  = totalDistanceKm(runs);
+  const totalDur   = totalDurationSeconds(runs);
+  const longest    = longestRun(runs);
+  const best       = bestPace(runs);
+  const weekly     = weeklyVolumeKm(runs);
+  const monthly    = monthlyVolumeKm(runs);
+  const bestWeekly = bestWeeklyVolumeKm(runs);
+  const bestMonthly= bestMonthlyVolumeKm(runs);
+  const lastRun    = runs[0] ?? null;
   const stravaRuns = runs.filter((r) => r.source === "strava" || r.source === "strava+ai");
   const withCoach  = runs.filter((r) => r.coach_feedback);
   const weeklyData = groupByWeek(runs).slice(-12);
@@ -105,6 +107,17 @@ export function DashboardContent({ runs, latestReport, goals, lastSync }: Props)
           label="Volume mensal"
           value={`${monthly.toFixed(1)} km`}
           icon={TrendingUp}
+        />
+        <StatCard
+          label="Melhor semana"
+          value={bestWeekly > 0 ? `${bestWeekly.toFixed(1)} km` : "—"}
+          icon={Award}
+          accent
+        />
+        <StatCard
+          label="Melhor mês"
+          value={bestMonthly > 0 ? `${bestMonthly.toFixed(1)} km` : "—"}
+          icon={Award}
         />
       </div>
 

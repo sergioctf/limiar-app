@@ -164,6 +164,18 @@ export function groupByMonth(runs: Run[]): MonthlyVolume[] {
   return Array.from(map.values()).sort((a, b) => a.month.localeCompare(b.month));
 }
 
+export function bestWeeklyVolumeKm(runs: Run[]): number {
+  const weekly = groupByWeek(runs);
+  if (!weekly.length) return 0;
+  return Math.max(...weekly.map((w) => w.totalKm));
+}
+
+export function bestMonthlyVolumeKm(runs: Run[]): number {
+  const monthly = groupByMonth(runs);
+  if (!monthly.length) return 0;
+  return Math.max(...monthly.map((m) => m.totalKm));
+}
+
 export function buildPaceTrend(runs: Run[]): PaceTrend[] {
   return runs
     .filter((r) => r.avg_pace_seconds_per_km)

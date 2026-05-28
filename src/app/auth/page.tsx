@@ -2,11 +2,14 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Activity, Mail, Lock, Loader2, TrendingUp } from "lucide-react";
+import { Activity, Mail, Lock, Loader2, TrendingUp, Key } from "lucide-react";
+
+const ACCESS_CODE = "Manoela Pinheiro";
 
 export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [accessCode, setAccessCode] = useState("");
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +32,11 @@ export default function AuthPage() {
         if (error) throw error;
         window.location.href = "/";
       } else {
+        if (accessCode !== ACCESS_CODE) {
+          setError("Código de acesso inválido.");
+          setLoading(false);
+          return;
+        }
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -120,6 +128,24 @@ export default function AuthPage() {
               />
             </div>
           </div>
+
+          {mode === "signup" && (
+            <div>
+              <label className="label">Código de acesso</label>
+              <div className="relative">
+                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-500" />
+                <input
+                  type="text"
+                  value={accessCode}
+                  onChange={(e) => setAccessCode(e.target.value)}
+                  placeholder="Digite o código de acesso"
+                  required
+                  className="input pl-9"
+                />
+              </div>
+              <p className="text-xs text-surface-500 mt-1">Necessário para criar uma conta.</p>
+            </div>
+          )}
 
           {error && (
             <p className="text-sm text-red-400 bg-red-400/10 rounded-lg px-3 py-2">
