@@ -4,8 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, MapPin, Clock, Heart, Mountain, Activity,
-  Zap, MessageSquare, Edit3, Trash2, ChevronDown, ChevronUp,
-  Flame, Wind, Droplets
+  Zap, MessageSquare, Edit3, ChevronDown, ChevronUp,
+  Flame, Wind, Droplets, Sparkles, Loader2
 } from "lucide-react";
 import {
   PaceBadge, RunTypeBadge, SourceBadge, HeartRateBadge, TagBadge
@@ -20,6 +20,27 @@ interface Props { run: Run }
 
 export function RunDetailContent({ run }: Props) {
   const [showRaw, setShowRaw] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(run.coach_feedback ?? null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+
+  async function handleAnalyze() {
+    setAnalyzing(true);
+    setAnalyzeError(null);
+    try {
+      const res = await fetch(`/api/runs/${run.id}/analyze`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.feedback) {
+        setFeedback(data.feedback);
+      } else {
+        setAnalyzeError(data.error ?? "Erro ao gerar análise.");
+      }
+    } catch {
+      setAnalyzeError("Falha na conexão. Tente novamente.");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
 
   return (
     <div className="space-y-5 max-w-2xl mx-auto animate-fade-in">
@@ -151,29 +172,43 @@ export function RunDetailContent({ run }: Props) {
       )}
 
       {/* Coach feedback */}
-      {run.coach_feedback ? (
+      {feedback ? (
         <div className="card p-5 border-purple-500/30">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-7 h-7 rounded-lg bg-purple-500/20 flex items-center justify-center">
-              <MessageSquare className="w-3.5 h-3.5 text-purple-400" />
+              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
             </div>
-            <h2 className="section-title">Análise do Treinador</h2>
+            <h2 className="section-title">Análise do Treinador IA</h2>
           </div>
           <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
-            {run.coach_feedback}
+            {feedback}
           </p>
         </div>
       ) : (
-        <div className="card p-5 border-dashed">
+        <div className="card p-5">
           <div className="flex items-center gap-3">
-            <MessageSquare className="w-5 h-5 text-surface-600" />
-            <div className="flex-1">
-              <p className="text-sm text-surface-400">Sem análise do treinador</p>
+            <div className="w-8 h-8 rounded-lg bg-surface-700 flex items-center justify-center shrink-0">
+              <MessageSquare className="w-4 h-4 text-surface-500" />
             </div>
-            <Link href={`/runs/${run.id}/edit`} className="btn-ghost text-brand-400 text-xs">
-              Adicionar
-            </Link>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-surface-300">Sem análise do treinador</p>
+              <p className="text-xs text-surface-500 mt-0.5">Gere uma análise automática via IA</p>
+            </div>
+            <button
+              onClick={handleAnalyze}
+              disabled={analyzing}
+              className="btn-primary text-xs py-1.5 px-3 shrink-0"
+            >
+              {analyzing ? (
+                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Analisando…</>
+              ) : (
+                <><Sparkles className="w-3.5 h-3.5" /> Gerar análise IA</>
+              )}
+            </button>
           </div>
+          {analyzeError && (
+            <p className="text-xs text-red-400 mt-3">{analyzeError}</p>
+          )}
         </div>
       )}
 

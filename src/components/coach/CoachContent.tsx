@@ -3,7 +3,8 @@
 import { useState } from "react";
 import {
   Brain, ChevronDown, ChevronUp, Award, AlertTriangle,
-  TrendingUp, Calendar, BookOpen, Flag, Layers
+  TrendingUp, Calendar, BookOpen, Flag, Layers,
+  Sparkles, Loader2, CalendarDays
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import type { CoachReport, TrainingCycle } from "@/types";
@@ -14,8 +15,34 @@ interface Props {
 }
 
 export function CoachContent({ reports, cycles }: Props) {
-  const [activeTab, setActiveTab] = useState<"reports" | "cycles">("reports");
+  const [activeTab, setActiveTab] = useState<"reports" | "cycles" | "plano">("reports");
   const [expanded, setExpanded] = useState<string | null>(reports[0]?.id ?? null);
+
+  // Weekly plan state
+  const latestWeekPlan = reports.find((r) => r.period_type === "week") ?? null;
+  const [weekPlan, setWeekPlan] = useState<string | null>(latestWeekPlan?.summary ?? null);
+  const [weekPlanDate, setWeekPlanDate] = useState<string | null>(latestWeekPlan?.report_date ?? null);
+  const [generating, setGenerating] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
+
+  async function handleGeneratePlan() {
+    setGenerating(true);
+    setPlanError(null);
+    try {
+      const res = await fetch("/api/coach/weekly-plan", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.summary) {
+        setWeekPlan(data.summary);
+        setWeekPlanDate(new Date().toISOString().slice(0, 10));
+      } else {
+        setPlanError(data.error ?? "Erro ao gerar plano.");
+      }
+    } catch {
+      setPlanError("Falha na conexão. Tente novamente.");
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   return (
     <div className="space-y-5 max-w-3xl mx-auto animate-fade-in">
@@ -26,6 +53,14 @@ export function CoachContent({ reports, cycles }: Props) {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-surface-700 rounded-xl p-1">
+        <button
+          onClick={() => setActiveTab("plano")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all ${
+            activeTab === "plano" ? "bg-brand-500 text-white" : "text-surface-400 hover:text-surface-200"
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" /> Plano
+        </button>
         <button
           onClick={() => setActiveTab("reports")}
           className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all ${
@@ -43,6 +78,80 @@ export function CoachContent({ reports, cycles }: Props) {
           <Layers className="w-3.5 h-3.5" /> Ciclos
         </button>
       </div>
+
+      {/* Plano semanal */}
+      {activeTab === "plano" && (
+        <div className="space-y-4">
+          <div className="card p-5">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-brand-500/20 flex items-center justify-center">
+                  <CalendarDays className="w-5 h-5 text-brand-400" />
+                </div>
+                <div>
+                  <h2 className="font-bold text-surface-100">Resumo semanal IA</h2>
+                  {weekPlanDate && (
+                    <p className="text-xs text-surface-500">Gerado em {formatDate(weekPlanDate)}</p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={handleGeneratePlan}
+                disabled={generating}
+                className="btn-primary text-xs py-1.5 px-3 shrink-0"
+              >
+                {generating ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Gerando…</>
+                ) : (
+                  <><Sparkles className="w-3.5 h-3.5" /> {weekPlan ? "Atualizar" : "Gerar plano"}</>
+                )}
+              </button>
+            </div>
+
+            {planError && (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-4">
+                <p className="text-sm text-red-400">{planError}</p>
+              </div>
+            )}
+
+            {weekPlan ? (
+              <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
+                {weekPlan}
+              </p>
+            ) : (
+              <div className="text-center py-8 text-surface-500">
+                <Sparkles className="w-8 h-8 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">Clique em &quot;Gerar plano&quot; para receber um resumo</p>
+                <p className="text-xs mt-1">da sua semana com recomendações personalizadas</p>
+              </div>
+            )}
+          </div>
+
+          {/* Histórico de planos semanais */}
+          {reports.filter((r) => r.period_type === "week").length > 1 && (
+            <div className="card p-5">
+              <h3 className="font-semibold text-surface-300 text-sm mb-3">Planos anteriores</h3>
+              <div className="space-y-2">
+                {reports.filter((r) => r.period_type === "week").slice(1).map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => { setWeekPlan(r.summary); setWeekPlanDate(r.report_date); setActiveTab("plano"); }}
+                    className="w-full text-left p-3 rounded-xl bg-surface-700/50 hover:bg-surface-700 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-surface-300">{r.title}</span>
+                      <span className="text-xs text-surface-500">{formatDate(r.report_date)}</span>
+                    </div>
+                    {r.summary && (
+                      <p className="text-xs text-surface-500 mt-1 line-clamp-2">{r.summary}</p>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Reports */}
       {activeTab === "reports" && (

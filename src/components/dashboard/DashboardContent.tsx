@@ -4,7 +4,7 @@ import Link from "next/link";
 import {
   Activity, MapPin, Clock, TrendingUp, Zap,
   Heart, Calendar, Target, ChevronRight,
-  Award, AlertTriangle, Brain
+  Award, AlertTriangle, Brain, Flag, Timer
 } from "lucide-react";
 import { StatCard } from "@/components/shared/StatCard";
 import { PaceBadge, RunTypeBadge } from "@/components/shared/Badges";
@@ -42,6 +42,17 @@ export function DashboardContent({ runs, latestReport, goals, lastSync }: Props)
     : null;
 
   const nextGoal = goals.find((g) => g.race_date) ?? goals[0] ?? null;
+
+  // Race countdown
+  const daysToRace = nextGoal?.race_date
+    ? Math.ceil((new Date(nextGoal.race_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : null;
+
+  // Training readiness: % of 4-week volume trend (last week vs best of prior 3)
+  const last4Weeks = groupByWeek(runs).slice(-4);
+  const lastWeekKm = last4Weeks[last4Weeks.length - 1]?.totalKm ?? 0;
+  const prior3Max  = Math.max(...last4Weeks.slice(0, 3).map((w) => w.totalKm), 1);
+  const readinessPct = Math.min(100, Math.round((lastWeekKm / prior3Max) * 100));
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto animate-fade-in">
@@ -170,8 +181,9 @@ export function DashboardContent({ runs, latestReport, goals, lastSync }: Props)
         </div>
       )}
 
-      {/* Last run + Next goal */}
+      {/* Last run + Race countdown */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Last run */}
         {lastRun && (
           <Link href={`/runs/${lastRun.id}`} className="card-hover p-4 block">
             <p className="stat-label mb-2">Última corrida</p>
@@ -200,22 +212,62 @@ export function DashboardContent({ runs, latestReport, goals, lastSync }: Props)
           </Link>
         )}
 
-        {nextGoal && (
+        {/* Race countdown */}
+        {nextGoal && daysToRace !== null ? (
+          <Link href="/goals" className="card-hover p-4 block relative overflow-hidden">
+            {/* accent line */}
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-brand-500 to-brand-300 rounded-t-xl" />
+            <div className="flex items-center justify-between mb-3">
+              <p className="stat-label">Próxima corrida</p>
+              <Flag className="w-4 h-4 text-brand-400" />
+            </div>
+            <p className="font-bold text-surface-100 text-sm line-clamp-1">{nextGoal.race_name}</p>
+            <p className="text-xs text-surface-500 mt-0.5">
+              {nextGoal.distance_km} km · {nextGoal.race_date ? formatDate(nextGoal.race_date) : ""}
+            </p>
+
+            {/* Countdown */}
+            <div className="flex items-end gap-2 mt-3">
+              <span className={`text-3xl font-black tabular-nums leading-none ${
+                daysToRace <= 7  ? "text-red-400" :
+                daysToRace <= 30 ? "text-yellow-400" : "text-brand-300"
+              }`}>
+                {daysToRace > 0 ? daysToRace : 0}
+              </span>
+              <span className="text-sm text-surface-400 mb-0.5">
+                {daysToRace === 1 ? "dia" : "dias"}
+              </span>
+              {nextGoal.target_time_seconds && (
+                <span className="ml-auto flex items-center gap-1 badge bg-brand-500/15 text-brand-300">
+                  <Timer className="w-3 h-3" />
+                  {secondsToReadable(nextGoal.target_time_seconds)}
+                </span>
+              )}
+            </div>
+
+            {/* Readiness bar */}
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-surface-500">Prontidão semanal</span>
+                <span className="text-xs font-semibold text-surface-300">{readinessPct}%</span>
+              </div>
+              <div className="h-1.5 bg-surface-700 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    readinessPct >= 80 ? "bg-green-500" :
+                    readinessPct >= 50 ? "bg-brand-500" : "bg-yellow-500"
+                  }`}
+                  style={{ width: `${readinessPct}%` }}
+                />
+              </div>
+            </div>
+          </Link>
+        ) : nextGoal ? (
           <Link href="/goals" className="card-hover p-4 block">
             <p className="stat-label mb-2">Próxima meta</p>
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="font-semibold text-surface-100 text-sm">{nextGoal.race_name}</p>
-                {nextGoal.race_date && (
-                  <p className="text-xs text-surface-500 mt-0.5">{formatDate(nextGoal.race_date)}</p>
-                )}
-              </div>
-              <Target className="w-4 h-4 text-brand-400 shrink-0 mt-0.5" />
-            </div>
+            <p className="font-semibold text-surface-100 text-sm">{nextGoal.race_name}</p>
             <div className="flex items-center gap-3 mt-3 flex-wrap">
-              <span className="font-bold text-surface-100 tabular-nums">
-                {nextGoal.distance_km} km
-              </span>
+              <span className="font-bold text-surface-100 tabular-nums">{nextGoal.distance_km} km</span>
               {nextGoal.target_time_seconds && (
                 <span className="badge bg-brand-500/15 text-brand-300">
                   alvo {secondsToReadable(nextGoal.target_time_seconds)}
@@ -223,7 +275,7 @@ export function DashboardContent({ runs, latestReport, goals, lastSync }: Props)
               )}
             </div>
           </Link>
-        )}
+        ) : null}
       </div>
 
       {/* Weekly volume chart */}
