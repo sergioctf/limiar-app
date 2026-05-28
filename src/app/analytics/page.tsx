@@ -10,7 +10,7 @@ export default async function AnalyticsPage() {
 
   const { data: runs } = await supabase
     .from("runs")
-    .select("id,date,type,distance_km,duration_seconds,avg_pace_seconds_per_km,avg_hr,elevation_gain_m,source")
+    .select("*")
     .eq("user_id", user.id)
     .is("deleted_at", null)
     .order("date", { ascending: true });
