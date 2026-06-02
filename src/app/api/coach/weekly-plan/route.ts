@@ -1,99 +1,109 @@
 /**
  * POST /api/coach/weekly-plan
- * Gera um resumo semanal IA e salva como coach_report.
- * Requer autenticação.
+ * Gera um plano semanal estruturado (JSON 7 dias) e salva como coach_report.
+ * Body: { paces?: { easy, threshold, long, interval } }
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { generateWeeklySummary } from "@/lib/ai";
+import { generateStructuredWeeklyPlan } from "@/lib/ai";
 
-export async function POST(_request: NextRequest) {
+export async function POST(request: NextRequest) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const body = await request.json().catch(() => ({}));
+  const paces = body?.paces ?? null;
+
   const admin = createAdminClient();
 
-  // Current week bounds (Monday to Sunday)
+  // Current week bounds (Monday–Sunday)
   const now = new Date();
-  const dayOfWeek = now.getDay(); // 0=Sun
+  const dayOfWeek = now.getDay(); // 0 = Sunday
   const daysSinceMonday = (dayOfWeek + 6) % 7;
   const weekStart = new Date(now);
   weekStart.setDate(now.getDate() - daysSinceMonday);
   weekStart.setHours(0, 0, 0, 0);
+  const weekStartStr = weekStart.toISOString().slice(0, 10);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
-  weekEnd.setHours(23, 59, 59, 999);
+  const weekEndStr = weekEnd.toISOString().slice(0, 10);
 
-  const weekStartStr = weekStart.toISOString().slice(0, 10);
-  const weekEndStr   = weekEnd.toISOString().slice(0, 10);
-
-  // Fetch this week's runs
-  const { data: weekRuns } = await admin
-    .from("runs")
-    .select("*")
-    .eq("user_id", user.id)
-    .is("deleted_at", null)
-    .gte("date", weekStartStr)
-    .lte("date", weekEndStr)
-    .order("date", { ascending: true });
-
-  // Fetch ALL runs for full historical context (Groq 128k window)
+  // Recent runs (last 30 for AI context)
   const { data: recentRuns } = await admin
     .from("runs")
     .select("*")
     .eq("user_id", user.id)
     .is("deleted_at", null)
-    .order("date", { ascending: false });
+    .order("date", { ascending: false })
+    .limit(30);
 
-  // Fetch next goal for context
-  const { data: goals } = await admin
-    .from("goals")
-    .select("*")
-    .eq("user_id", user.id)
-    .in("status", ["active", "upcoming"])
-    .order("race_date", { ascending: true })
-    .limit(1);
+  // Next upcoming race (graceful fallback if table doesn't exist)
+  let nextRace = null;
+  try {
+    const todayStr = now.toISOString().slice(0, 10);
+    const { data: raceData } = await admin
+      .from("races")
+      .select("name, race_date, distance_km")
+      .eq("user_id", user.id)
+      .gt("race_date", todayStr)
+      .is("time_seconds", null)
+      .order("race_date", { ascending: true })
+      .limit(1);
+    if (raceData?.[0]) {
+      nextRace = {
+        name: raceData[0].name as string,
+        date: raceData[0].race_date as string,
+        distance_km: raceData[0].distance_km as number,
+      };
+    }
+  } catch { /* races table may not exist yet */ }
 
-  const nextGoal = goals?.[0] ?? null;
-  let weeksToGoal: number | undefined;
-  if (nextGoal?.race_date) {
-    const msToRace = new Date(nextGoal.race_date).getTime() - Date.now();
-    weeksToGoal = Math.max(0, Math.round(msToRace / (7 * 24 * 60 * 60 * 1000)));
-  }
+  // Latest VDOT (graceful fallback)
+  let vdot: number | null = null;
+  try {
+    const { data: testData } = await admin
+      .from("performance_tests")
+      .select("vdot")
+      .eq("user_id", user.id)
+      .order("test_date", { ascending: false })
+      .limit(1);
+    vdot = (testData?.[0]?.vdot as number | null) ?? null;
+  } catch { /* performance_tests table may not exist yet */ }
 
-  const summary = await generateWeeklySummary(
-    weekRuns ?? [],
+  const plan = await generateStructuredWeeklyPlan(
+    weekStartStr,
     recentRuns ?? [],
-    nextGoal?.race_name,
-    weeksToGoal
+    paces,
+    nextRace,
+    vdot,
   );
 
-  if (!summary) {
-    return NextResponse.json({ error: "AI generation failed or no runs this week" }, { status: 422 });
+  if (!plan) {
+    return NextResponse.json({ error: "AI generation failed" }, { status: 422 });
   }
 
-  // Save as coach_report
+  // Save as coach_report — full_report holds the JSON plan
+  const trainingDays = plan.days.filter(d => d.type !== "rest").length;
   const { data: report, error } = await admin
     .from("coach_reports")
     .insert({
       user_id:      user.id,
-      title:        `Resumo da semana — ${weekStartStr}`,
+      title:        `Plano da semana — ${weekStartStr}`,
       report_date:  new Date().toISOString().slice(0, 10),
       period_type:  "week",
       period_start: weekStartStr,
       period_end:   weekEndStr,
-      summary,
-      full_report:  summary,
+      summary:      plan.ai_message ?? `${trainingDays} treinos planejados`,
+      full_report:  JSON.stringify(plan),
     })
     .select("*")
     .single();
 
   if (error) {
     console.error("[weekly-plan] DB insert error:", error);
-    // Still return the summary even if save failed
-    return NextResponse.json({ summary, saved: false });
+    return NextResponse.json({ plan, saved: false });
   }
 
-  return NextResponse.json({ summary, saved: true, report });
+  return NextResponse.json({ plan, saved: true, report });
 }

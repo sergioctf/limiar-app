@@ -17,8 +17,8 @@ export async function refreshStravaToken(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      client_id: process.env.STRAVA_CLIENT_ID,
-      client_secret: process.env.STRAVA_CLIENT_SECRET,
+      client_id: process.env.STRAVA_CLIENT_ID?.trim(),
+      client_secret: process.env.STRAVA_CLIENT_SECRET?.trim(),
       grant_type: "refresh_token",
       refresh_token: refreshToken,
     }),
@@ -83,8 +83,8 @@ export function stravaActivityToRun(
     avg_pace_seconds_per_km: avgPace ? Math.round(avgPace) : null,
     avg_speed_mps: avgSpeed || null,
     max_speed_mps: activity.max_speed ?? null,
-    avg_hr: activity.average_heartrate ?? null,
-    max_hr: activity.max_heartrate ?? null,
+    avg_hr: activity.average_heartrate ? Math.round(activity.average_heartrate) : null,
+    max_hr: activity.max_heartrate ? Math.round(activity.max_heartrate) : null,
     elevation_gain_m: activity.total_elevation_gain ?? null,
     avg_cadence: activity.average_cadence
       ? Math.round(activity.average_cadence * 2)

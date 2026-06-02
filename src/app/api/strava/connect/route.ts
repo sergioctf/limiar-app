@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.redirect(new URL("/auth", request.url));
 
-  const clientId    = process.env.STRAVA_CLIENT_ID!;
+  const clientId    = (process.env.STRAVA_CLIENT_ID ?? "").trim();
   const redirectUri = `${request.nextUrl.origin}/api/strava/callback`;
 
   const stravaAuthUrl = new URL("https://www.strava.com/oauth/authorize");

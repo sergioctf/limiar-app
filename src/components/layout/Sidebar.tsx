@@ -12,6 +12,8 @@ import {
   Settings,
   LogOut,
   TrendingUp,
+  CalendarDays,
+  Trophy,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -19,6 +21,8 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/",           icon: LayoutDashboard, label: "Dashboard" },
   { href: "/runs",       icon: ListOrdered,     label: "Corridas"  },
+  { href: "/races",      icon: Trophy,          label: "Provas"    },
+  { href: "/calendar",   icon: CalendarDays,    label: "Calendário"},
   { href: "/analytics",  icon: BarChart3,       label: "Gráficos"  },
   { href: "/goals",      icon: Target,          label: "Metas"     },
   { href: "/coach",      icon: FileText,        label: "Treinador" },

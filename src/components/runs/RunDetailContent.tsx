@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, MapPin, Clock, Heart, Mountain, Activity,
   Zap, MessageSquare, Edit3, ChevronDown, ChevronUp,
-  Flame, Wind, Droplets, Sparkles, Loader2
+  Flame, Wind, Droplets, Sparkles, Loader2, NotebookPen,
+  Check, X, PenLine, RefreshCw
 } from "lucide-react";
 import {
   PaceBadge, RunTypeBadge, SourceBadge, HeartRateBadge, TagBadge
@@ -15,14 +16,66 @@ import {
   secondsToPaceString
 } from "@/lib/utils";
 import type { Run } from "@/types";
+import { cn } from "@/lib/utils";
 
 interface Props { run: Run }
 
 export function RunDetailContent({ run }: Props) {
-  const [showRaw, setShowRaw] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(run.coach_feedback ?? null);
-  const [analyzing, setAnalyzing] = useState(false);
+  const [showRaw, setShowRaw]       = useState(false);
+  const [feedback, setFeedback]     = useState<string | null>(run.coach_feedback ?? null);
+  const [analyzing, setAnalyzing]   = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+
+  // Notes state
+  const [notes, setNotes]           = useState<string>(run.notes ?? "");
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesValue, setNotesValue] = useState<string>(run.notes ?? "");
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [notesSaved, setNotesSaved] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (editingNotes && textareaRef.current) {
+      textareaRef.current.focus();
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [editingNotes]);
+
+  function openEditor() {
+    setNotesValue(notes);
+    setEditingNotes(true);
+    setNotesSaved(false);
+  }
+
+  function cancelEdit() {
+    setNotesValue(notes);
+    setEditingNotes(false);
+  }
+
+  async function saveNotes() {
+    setSavingNotes(true);
+    try {
+      const res = await fetch(`/api/runs/${run.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: notesValue.trim() || null }),
+      });
+      if (res.ok) {
+        setNotes(notesValue.trim());
+        setEditingNotes(false);
+        setNotesSaved(true);
+        // Also reset coach_feedback so user is nudged to re-analyze with new notes
+        if (feedback && notesValue.trim() !== (run.notes ?? "")) {
+          setFeedback(null);
+        }
+        setTimeout(() => setNotesSaved(false), 3000);
+      }
+    } finally {
+      setSavingNotes(false);
+    }
+  }
 
   async function handleAnalyze() {
     setAnalyzing(true);
@@ -161,38 +214,147 @@ export function RunDetailContent({ run }: Props) {
         )}
       </div>
 
-      {/* Notes */}
-      {run.notes && (
-        <div className="card p-5">
-          <h2 className="section-title mb-3">Notas</h2>
-          <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
-            {run.notes}
-          </p>
+      {/* ── NOTES ───────────────────────────────────────────────────────────── */}
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <NotebookPen className="w-4 h-4 text-surface-400" />
+            <h2 className="section-title">Minhas anotações</h2>
+          </div>
+          {!editingNotes && (
+            <button
+              onClick={openEditor}
+              className="flex items-center gap-1.5 text-xs text-surface-400 hover:text-surface-200 transition-colors py-1 px-2 rounded-lg hover:bg-surface-700"
+            >
+              <PenLine className="w-3.5 h-3.5" />
+              {notes ? "Editar" : "Adicionar nota"}
+            </button>
+          )}
         </div>
-      )}
 
-      {/* Coach feedback */}
+        {editingNotes ? (
+          /* Editor mode */
+          <div className="space-y-3">
+            <textarea
+              ref={textareaRef}
+              value={notesValue}
+              onChange={(e) => {
+                setNotesValue(e.target.value);
+                e.target.style.height = "auto";
+                e.target.style.height = `${e.target.scrollHeight}px`;
+              }}
+              placeholder="Como foi o treino? Como você estava se sentindo? Condições, estratégia, o que aprendeu…"
+              className={cn(
+                "w-full bg-surface-700 border border-surface-600 rounded-xl px-4 py-3",
+                "text-sm text-surface-100 placeholder:text-surface-600",
+                "resize-none overflow-hidden min-h-[100px]",
+                "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
+                "transition-colors"
+              )}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") cancelEdit();
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) saveNotes();
+              }}
+            />
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-surface-600">Ctrl+Enter para salvar · Esc para cancelar</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={cancelEdit}
+                  className="flex items-center gap-1.5 text-xs text-surface-400 hover:text-surface-200 py-1.5 px-3 rounded-lg hover:bg-surface-700 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" /> Cancelar
+                </button>
+                <button
+                  onClick={saveNotes}
+                  disabled={savingNotes}
+                  className="flex items-center gap-1.5 text-xs bg-brand-500 hover:bg-brand-400 text-white py-1.5 px-3 rounded-lg transition-colors disabled:opacity-60"
+                >
+                  {savingNotes ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
+                  Salvar
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : notes ? (
+          /* Notes display */
+          <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
+            {notes}
+          </p>
+        ) : (
+          /* Empty state */
+          <button
+            onClick={openEditor}
+            className="w-full border border-dashed border-surface-700 rounded-xl py-6 flex flex-col items-center gap-2 text-surface-600 hover:text-surface-400 hover:border-surface-600 transition-colors"
+          >
+            <PenLine className="w-5 h-5" />
+            <span className="text-sm">Clique para adicionar uma anotação sobre esta corrida</span>
+            <span className="text-xs">A IA usará suas notas na análise</span>
+          </button>
+        )}
+
+        {notesSaved && (
+          <p className="text-xs text-green-400 mt-2 flex items-center gap-1">
+            <Check className="w-3 h-3" /> Anotação salva
+          </p>
+        )}
+      </div>
+
+      {/* ── COACH AI ─────────────────────────────────────────────────────────── */}
       {feedback ? (
         <div className="card p-5 border-purple-500/30">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 rounded-lg bg-purple-500/20 flex items-center justify-center">
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+              </div>
+              <h2 className="section-title">Análise do Treinador IA</h2>
             </div>
-            <h2 className="section-title">Análise do Treinador IA</h2>
+            {/* Re-analyze button (useful after adding notes) */}
+            <button
+              onClick={handleAnalyze}
+              disabled={analyzing}
+              title="Re-analisar com anotações atualizadas"
+              className="flex items-center gap-1.5 text-xs text-surface-400 hover:text-surface-200 py-1 px-2 rounded-lg hover:bg-surface-700 transition-colors disabled:opacity-40"
+            >
+              {analyzing ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="w-3.5 h-3.5" />
+              )}
+              {analyzing ? "Analisando…" : "Re-analisar"}
+            </button>
           </div>
           <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
             {feedback}
           </p>
+          {analyzeError && (
+            <p className="text-xs text-red-400 mt-3">{analyzeError}</p>
+          )}
         </div>
       ) : (
         <div className="card p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-surface-700 flex items-center justify-center shrink-0">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-surface-700 flex items-center justify-center shrink-0 mt-0.5">
               <MessageSquare className="w-4 h-4 text-surface-500" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-surface-300">Sem análise do treinador</p>
-              <p className="text-xs text-surface-500 mt-0.5">Gere uma análise automática via IA</p>
+              <p className="text-xs text-surface-500 mt-0.5">
+                {notes
+                  ? "A IA vai usar suas anotações + todos os dados da corrida"
+                  : "Adicione uma anotação para análise mais personalizada"}
+              </p>
+              {notes && (
+                <p className="text-xs text-brand-400 mt-1 flex items-center gap-1">
+                  <NotebookPen className="w-3 h-3" />
+                  &quot;{notes.length > 60 ? notes.slice(0, 60) + "…" : notes}&quot;
+                </p>
+              )}
             </div>
             <button
               onClick={handleAnalyze}

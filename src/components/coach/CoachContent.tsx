@@ -1,163 +1,294 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Brain, ChevronDown, ChevronUp, Award, AlertTriangle,
   TrendingUp, Calendar, BookOpen, Flag, Layers,
-  Sparkles, Loader2, CalendarDays
+  Sparkles, Loader2, Activity, FlaskConical,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
-import type { CoachReport, TrainingCycle } from "@/types";
+import { computeMetrics, paceToString } from "@/lib/performance";
+import type { CoachReport, TrainingCycle, PerformanceTest, WeeklyPlanData } from "@/types";
+import { ZonesCard }        from "@/components/coach/ZonesCard";
+import { PacesCard }        from "@/components/coach/PacesCard";
+import { PredictionsCard }  from "@/components/coach/PredictionsCard";
+import { TestHistoryCard }  from "@/components/coach/TestHistoryCard";
+import { TestForm }         from "@/components/coach/TestForm";
+import { WeeklyPlanCard }   from "@/components/coach/WeeklyPlanCard";
+
+type Tab = "zonas" | "testes" | "relatorios";
 
 interface Props {
   reports: CoachReport[];
-  cycles: TrainingCycle[];
+  cycles:  TrainingCycle[];
+  tests:   PerformanceTest[];
 }
 
-export function CoachContent({ reports, cycles }: Props) {
-  const [activeTab, setActiveTab] = useState<"reports" | "cycles" | "plano">("reports");
-  const [expanded, setExpanded] = useState<string | null>(reports[0]?.id ?? null);
+export function CoachContent({ reports, cycles, tests: initialTests }: Props) {
+  const [activeTab, setActiveTab] = useState<Tab>("zonas");
+  const [expanded,  setExpanded]  = useState<string | null>(reports[0]?.id ?? null);
 
-  // Weekly plan state
-  const latestWeekPlan = reports.find((r) => r.period_type === "week") ?? null;
-  const [weekPlan, setWeekPlan] = useState<string | null>(latestWeekPlan?.summary ?? null);
-  const [weekPlanDate, setWeekPlanDate] = useState<string | null>(latestWeekPlan?.report_date ?? null);
-  const [generating, setGenerating] = useState(false);
-  const [planError, setPlanError] = useState<string | null>(null);
+  // Tests state (updated locally on add/delete)
+  const [tests, setTests] = useState<PerformanceTest[]>(initialTests);
+  const [showTestForm, setShowTestForm] = useState(false);
 
-  async function handleGeneratePlan() {
-    setGenerating(true);
-    setPlanError(null);
+  // Full AI analysis state
+  const [analyzing,      setAnalyzing]      = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
+  const [analysisError,  setAnalysisError]  = useState<string | null>(null);
+
+  // Derived: latest test + metrics
+  const latestTest = tests[0] ?? null;
+  const metrics = useMemo(() => {
+    if (!latestTest) return null;
+    return computeMetrics(
+      latestTest.distance_km * 1000,
+      latestTest.time_seconds,
+      latestTest.avg_hr ?? undefined
+    );
+  }, [latestTest]);
+
+  // Paces formatted for AI plan generation
+  const pacesForPlan = useMemo(() => {
+    if (!metrics?.paces) return null;
+    const find = (name: string) => metrics.paces.find(p => p.name === name);
+    const fmt = (min: number, max: number) =>
+      `${paceToString(min)}–${paceToString(max)}/km`;
+    const easy      = find("easy");
+    const threshold = find("threshold");
+    const marathon  = find("marathon");
+    const interval  = find("interval");
+    return {
+      easy:      easy      ? fmt(easy.pace_min_sec,      easy.pace_max_sec)      : undefined,
+      threshold: threshold ? fmt(threshold.pace_min_sec, threshold.pace_max_sec) : undefined,
+      long:      marathon  ? fmt(marathon.pace_min_sec,  marathon.pace_max_sec)  : undefined,
+      interval:  interval  ? fmt(interval.pace_min_sec,  interval.pace_max_sec)  : undefined,
+    };
+  }, [metrics]);
+
+  // Parse existing structured weekly plan from latest week report
+  const latestWeekReport = reports.find(r => r.period_type === "week") ?? null;
+  const initialWeeklyPlan = useMemo((): WeeklyPlanData | null => {
+    if (!latestWeekReport?.full_report) return null;
     try {
-      const res = await fetch("/api/coach/weekly-plan", { method: "POST" });
+      return JSON.parse(latestWeekReport.full_report) as WeeklyPlanData;
+    } catch {
+      return null; // old text-format reports — show empty state
+    }
+  }, [latestWeekReport]);
+
+  // ── Handlers ─────────────────────────────────────────────────────────────────
+
+  async function handleFullAnalysis() {
+    setAnalyzing(true);
+    setAnalysisError(null);
+    try {
+      const res  = await fetch("/api/coach/full-analysis", { method: "POST" });
       const data = await res.json();
-      if (res.ok && data.summary) {
-        setWeekPlan(data.summary);
-        setWeekPlanDate(new Date().toISOString().slice(0, 10));
+      if (res.ok && data.analysis) {
+        setAnalysisResult(data.analysis);
       } else {
-        setPlanError(data.error ?? "Erro ao gerar plano.");
+        setAnalysisError(data.error ?? "Erro ao gerar análise.");
       }
     } catch {
-      setPlanError("Falha na conexão. Tente novamente.");
+      setAnalysisError("Falha na conexão. Tente novamente.");
     } finally {
-      setGenerating(false);
+      setAnalyzing(false);
     }
   }
+
+  async function handleDeleteTest(id: string) {
+    const res = await fetch(`/api/performance-tests/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      setTests(prev => prev.filter(t => t.id !== id));
+    }
+  }
+
+  // ── Tabs ─────────────────────────────────────────────────────────────────────
+
+  const tabs: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
+    { key: "zonas",     label: "Zonas & Plano", icon: <Activity className="w-3.5 h-3.5" /> },
+    { key: "testes",    label: "Testes 3km",    icon: <FlaskConical className="w-3.5 h-3.5" /> },
+    { key: "relatorios",label: "Relatórios",    icon: <Brain className="w-3.5 h-3.5" /> },
+  ];
 
   return (
     <div className="space-y-5 max-w-3xl mx-auto animate-fade-in">
       <div>
         <h1 className="page-header">Treinador</h1>
-        <p className="text-surface-500 text-sm">{reports.length} relatório(s) · {cycles.length} ciclo(s)</p>
+        <p className="text-surface-500 text-sm">
+          {reports.length} relatório(s) · {cycles.length} ciclo(s) · {tests.length} teste(s)
+        </p>
       </div>
 
-      {/* Tabs */}
+      {/* Tab bar */}
       <div className="flex gap-1 bg-surface-700 rounded-xl p-1">
-        <button
-          onClick={() => setActiveTab("plano")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all ${
-            activeTab === "plano" ? "bg-brand-500 text-white" : "text-surface-400 hover:text-surface-200"
-          }`}
-        >
-          <Sparkles className="w-3.5 h-3.5" /> Plano
-        </button>
-        <button
-          onClick={() => setActiveTab("reports")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all ${
-            activeTab === "reports" ? "bg-brand-500 text-white" : "text-surface-400 hover:text-surface-200"
-          }`}
-        >
-          <Brain className="w-3.5 h-3.5" /> Relatórios
-        </button>
-        <button
-          onClick={() => setActiveTab("cycles")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all ${
-            activeTab === "cycles" ? "bg-brand-500 text-white" : "text-surface-400 hover:text-surface-200"
-          }`}
-        >
-          <Layers className="w-3.5 h-3.5" /> Ciclos
-        </button>
+        {tabs.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === tab.key
+                ? "bg-brand-500 text-white"
+                : "text-surface-400 hover:text-surface-200"
+            }`}
+          >
+            {tab.icon}
+            <span className="hidden sm:inline">{tab.label}</span>
+          </button>
+        ))}
       </div>
 
-      {/* Plano semanal */}
-      {activeTab === "plano" && (
+      {/* ── TAB: Zonas & Plano ─────────────────────────────────────────────────── */}
+      {activeTab === "zonas" && (
         <div className="space-y-4">
-          <div className="card p-5">
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-brand-500/20 flex items-center justify-center">
-                  <CalendarDays className="w-5 h-5 text-brand-400" />
-                </div>
-                <div>
-                  <h2 className="font-bold text-surface-100">Resumo semanal IA</h2>
-                  {weekPlanDate && (
-                    <p className="text-xs text-surface-500">Gerado em {formatDate(weekPlanDate)}</p>
-                  )}
-                </div>
+          {!latestTest ? (
+            /* No tests yet — CTA */
+            <div className="card p-8 text-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-brand-500/10 flex items-center justify-center mx-auto">
+                <FlaskConical className="w-7 h-7 text-brand-400" />
+              </div>
+              <div>
+                <h3 className="font-bold text-surface-100 text-lg">Nenhum teste registrado ainda</h3>
+                <p className="text-sm text-surface-500 mt-2 max-w-sm mx-auto leading-relaxed">
+                  O teste de 3km é um esforço máximo sustentável que leva ~10-14 minutos.
+                  A partir dele calculamos seu VDOT, zonas de FC e ritmos de treino.
+                </p>
               </div>
               <button
-                onClick={handleGeneratePlan}
-                disabled={generating}
-                className="btn-primary text-xs py-1.5 px-3 shrink-0"
+                onClick={() => { setShowTestForm(true); setActiveTab("testes"); }}
+                className="btn-primary mx-auto"
               >
-                {generating ? (
-                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Gerando…</>
-                ) : (
-                  <><Sparkles className="w-3.5 h-3.5" /> {weekPlan ? "Atualizar" : "Gerar plano"}</>
-                )}
+                + Registrar primeiro teste
               </button>
             </div>
-
-            {planError && (
-              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-4">
-                <p className="text-sm text-red-400">{planError}</p>
+          ) : (
+            /* Has tests — show metrics */
+            <>
+              {/* Top stats row */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="card p-4 text-center">
+                  <p className="text-xs text-surface-500 uppercase tracking-wide">VDOT</p>
+                  <p className="text-2xl font-bold text-brand-400 mt-1">
+                    {metrics?.vdot.toFixed(1)}
+                  </p>
+                  <p className="text-xs text-surface-600">ml/kg/min</p>
+                </div>
+                <div className="card p-4 text-center">
+                  <p className="text-xs text-surface-500 uppercase tracking-wide">VO2max</p>
+                  <p className="text-2xl font-bold text-surface-100 mt-1">
+                    {metrics?.vo2max.toFixed(1)}
+                  </p>
+                  <p className="text-xs text-surface-600">estimado</p>
+                </div>
+                <div className="card p-4 text-center">
+                  <p className="text-xs text-surface-500 uppercase tracking-wide">Último teste</p>
+                  <p className="text-sm font-bold text-surface-200 mt-1">
+                    {formatDate(latestTest.test_date)}
+                  </p>
+                  <p className="text-xs text-surface-600">{latestTest.distance_km} km</p>
+                </div>
               </div>
-            )}
 
-            {weekPlan ? (
-              <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
-                {weekPlan}
-              </p>
-            ) : (
-              <div className="text-center py-8 text-surface-500">
-                <Sparkles className="w-8 h-8 mx-auto mb-3 opacity-30" />
-                <p className="text-sm">Clique em &quot;Gerar plano&quot; para receber um resumo</p>
-                <p className="text-xs mt-1">da sua semana com recomendações personalizadas</p>
-              </div>
-            )}
-          </div>
+              {/* Zones + Paces (side by side on desktop) */}
+              {metrics && metrics.zones.length > 0 && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <ZonesCard
+                    zones={metrics.zones}
+                    lthr={metrics.lthr}
+                    hrmax={metrics.hrmax_estimate}
+                  />
+                  <PacesCard paces={metrics.paces} />
+                </div>
+              )}
 
-          {/* Histórico de planos semanais */}
-          {reports.filter((r) => r.period_type === "week").length > 1 && (
-            <div className="card p-5">
-              <h3 className="font-semibold text-surface-300 text-sm mb-3">Planos anteriores</h3>
-              <div className="space-y-2">
-                {reports.filter((r) => r.period_type === "week").slice(1).map((r) => (
-                  <button
-                    key={r.id}
-                    onClick={() => { setWeekPlan(r.summary); setWeekPlanDate(r.report_date); setActiveTab("plano"); }}
-                    className="w-full text-left p-3 rounded-xl bg-surface-700/50 hover:bg-surface-700 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-surface-300">{r.title}</span>
-                      <span className="text-xs text-surface-500">{formatDate(r.report_date)}</span>
+              {/* If no HR data, only paces */}
+              {metrics && metrics.zones.length === 0 && (
+                <PacesCard paces={metrics.paces} />
+              )}
+
+              {/* Predictions */}
+              {metrics && (
+                <PredictionsCard
+                  predictions={metrics.predictions}
+                  testDate={latestTest.test_date}
+                />
+              )}
+
+              {/* Full AI analysis */}
+              <div className="card p-5">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-brand-500/20 flex items-center justify-center">
+                      <Brain className="w-5 h-5 text-brand-400" />
                     </div>
-                    {r.summary && (
-                      <p className="text-xs text-surface-500 mt-1 line-clamp-2">{r.summary}</p>
+                    <div>
+                      <h2 className="font-bold text-surface-100">Análise completa IA</h2>
+                      <p className="text-xs text-surface-500">
+                        Usa testes, histórico completo e treinos
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleFullAnalysis}
+                    disabled={analyzing}
+                    className="btn-primary text-xs py-1.5 px-3 shrink-0"
+                  >
+                    {analyzing ? (
+                      <><Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1.5" />Analisando…</>
+                    ) : (
+                      <><Sparkles className="w-3.5 h-3.5 inline mr-1.5" />{analysisResult ? "Reanalisar" : "Analisar"}</>
                     )}
                   </button>
-                ))}
+                </div>
+
+                {analysisError && (
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-3">
+                    <p className="text-sm text-red-400">{analysisError}</p>
+                  </div>
+                )}
+
+                {analysisResult ? (
+                  <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
+                    {analysisResult}
+                  </p>
+                ) : !analyzing && (
+                  <div className="text-center py-6 text-surface-500">
+                    <Sparkles className="w-7 h-7 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm">Análise profunda com todos os seus dados</p>
+                    <p className="text-xs mt-1 text-surface-600">
+                      Inclui VDOT, zonas de FC, progressão e plano 8 semanas
+                    </p>
+                  </div>
+                )}
               </div>
-            </div>
+            </>
           )}
+
+          {/* Interactive weekly plan — always shown */}
+          <WeeklyPlanCard
+            initialPlan={initialWeeklyPlan}
+            paces={pacesForPlan}
+          />
         </div>
       )}
 
-      {/* Reports */}
-      {activeTab === "reports" && (
+      {/* ── TAB: Testes 3km ──────────────────────────────────────────────────────── */}
+      {activeTab === "testes" && (
+        <TestHistoryCard
+          tests={tests}
+          onAddTest={() => setShowTestForm(true)}
+          onDelete={handleDeleteTest}
+        />
+      )}
+
+      {/* ── TAB: Relatórios ─────────────────────────────────────────────────────── */}
+      {activeTab === "relatorios" && (
         <div className="space-y-3">
           {reports.length === 0 ? (
-            <div className="card p-8 text-center text-surface-500">Nenhum relatório cadastrado.</div>
+            <div className="card p-8 text-center text-surface-500">
+              Nenhum relatório cadastrado.
+            </div>
           ) : (
             reports.map((report) => {
               const isOpen = expanded === report.id;
@@ -176,14 +307,18 @@ export function CoachContent({ reports, cycles }: Props) {
                           <h3 className="font-bold text-surface-100 text-sm">{report.title}</h3>
                           <div className="flex items-center gap-2 mt-0.5">
                             <Calendar className="w-3 h-3 text-surface-600" />
-                            <span className="text-xs text-surface-500">{formatDate(report.report_date)}</span>
+                            <span className="text-xs text-surface-500">
+                              {formatDate(report.report_date)}
+                            </span>
                             <span className="badge bg-surface-700 text-surface-400 text-xs">
                               {report.period_type}
                             </span>
                           </div>
                         </div>
                       </div>
-                      {isOpen ? <ChevronUp className="w-4 h-4 text-surface-500 shrink-0 mt-1" /> : <ChevronDown className="w-4 h-4 text-surface-500 shrink-0 mt-1" />}
+                      {isOpen
+                        ? <ChevronUp   className="w-4 h-4 text-surface-500 shrink-0 mt-1" />
+                        : <ChevronDown className="w-4 h-4 text-surface-500 shrink-0 mt-1" />}
                     </div>
 
                     {report.summary && (
@@ -195,7 +330,6 @@ export function CoachContent({ reports, cycles }: Props) {
 
                   {isOpen && (
                     <div className="border-t border-surface-700 p-5 space-y-5">
-                      {/* Strengths */}
                       {report.strengths && (
                         <div className="bg-green-500/10 rounded-xl p-4 border border-green-500/20">
                           <div className="flex items-center gap-2 mb-2">
@@ -208,7 +342,6 @@ export function CoachContent({ reports, cycles }: Props) {
                         </div>
                       )}
 
-                      {/* Weaknesses */}
                       {report.weaknesses && (
                         <div className="bg-yellow-500/10 rounded-xl p-4 border border-yellow-500/20">
                           <div className="flex items-center gap-2 mb-2">
@@ -221,7 +354,6 @@ export function CoachContent({ reports, cycles }: Props) {
                         </div>
                       )}
 
-                      {/* Recommendations */}
                       {report.recommendations && (
                         <div>
                           <div className="flex items-center gap-2 mb-2">
@@ -234,7 +366,6 @@ export function CoachContent({ reports, cycles }: Props) {
                         </div>
                       )}
 
-                      {/* Projections */}
                       {report.projections && (
                         <div>
                           <div className="flex items-center gap-2 mb-2">
@@ -247,12 +378,13 @@ export function CoachContent({ reports, cycles }: Props) {
                         </div>
                       )}
 
-                      {/* Full report */}
                       {report.full_report && (
                         <div>
                           <div className="flex items-center gap-2 mb-2">
                             <BookOpen className="w-4 h-4 text-surface-500" />
-                            <span className="text-sm font-semibold text-surface-400">Relatório completo</span>
+                            <span className="text-sm font-semibold text-surface-400">
+                              Relatório completo
+                            </span>
                           </div>
                           <div className="bg-surface-700/50 rounded-xl p-4 max-h-96 overflow-y-auto">
                             <p className="text-xs text-surface-400 leading-relaxed whitespace-pre-wrap font-mono">
@@ -267,47 +399,67 @@ export function CoachContent({ reports, cycles }: Props) {
               );
             })
           )}
+
+          {/* Cycles section (previously in separate tab) */}
+          {cycles.length > 0 && (
+            <div className="space-y-3 pt-2">
+              <h3 className="font-semibold text-surface-400 text-sm flex items-center gap-2">
+                <Layers className="w-4 h-4" /> Ciclos de treino
+              </h3>
+              {cycles.map((cycle, idx) => (
+                <div key={cycle.id} className="card p-5">
+                  <div className="flex items-start gap-3">
+                    <div className="flex flex-col items-center shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-brand-500/20 flex items-center justify-center text-sm font-bold text-brand-300">
+                        {idx + 1}
+                      </div>
+                      {idx < cycles.length - 1 && (
+                        <div className="w-0.5 h-6 bg-surface-700 mt-1" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-surface-100">{cycle.name}</h3>
+                      <div className="flex items-center gap-2 mt-0.5 text-xs text-surface-500">
+                        <Calendar className="w-3 h-3" />
+                        {formatDate(cycle.start_date)}
+                        {cycle.end_date && <> → {formatDate(cycle.end_date)}</>}
+                      </div>
+                      {cycle.objective && (
+                        <p className="text-sm text-surface-400 mt-2 leading-relaxed">
+                          {cycle.objective}
+                        </p>
+                      )}
+                      {cycle.notes && (
+                        <p className="text-xs text-surface-500 mt-2 leading-relaxed">
+                          {cycle.notes}
+                        </p>
+                      )}
+                      {cycle.final_assessment && (
+                        <div className="mt-3 bg-surface-700/50 rounded-xl p-3">
+                          <p className="text-xs font-semibold text-surface-400 mb-1">Avaliação final</p>
+                          <p className="text-xs text-surface-300 leading-relaxed">
+                            {cycle.final_assessment}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Cycles */}
-      {activeTab === "cycles" && (
-        <div className="space-y-3">
-          {cycles.map((cycle, idx) => (
-            <div key={cycle.id} className="card p-5">
-              <div className="flex items-start gap-3">
-                <div className="flex flex-col items-center shrink-0">
-                  <div className="w-8 h-8 rounded-full bg-brand-500/20 flex items-center justify-center text-sm font-bold text-brand-300">
-                    {idx + 1}
-                  </div>
-                  {idx < cycles.length - 1 && (
-                    <div className="w-0.5 h-6 bg-surface-700 mt-1" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-surface-100">{cycle.name}</h3>
-                  <div className="flex items-center gap-2 mt-0.5 text-xs text-surface-500">
-                    <Calendar className="w-3 h-3" />
-                    {formatDate(cycle.start_date)}
-                    {cycle.end_date && <> → {formatDate(cycle.end_date)}</>}
-                  </div>
-                  {cycle.objective && (
-                    <p className="text-sm text-surface-400 mt-2 leading-relaxed">{cycle.objective}</p>
-                  )}
-                  {cycle.notes && (
-                    <p className="text-xs text-surface-500 mt-2 leading-relaxed">{cycle.notes}</p>
-                  )}
-                  {cycle.final_assessment && (
-                    <div className="mt-3 bg-surface-700/50 rounded-xl p-3">
-                      <p className="text-xs font-semibold text-surface-400 mb-1">Avaliação final</p>
-                      <p className="text-xs text-surface-300 leading-relaxed">{cycle.final_assessment}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* Test form modal */}
+      {showTestForm && (
+        <TestForm
+          onClose={() => setShowTestForm(false)}
+          onSaved={(t) => {
+            setTests(prev => [t, ...prev]);
+            setShowTestForm(false);
+          }}
+        />
       )}
     </div>
   );

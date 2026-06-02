@@ -188,6 +188,64 @@ export interface SyncLog {
 }
 
 // ─────────────────────────────────────────────────────────
+// Activities (all sport types — non-run Strava + manual gym)
+// ─────────────────────────────────────────────────────────
+
+export type SportType =
+  | "Run" | "TrailRun" | "VirtualRun"
+  | "WeightTraining" | "Workout" | "Crossfit" | "Yoga" | "Pilates"
+  | "Ride" | "VirtualRide" | "EBikeRide"
+  | "Swim" | "OpenWaterSwim"
+  | "Walk" | "Hike"
+  | "Soccer" | "Tennis" | "Basketball" | "Other";
+
+export interface GymExercise {
+  name: string;
+  sets?: number;
+  reps?: number;
+  weight_kg?: number;
+  notes?: string;
+}
+
+export interface Activity {
+  id: string;
+  user_id: string;
+  strava_activity_id: number | null;
+  name: string;
+  sport_type: string;
+  date: string;                // YYYY-MM-DD
+  duration_seconds: number | null;
+  distance_m: number | null;
+  calories: number | null;
+  avg_hr: number | null;
+  elevation_gain_m: number | null;
+  source: "strava" | "manual";
+  notes: string | null;
+  exercises: GymExercise[] | null;
+  strava_raw_json: Record<string, unknown> | null;
+  created_at: string;
+  deleted_at: string | null;
+}
+
+/** Unified entry used by the calendar (merges Run + Activity rows) */
+export interface CalendarEntry {
+  id: string;
+  date: string;
+  name: string;
+  sport_type: string;
+  duration_seconds: number | null;
+  distance_km: number | null;
+  calories: number | null;
+  avg_hr: number | null;
+  source: string;
+  // run-specific
+  avg_pace_seconds_per_km?: number | null;
+  type?: string;
+  // gym-specific
+  exercises?: GymExercise[] | null;
+}
+
+// ─────────────────────────────────────────────────────────
 // UI / computed types
 // ─────────────────────────────────────────────────────────
 
@@ -226,4 +284,74 @@ export interface DashboardStats {
   withCoachFeedback: number;
   lastRun: Run | null;
   nextGoal: Goal | null;
+}
+
+// ─────────────────────────────────────────────────────────
+// Performance Tests (bi-monthly 3km time trials)
+// ─────────────────────────────────────────────────────────
+
+export interface PerformanceTest {
+  id: string;
+  user_id: string;
+  test_date: string;        // YYYY-MM-DD
+  distance_km: number;      // default 3.0
+  time_seconds: number;     // total time
+  avg_hr: number | null;
+  max_hr: number | null;
+  notes: string | null;
+  vo2max_estimate: number | null;
+  vdot: number | null;
+  created_at: string;
+}
+
+// ─────────────────────────────────────────────────────────
+// Weekly training plan (AI-generated, structured)
+// ─────────────────────────────────────────────────────────
+
+export type PlanDayType =
+  | "rest" | "easy" | "tempo" | "intervals"
+  | "long_run" | "recovery" | "test" | "race";
+
+export interface WeeklyPlanDay {
+  day:         "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
+  dayPt:       string;       // "Segunda", "Terça", …
+  type:        PlanDayType;
+  label:       string;       // "Rodagem", "Tiro", "Longão", "Descanso" …
+  distance_km?: number;
+  duration_min?: number;
+  pace?:       string;       // "6:30–6:45/km"
+  description: string;
+}
+
+export interface WeeklyPlanData {
+  week_start:   string;      // YYYY-MM-DD (Monday)
+  days:         WeeklyPlanDay[];
+  ai_message?:  string;      // Proactive question / observation
+  generated_at: string;      // ISO timestamp
+}
+
+export interface PlanChatMessage {
+  role:      "user" | "assistant";
+  content:   string;
+  timestamp: string;
+}
+
+// ─────────────────────────────────────────────────────────
+// Races (official race results + upcoming target races)
+// ─────────────────────────────────────────────────────────
+
+export interface Race {
+  id: string;
+  user_id: string;
+  name: string;
+  race_date: string;             // YYYY-MM-DD
+  distance_km: number;
+  time_seconds: number | null;   // null = future race (no result yet)
+  avg_hr: number | null;
+  notes: string | null;
+  location: string | null;
+  is_target_race: boolean;
+  bib_number: string | null;
+  weather: string | null;
+  created_at: string;
 }

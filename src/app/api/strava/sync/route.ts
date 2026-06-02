@@ -56,50 +56,50 @@ export async function POST(request: NextRequest) {
       .is("strava_activity_id", null)
       .is("deleted_at", null);
 
+    // Also get existing strava_activity_ids in the activities table
+    const { data: existingActivities } = await supabase
+      .from("activities")
+      .select("strava_activity_id")
+      .eq("user_id", user.id)
+      .not("strava_activity_id", "is", null);
+    const existingActivityIds = new Set(
+      (existingActivities ?? []).map((a) => a.strava_activity_id)
+    );
+
+    // Run sport types — go to `runs` table
+    const RUN_TYPES = new Set(["Run", "TrailRun", "VirtualRun", "Treadmill"]);
+
     // Fetch activities from Strava
-    let imported = 0, updated = 0, ignored = 0;
+    let imported = 0, updated = 0, ignored = 0, activitiesImported = 0;
     let page = 1;
 
     while (true) {
       const activities = await getStravaActivities(accessToken, page, 50);
       if (!Array.isArray(activities) || activities.length === 0) break;
 
-      // Filter only runs
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const runs = activities.filter((a: any) => a.type === "Run");
-
-      for (const activity of runs) {
+      for (const activity of activities) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const act = activity as any;
+        const sportType: string = act.sport_type ?? act.type ?? "Other";
+        const isRun = RUN_TYPES.has(sportType);
 
-        // Skip if already linked to this Strava activity
-        if (existingIds.has(act.id)) {
-          ignored++;
-          continue;
-        }
+        if (isRun) {
+          // ── RUNS TABLE ──────────────────────────────────────────────────
+          if (existingIds.has(act.id)) { ignored++; continue; }
 
-        const run = stravaActivityToRun(act, user.id);
+          const run = stravaActivityToRun(act, user.id);
 
-        // Check if a manual/seed run is a probable duplicate
-        const duplicate = (manualRuns ?? []).find((m) =>
-          isProbableDuplicate(
-            { date: m.date, distance_km: m.distance_km, duration_seconds: m.duration_seconds },
-            {
-              date: run.date ?? "",
-              distance_km: run.distance_km ?? 0,
-              duration_seconds: run.duration_seconds ?? 0,
-            }
-          )
-        );
+          const duplicate = (manualRuns ?? []).find((m) =>
+            isProbableDuplicate(
+              { date: m.date, distance_km: m.distance_km, duration_seconds: m.duration_seconds },
+              { date: run.date ?? "", distance_km: run.distance_km ?? 0, duration_seconds: run.duration_seconds ?? 0 }
+            )
+          );
 
-        if (duplicate) {
-          // Merge: update the existing manual/seed run with Strava objective data
-          const { error } = await admin
-            .from("runs")
-            .update({
+          if (duplicate) {
+            const { error } = await admin.from("runs").update({
               strava_activity_id:      act.id,
               source:                  "strava+ai",
-              // Overwrite objective fields with Strava's authoritative values
               distance_km:             run.distance_km,
               duration_seconds:        run.duration_seconds,
               moving_time_seconds:     run.moving_time_seconds,
@@ -116,27 +116,42 @@ export async function POST(request: NextRequest) {
               device_name:             run.device_name,
               strava_raw_json:         run.strava_raw_json,
               synced_at:               new Date().toISOString(),
-            })
-            .eq("id", duplicate.id);
+            }).eq("id", duplicate.id);
 
-          if (!error) {
-            updated++;
-            existingIds.add(act.id);
-            // Remove from manualRuns pool so it can't match again
-            const idx = (manualRuns ?? []).indexOf(duplicate);
-            if (idx !== -1) manualRuns!.splice(idx, 1);
+            if (!error) {
+              updated++;
+              existingIds.add(act.id);
+              const idx = (manualRuns ?? []).indexOf(duplicate);
+              if (idx !== -1) manualRuns!.splice(idx, 1);
+            }
+          } else {
+            const { error } = await admin.from("runs").insert({ ...run, synced_at: new Date().toISOString() });
+            if (!error) { imported++; existingIds.add(act.id); }
           }
         } else {
-          // No match — insert as a fresh Strava run
-          const { error } = await admin.from("runs").insert({
-            ...run,
-            synced_at: new Date().toISOString(),
+          // ── ACTIVITIES TABLE (gym, bike, swim, etc.) ─────────────────────
+          if (existingActivityIds.has(act.id)) { ignored++; continue; }
+
+          const date: string = act.start_date_local
+            ? act.start_date_local.split("T")[0]
+            : new Date().toISOString().split("T")[0];
+
+          const { error } = await admin.from("activities").insert({
+            user_id:            user.id,
+            strava_activity_id: act.id,
+            name:               act.name ?? sportType,
+            sport_type:         sportType,
+            date,
+            duration_seconds:   act.moving_time ?? act.elapsed_time ?? null,
+            distance_m:         act.distance ?? null,
+            calories:           act.calories ? Math.round(act.calories) : null,
+            avg_hr:             act.average_heartrate ? Math.round(act.average_heartrate) : null,
+            elevation_gain_m:   act.total_elevation_gain ?? null,
+            source:             "strava",
+            strava_raw_json:    act,
           });
 
-          if (!error) {
-            imported++;
-            existingIds.add(act.id);
-          }
+          if (!error) { activitiesImported++; existingActivityIds.add(act.id); }
         }
       }
 
@@ -149,13 +164,13 @@ export async function POST(request: NextRequest) {
       user_id:              user.id,
       source:               "strava",
       status:               "success",
-      message:              `Importadas: ${imported}, Atualizadas: ${updated}, Ignoradas: ${ignored}`,
-      activities_imported:  imported,
+      message:              `Corridas: ${imported} novas, ${updated} atualizadas | Atividades: ${activitiesImported} novas | Ignoradas: ${ignored}`,
+      activities_imported:  imported + activitiesImported,
       activities_updated:   updated,
       activities_ignored:   ignored,
     });
 
-    return NextResponse.json({ imported, updated, ignored, success: true });
+    return NextResponse.json({ imported, updated, ignored, activitiesImported, success: true });
   } catch (err) {
     console.error("Strava sync error:", err);
     const message = err instanceof Error ? err.message : "Sync error";

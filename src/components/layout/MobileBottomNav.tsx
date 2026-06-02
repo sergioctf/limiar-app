@@ -5,18 +5,18 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   ListOrdered,
-  Target,
-  BarChart3,
+  Trophy,
+  FileText,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/",          icon: LayoutDashboard, label: "Home"     },
-  { href: "/runs",      icon: ListOrdered,     label: "Corridas" },
-  { href: "/analytics", icon: BarChart3,       label: "Gráficos" },
-  { href: "/goals",     icon: Target,          label: "Metas"    },
-  { href: "/settings",  icon: Settings,        label: "Config."  },
+  { href: "/",        icon: LayoutDashboard, label: "Home"      },
+  { href: "/runs",    icon: ListOrdered,     label: "Corridas"  },
+  { href: "/races",   icon: Trophy,          label: "Provas"    },
+  { href: "/coach",   icon: FileText,        label: "Treinador" },
+  { href: "/settings", icon: Settings,       label: "Config."   },
 ];
 
 export function MobileBottomNav() {

@@ -2,39 +2,72 @@
 
 import Link from "next/link";
 import {
-  Activity, MapPin, Clock, TrendingUp, Zap,
+  MapPin, Clock, TrendingUp, Zap,
   Heart, Calendar, Target, ChevronRight,
-  Award, AlertTriangle, Brain, Flag, Timer
+  Award, AlertTriangle, Brain, Flag, Timer, Dumbbell
 } from "lucide-react";
 import { StatCard } from "@/components/shared/StatCard";
 import { PaceBadge, RunTypeBadge } from "@/components/shared/Badges";
 import { WeeklyVolumeChart } from "@/components/charts/WeeklyVolumeChart";
 import {
   totalDistanceKm, totalDurationSeconds, longestRun, bestPace,
-  weeklyVolumeKm, monthlyVolumeKm, bestWeeklyVolumeKm, bestMonthlyVolumeKm,
+  monthlyVolumeKm,
   secondsToPaceString, secondsToReadable, formatDate, formatDistanceKm, groupByWeek,
 } from "@/lib/utils";
-import type { Run, Goal, CoachReport, SyncLog } from "@/types";
+import type { Run, Goal, CoachReport, SyncLog, Activity, Race } from "@/types";
 
 interface Props {
   runs: Run[];
   latestReport: CoachReport | null;
   goals: Goal[];
   lastSync: SyncLog | null;
+  weekActivities: Activity[];
+  recentActivities: Activity[];
+  nextRace?: Race | null;
 }
 
-export function DashboardContent({ runs, latestReport, goals, lastSync }: Props) {
+function sportIcon(sportType: string): string {
+  const t = sportType?.toLowerCase() ?? "";
+  if (t.includes("run") || t.includes("trail"))  return "🏃";
+  if (t.includes("weight") || t.includes("workout") || t.includes("crossfit") || t.includes("gym")) return "🏋️";
+  if (t.includes("ride") || t.includes("bike") || t.includes("cycling")) return "🚴";
+  if (t.includes("swim"))                         return "🏊";
+  if (t.includes("walk") || t.includes("hike"))   return "🚶";
+  if (t.includes("yoga") || t.includes("pilates")) return "🧘";
+  return "⚡";
+}
+
+function greetingByHour(): string {
+  const h = new Date().getHours();
+  if (h < 12) return "Bom dia";
+  if (h < 18) return "Boa tarde";
+  return "Boa noite";
+}
+
+function todayPtBR(): string {
+  return new Date().toLocaleDateString("pt-BR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+export function DashboardContent({
+  runs,
+  latestReport,
+  goals,
+  lastSync,
+  weekActivities,
+  recentActivities,
+  nextRace,
+}: Props) {
   const totalDist  = totalDistanceKm(runs);
   const totalDur   = totalDurationSeconds(runs);
   const longest    = longestRun(runs);
   const best       = bestPace(runs);
-  const weekly     = weeklyVolumeKm(runs);
   const monthly    = monthlyVolumeKm(runs);
-  const bestWeekly = bestWeeklyVolumeKm(runs);
-  const bestMonthly= bestMonthlyVolumeKm(runs);
   const lastRun    = runs[0] ?? null;
-  const stravaRuns = runs.filter((r) => r.source === "strava" || r.source === "strava+ai");
-  const withCoach  = runs.filter((r) => r.coach_feedback);
   const weeklyData = groupByWeek(runs).slice(-12);
 
   const avgPace = totalDist > 0
@@ -54,82 +87,295 @@ export function DashboardContent({ runs, latestReport, goals, lastSync }: Props)
   const prior3Max  = Math.max(...last4Weeks.slice(0, 3).map((w) => w.totalKm), 1);
   const readinessPct = Math.min(100, Math.round((lastWeekKm / prior3Max) * 100));
 
+  // This week's runs
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  const weekStartStr = weekStart.toISOString().slice(0, 10);
+  const weekRuns = runs.filter((r) => r.date >= weekStartStr);
+  const weekRunKm = weekRuns.reduce((s, r) => s + r.distance_km, 0);
+
+  // This week gym stats
+  const weekGymCount = weekActivities.filter((a) => {
+    const t = a.sport_type?.toLowerCase() ?? "";
+    return t.includes("weight") || t.includes("workout") || t.includes("crossfit") || t.includes("gym");
+  }).length;
+  const weekGymMinutes = weekActivities.reduce((s, a) => s + (a.duration_seconds ?? 0) / 60, 0);
+
+  // Total calories this week (runs + activities)
+  const weekRunCalories = weekRuns.reduce((s, r) => s + (r.calories ?? 0), 0);
+  const weekGymCalories = weekActivities.reduce((s, a) => s + (a.calories ?? 0), 0);
+  const weekCalories    = weekRunCalories + weekGymCalories;
+
+  // Total training hours this week
+  const weekRunSeconds  = weekRuns.reduce((s, r) => s + r.duration_seconds, 0);
+  const weekGymSeconds  = weekActivities.reduce((s, a) => s + (a.duration_seconds ?? 0), 0);
+  const weekTotalHours  = (weekRunSeconds + weekGymSeconds) / 3600;
+
+  // Activity feed: merge recent runs (last 30 days) with recentActivities
+  const thirtyAgo = new Date();
+  thirtyAgo.setDate(thirtyAgo.getDate() - 30);
+  const thirtyAgoStr = thirtyAgo.toISOString().slice(0, 10);
+  const recentRuns = runs.filter((r) => r.date >= thirtyAgoStr).slice(0, 6);
+
+  type FeedItem =
+    | { kind: "run"; id: string; name: string; date: string; sport_type: string; metric: string }
+    | { kind: "gym"; id: string; name: string; date: string; sport_type: string; metric: string };
+
+  const feedItems: FeedItem[] = [
+    ...recentRuns.map((r) => ({
+      kind: "run" as const,
+      id: r.id,
+      name: r.name,
+      date: r.date,
+      sport_type: r.type === "easy" ? "Run" : r.type,
+      metric: formatDistanceKm(r.distance_km),
+    })),
+    ...recentActivities.map((a) => ({
+      kind: "gym" as const,
+      id: a.id,
+      name: a.name,
+      date: a.date,
+      sport_type: a.sport_type,
+      metric: a.duration_seconds
+        ? `${Math.floor(a.duration_seconds / 3600) > 0 ? Math.floor(a.duration_seconds / 3600) + "h" : ""}${Math.floor((a.duration_seconds % 3600) / 60)}min`
+        : "—",
+    })),
+  ]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 6);
+
+  // Training balance (last 30 days)
+  const balance30RunCount   = recentRuns.length;
+  const balance30GymCount   = recentActivities.filter((a) => {
+    const t = a.sport_type?.toLowerCase() ?? "";
+    return t.includes("weight") || t.includes("workout") || t.includes("crossfit");
+  }).length;
+  const balance30OtherCount = recentActivities.length - balance30GymCount;
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="page-header">Dashboard</h1>
-          <p className="text-surface-500 text-sm mt-0.5">
-            {runs.length} corridas registradas
-          </p>
+          <h1 className="page-header">{greetingByHour()}, Sérgio</h1>
+          <p className="text-surface-500 text-sm mt-0.5 capitalize">{todayPtBR()}</p>
         </div>
         <Link href="/runs/new" className="btn-primary">
-          <Activity className="w-4 h-4" />
+          <span className="text-base leading-none">🏃</span>
           <span className="hidden sm:inline">Nova corrida</span>
         </Link>
       </div>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
-        <StatCard
-          label="Total de corridas"
-          value={runs.length}
-          icon={Activity}
-        />
-        <StatCard
-          label="Distância total"
-          value={`${totalDist.toFixed(0)} km`}
-          sub={`${totalDist.toFixed(1)} km exatos`}
-          icon={MapPin}
-          accent
-        />
-        <StatCard
-          label="Tempo total"
-          value={secondsToReadable(totalDur)}
-          icon={Clock}
-        />
-        <StatCard
-          label="Pace médio"
-          value={avgPace ? secondsToPaceString(avgPace) + "/km" : "—"}
-          icon={TrendingUp}
-        />
-        <StatCard
-          label="Maior distância"
-          value={longest ? formatDistanceKm(longest.distance_km) : "—"}
-          sub={longest ? formatDate(longest.date) : undefined}
-          icon={Award}
-        />
-        <StatCard
-          label="Melhor pace"
-          value={best?.avg_pace_seconds_per_km
-            ? secondsToPaceString(best.avg_pace_seconds_per_km) + "/km"
-            : "—"}
-          sub={best ? formatDistanceKm(best.distance_km) : undefined}
-          icon={Zap}
-          accent
-        />
-        <StatCard
-          label="Volume semanal"
-          value={`${weekly.toFixed(1)} km`}
-          icon={Calendar}
-        />
-        <StatCard
-          label="Volume mensal"
-          value={`${monthly.toFixed(1)} km`}
-          icon={TrendingUp}
-        />
-        <StatCard
-          label="Melhor semana"
-          value={bestWeekly > 0 ? `${bestWeekly.toFixed(1)} km` : "—"}
-          icon={Award}
-          accent
-        />
-        <StatCard
-          label="Melhor mês"
-          value={bestMonthly > 0 ? `${bestMonthly.toFixed(1)} km` : "—"}
-          icon={Award}
-        />
+      {/* Esta semana overview */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="card p-4">
+          <p className="stat-label mb-1">Corridas</p>
+          <p className="text-2xl font-black text-surface-100 tabular-nums">{weekRuns.length}</p>
+          <p className="text-xs text-surface-500 mt-0.5">{weekRunKm.toFixed(1)} km</p>
+        </div>
+        <div className="card p-4">
+          <p className="stat-label mb-1">Musculação</p>
+          <p className="text-2xl font-black text-blue-300 tabular-nums">{weekGymCount}</p>
+          <p className="text-xs text-surface-500 mt-0.5">
+            {weekGymMinutes > 0 ? `${Math.round(weekGymMinutes)} min` : "—"}
+          </p>
+        </div>
+        <div className="card p-4">
+          <p className="stat-label mb-1">Calorias</p>
+          <p className="text-2xl font-black text-orange-300 tabular-nums">
+            {weekCalories > 0 ? weekCalories.toLocaleString("pt-BR") : "—"}
+          </p>
+          <p className="text-xs text-surface-500 mt-0.5">esta semana</p>
+        </div>
+        <div className="card p-4">
+          <p className="stat-label mb-1">Horas de treino</p>
+          <p className="text-2xl font-black text-green-300 tabular-nums">
+            {weekTotalHours > 0 ? weekTotalHours.toFixed(1) : "—"}
+          </p>
+          <p className="text-xs text-surface-500 mt-0.5">horas esta semana</p>
+        </div>
+      </div>
+
+      {/* Activity feed + Race countdown */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Activity feed */}
+        <div className="card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="section-title">Atividades recentes</h2>
+            <Link href="/calendar" className="btn-ghost text-brand-400 hover:text-brand-300 text-xs">
+              Ver calendário <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+          {feedItems.length === 0 ? (
+            <p className="text-surface-500 text-sm">Sem atividades nos últimos 30 dias.</p>
+          ) : (
+            <ul className="space-y-2">
+              {feedItems.map((item) => (
+                <li key={`${item.kind}-${item.id}`}>
+                  {item.kind === "run" ? (
+                    <Link
+                      href={`/runs/${item.id}`}
+                      className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-surface-700/50 transition-colors"
+                    >
+                      <span className="text-base leading-none w-6 text-center shrink-0">
+                        {sportIcon(item.sport_type)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-surface-200 font-medium truncate">{item.name}</p>
+                        <p className="text-xs text-surface-500">{formatDate(item.date)}</p>
+                      </div>
+                      <span className="text-sm font-bold text-surface-100 tabular-nums shrink-0">
+                        {item.metric}
+                      </span>
+                    </Link>
+                  ) : (
+                    <div className="flex items-center gap-2 rounded-lg px-2 py-1.5">
+                      <span className="text-base leading-none w-6 text-center shrink-0">
+                        {sportIcon(item.sport_type)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-surface-200 font-medium truncate">{item.name}</p>
+                        <p className="text-xs text-surface-500">{formatDate(item.date)}</p>
+                      </div>
+                      <span className="text-sm font-bold text-surface-100 tabular-nums shrink-0">
+                        {item.metric}
+                      </span>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Race countdown — prefers races table, falls back to goals */}
+        {nextRace ? (() => {
+          const raceDay  = new Date(nextRace.race_date + "T12:00:00");
+          const today2   = new Date(); today2.setHours(0,0,0,0);
+          const raceDays = Math.round((raceDay.getTime() - today2.getTime()) / (1000 * 60 * 60 * 24));
+          return (
+            <Link href="/races" className="card-hover p-4 block relative overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-brand-500 to-brand-300 rounded-t-xl" />
+              <div className="flex items-center justify-between mb-3">
+                <p className="stat-label">Próxima prova</p>
+                <Flag className="w-4 h-4 text-brand-400" />
+              </div>
+              <p className="font-bold text-surface-100 text-sm line-clamp-1">{nextRace.name}</p>
+              <p className="text-xs text-surface-500 mt-0.5">
+                {nextRace.distance_km} km · {formatDate(nextRace.race_date)}
+              </p>
+              <div className="flex items-end gap-2 mt-3">
+                <span className={`text-3xl font-black tabular-nums leading-none ${
+                  raceDays <= 7  ? "text-red-400" :
+                  raceDays <= 30 ? "text-yellow-400" : "text-brand-300"
+                }`}>
+                  {raceDays > 0 ? raceDays : "HOJE"}
+                </span>
+                {raceDays > 0 && (
+                  <span className="text-sm text-surface-400 mb-0.5">
+                    {raceDays === 1 ? "dia" : "dias"}
+                  </span>
+                )}
+              </div>
+              <div className="mt-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-surface-500">Prontidão semanal</span>
+                  <span className="text-xs font-semibold text-surface-300">{readinessPct}%</span>
+                </div>
+                <div className="h-1.5 bg-surface-700 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      readinessPct >= 80 ? "bg-green-500" :
+                      readinessPct >= 50 ? "bg-brand-500" : "bg-yellow-500"
+                    }`}
+                    style={{ width: `${readinessPct}%` }}
+                  />
+                </div>
+              </div>
+            </Link>
+          );
+        })() : nextGoal && daysToRace !== null ? (
+          <Link href="/goals" className="card-hover p-4 block relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-brand-500 to-brand-300 rounded-t-xl" />
+            <div className="flex items-center justify-between mb-3">
+              <p className="stat-label">Próxima corrida</p>
+              <Flag className="w-4 h-4 text-brand-400" />
+            </div>
+            <p className="font-bold text-surface-100 text-sm line-clamp-1">{nextGoal.race_name}</p>
+            <p className="text-xs text-surface-500 mt-0.5">
+              {nextGoal.distance_km} km · {nextGoal.race_date ? formatDate(nextGoal.race_date) : ""}
+            </p>
+            <div className="flex items-end gap-2 mt-3">
+              <span className={`text-3xl font-black tabular-nums leading-none ${
+                daysToRace <= 7  ? "text-red-400" :
+                daysToRace <= 30 ? "text-yellow-400" : "text-brand-300"
+              }`}>
+                {daysToRace > 0 ? daysToRace : 0}
+              </span>
+              <span className="text-sm text-surface-400 mb-0.5">
+                {daysToRace === 1 ? "dia" : "dias"}
+              </span>
+              {nextGoal.target_time_seconds && (
+                <span className="ml-auto flex items-center gap-1 badge bg-brand-500/15 text-brand-300">
+                  <Timer className="w-3 h-3" />
+                  {secondsToReadable(nextGoal.target_time_seconds)}
+                </span>
+              )}
+            </div>
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-surface-500">Prontidão semanal</span>
+                <span className="text-xs font-semibold text-surface-300">{readinessPct}%</span>
+              </div>
+              <div className="h-1.5 bg-surface-700 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    readinessPct >= 80 ? "bg-green-500" :
+                    readinessPct >= 50 ? "bg-brand-500" : "bg-yellow-500"
+                  }`}
+                  style={{ width: `${readinessPct}%` }}
+                />
+              </div>
+            </div>
+          </Link>
+        ) : nextGoal ? (
+          <Link href="/goals" className="card-hover p-4 block">
+            <p className="stat-label mb-2">Próxima meta</p>
+            <p className="font-semibold text-surface-100 text-sm">{nextGoal.race_name}</p>
+            <div className="flex items-center gap-3 mt-3 flex-wrap">
+              <span className="font-bold text-surface-100 tabular-nums">{nextGoal.distance_km} km</span>
+              {nextGoal.target_time_seconds && (
+                <span className="badge bg-brand-500/15 text-brand-300">
+                  alvo {secondsToReadable(nextGoal.target_time_seconds)}
+                </span>
+              )}
+            </div>
+          </Link>
+        ) : lastRun ? (
+          <Link href={`/runs/${lastRun.id}`} className="card-hover p-4 block">
+            <p className="stat-label mb-2">Última corrida</p>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="font-semibold text-surface-100 text-sm line-clamp-1">{lastRun.name}</p>
+                <p className="text-xs text-surface-500 mt-0.5">{formatDate(lastRun.date)}</p>
+              </div>
+              <RunTypeBadge type={lastRun.type} />
+            </div>
+            <div className="flex items-center gap-3 mt-3 flex-wrap">
+              <span className="font-bold text-surface-100 tabular-nums">
+                {formatDistanceKm(lastRun.distance_km)}
+              </span>
+              {lastRun.avg_pace_seconds_per_km && (
+                <PaceBadge paceSeconds={lastRun.avg_pace_seconds_per_km} />
+              )}
+              {lastRun.avg_hr && (
+                <span className="flex items-center gap-1 text-xs text-surface-500">
+                  <Heart className="w-3 h-3" /> {lastRun.avg_hr} bpm
+                </span>
+              )}
+            </div>
+          </Link>
+        ) : null}
       </div>
 
       {/* Coach Executive Summary */}
@@ -181,101 +427,41 @@ export function DashboardContent({ runs, latestReport, goals, lastSync }: Props)
         </div>
       )}
 
-      {/* Last run + Race countdown */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Last run */}
-        {lastRun && (
-          <Link href={`/runs/${lastRun.id}`} className="card-hover p-4 block">
-            <p className="stat-label mb-2">Última corrida</p>
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="font-semibold text-surface-100 text-sm line-clamp-1">
-                  {lastRun.name}
-                </p>
-                <p className="text-xs text-surface-500 mt-0.5">{formatDate(lastRun.date)}</p>
-              </div>
-              <RunTypeBadge type={lastRun.type} />
-            </div>
-            <div className="flex items-center gap-3 mt-3 flex-wrap">
-              <span className="font-bold text-surface-100 tabular-nums">
-                {formatDistanceKm(lastRun.distance_km)}
-              </span>
-              {lastRun.avg_pace_seconds_per_km && (
-                <PaceBadge paceSeconds={lastRun.avg_pace_seconds_per_km} />
-              )}
-              {lastRun.avg_hr && (
-                <span className="flex items-center gap-1 text-xs text-surface-500">
-                  <Heart className="w-3 h-3" /> {lastRun.avg_hr} bpm
-                </span>
-              )}
-            </div>
-          </Link>
-        )}
-
-        {/* Race countdown */}
-        {nextGoal && daysToRace !== null ? (
-          <Link href="/goals" className="card-hover p-4 block relative overflow-hidden">
-            {/* accent line */}
-            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-brand-500 to-brand-300 rounded-t-xl" />
-            <div className="flex items-center justify-between mb-3">
-              <p className="stat-label">Próxima corrida</p>
-              <Flag className="w-4 h-4 text-brand-400" />
-            </div>
-            <p className="font-bold text-surface-100 text-sm line-clamp-1">{nextGoal.race_name}</p>
-            <p className="text-xs text-surface-500 mt-0.5">
-              {nextGoal.distance_km} km · {nextGoal.race_date ? formatDate(nextGoal.race_date) : ""}
-            </p>
-
-            {/* Countdown */}
-            <div className="flex items-end gap-2 mt-3">
-              <span className={`text-3xl font-black tabular-nums leading-none ${
-                daysToRace <= 7  ? "text-red-400" :
-                daysToRace <= 30 ? "text-yellow-400" : "text-brand-300"
-              }`}>
-                {daysToRace > 0 ? daysToRace : 0}
-              </span>
-              <span className="text-sm text-surface-400 mb-0.5">
-                {daysToRace === 1 ? "dia" : "dias"}
-              </span>
-              {nextGoal.target_time_seconds && (
-                <span className="ml-auto flex items-center gap-1 badge bg-brand-500/15 text-brand-300">
-                  <Timer className="w-3 h-3" />
-                  {secondsToReadable(nextGoal.target_time_seconds)}
-                </span>
-              )}
-            </div>
-
-            {/* Readiness bar */}
-            <div className="mt-3">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-surface-500">Prontidão semanal</span>
-                <span className="text-xs font-semibold text-surface-300">{readinessPct}%</span>
-              </div>
-              <div className="h-1.5 bg-surface-700 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    readinessPct >= 80 ? "bg-green-500" :
-                    readinessPct >= 50 ? "bg-brand-500" : "bg-yellow-500"
-                  }`}
-                  style={{ width: `${readinessPct}%` }}
-                />
-              </div>
-            </div>
-          </Link>
-        ) : nextGoal ? (
-          <Link href="/goals" className="card-hover p-4 block">
-            <p className="stat-label mb-2">Próxima meta</p>
-            <p className="font-semibold text-surface-100 text-sm">{nextGoal.race_name}</p>
-            <div className="flex items-center gap-3 mt-3 flex-wrap">
-              <span className="font-bold text-surface-100 tabular-nums">{nextGoal.distance_km} km</span>
-              {nextGoal.target_time_seconds && (
-                <span className="badge bg-brand-500/15 text-brand-300">
-                  alvo {secondsToReadable(nextGoal.target_time_seconds)}
-                </span>
-              )}
-            </div>
-          </Link>
-        ) : null}
+      {/* Stats grid (trimmed to 6 most important) */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <StatCard label="Total de corridas" value={runs.length} icon={Target} />
+        <StatCard
+          label="Distância total"
+          value={`${totalDist.toFixed(0)} km`}
+          sub={`${totalDist.toFixed(1)} km exatos`}
+          icon={MapPin}
+          accent
+        />
+        <StatCard
+          label="Pace médio"
+          value={avgPace ? secondsToPaceString(avgPace) + "/km" : "—"}
+          icon={TrendingUp}
+        />
+        <StatCard
+          label="Maior distância"
+          value={longest ? formatDistanceKm(longest.distance_km) : "—"}
+          sub={longest ? formatDate(longest.date) : undefined}
+          icon={Award}
+        />
+        <StatCard
+          label="Melhor pace"
+          value={best?.avg_pace_seconds_per_km
+            ? secondsToPaceString(best.avg_pace_seconds_per_km) + "/km"
+            : "—"}
+          sub={best ? formatDistanceKm(best.distance_km) : undefined}
+          icon={Zap}
+          accent
+        />
+        <StatCard
+          label="Volume mensal"
+          value={`${monthly.toFixed(1)} km`}
+          icon={Calendar}
+        />
       </div>
 
       {/* Weekly volume chart */}
@@ -291,25 +477,42 @@ export function DashboardContent({ runs, latestReport, goals, lastSync }: Props)
         </div>
       )}
 
-      {/* Strava + coach counters */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="card p-4">
-          <p className="stat-label">Strava importadas</p>
-          <p className="stat-value text-orange-300">{stravaRuns.length}</p>
-          {lastSync && (
-            <p className="text-xs text-surface-500 mt-1">
-              Último sync: {new Date(lastSync.created_at).toLocaleDateString("pt-BR")}
-            </p>
-          )}
+      {/* Training balance */}
+      <div className="card p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Dumbbell className="w-4 h-4 text-surface-400" />
+          <h2 className="section-title">Balanço de treinos (últimos 30 dias)</h2>
         </div>
-        <div className="card p-4">
-          <p className="stat-label">Com análise do treinador</p>
-          <p className="stat-value text-purple-300">{withCoach.length}</p>
-          <p className="text-xs text-surface-500 mt-1">
-            {runs.length > 0
-              ? `${Math.round((withCoach.length / runs.length) * 100)}% do total`
-              : "0%"}
-          </p>
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-brand-500 shrink-0" />
+            <span className="text-surface-300">
+              <strong className="text-surface-100">{balance30RunCount}</strong> corridas
+            </span>
+          </span>
+          <span className="text-surface-600">·</span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
+            <span className="text-surface-300">
+              <strong className="text-surface-100">{balance30GymCount}</strong> sessões de musculação
+            </span>
+          </span>
+          {balance30OtherCount > 0 && (
+            <>
+              <span className="text-surface-600">·</span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-surface-500 shrink-0" />
+                <span className="text-surface-300">
+                  <strong className="text-surface-100">{balance30OtherCount}</strong> outras
+                </span>
+              </span>
+            </>
+          )}
+          {lastSync && (
+            <span className="ml-auto text-xs text-surface-500">
+              Strava sync: {new Date(lastSync.created_at).toLocaleDateString("pt-BR")}
+            </span>
+          )}
         </div>
       </div>
     </div>

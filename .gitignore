@@ -13,10 +13,9 @@
 
 # Env
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env*.local
+.env.vercel.check
+*.vercel.check
 
 # Vercel
 .vercel
@@ -28,3 +27,5 @@ next-env.d.ts
 # Misc
 .DS_Store
 *.pem
+
+.vercel
