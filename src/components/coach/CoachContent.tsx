@@ -9,12 +9,13 @@ import {
 import { formatDate } from "@/lib/utils";
 import { computeMetrics, paceToString } from "@/lib/performance";
 import type { CoachReport, TrainingCycle, PerformanceTest, WeeklyPlanData } from "@/types";
-import { ZonesCard }        from "@/components/coach/ZonesCard";
-import { PacesCard }        from "@/components/coach/PacesCard";
-import { PredictionsCard }  from "@/components/coach/PredictionsCard";
-import { TestHistoryCard }  from "@/components/coach/TestHistoryCard";
-import { TestForm }         from "@/components/coach/TestForm";
-import { WeeklyPlanCard }   from "@/components/coach/WeeklyPlanCard";
+import { ZonesCard }            from "@/components/coach/ZonesCard";
+import { PacesCard }            from "@/components/coach/PacesCard";
+import { PredictionsCard }      from "@/components/coach/PredictionsCard";
+import { TestHistoryCard }      from "@/components/coach/TestHistoryCard";
+import { TestForm }             from "@/components/coach/TestForm";
+import { WeeklyPlanCard }       from "@/components/coach/WeeklyPlanCard";
+import { VdotEvolutionChart }   from "@/components/coach/VdotEvolutionChart";
 
 type Tab = "zonas" | "testes" | "relatorios";
 
@@ -217,6 +218,9 @@ export function CoachContent({ reports, cycles, tests: initialTests }: Props) {
                   testDate={latestTest.test_date}
                 />
               )}
+
+              {/* VDOT evolution chart (only when ≥2 tests) */}
+              <VdotEvolutionChart tests={tests} />
 
               {/* Full AI analysis */}
               <div className="card p-5">

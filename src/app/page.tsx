@@ -86,6 +86,21 @@ export default async function DashboardPage() {
     // Table may not exist yet — graceful fallback
   }
 
+  // Fetch latest performance test for VDOT / LTHR (used for CTL/ATL accuracy)
+  let latestTest: import("@/types").PerformanceTest | null = null;
+  try {
+    const supabaseAdmin = (await import("@/lib/supabase/server")).createAdminClient();
+    const { data: testData } = await supabaseAdmin
+      .from("performance_tests")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("test_date", { ascending: false })
+      .limit(1);
+    latestTest = (testData?.[0] ?? null) as import("@/types").PerformanceTest | null;
+  } catch {
+    // Table may not exist yet — graceful fallback
+  }
+
   const runsWithTags = (runs ?? []).map((r) => ({
     ...r,
     tags: (r.run_tags ?? []).map((t: { tag: string }) => t.tag),
@@ -101,6 +116,7 @@ export default async function DashboardPage() {
         weekActivities={(weekActivities ?? []) as import("@/types").Activity[]}
         recentActivities={(recentActivities ?? []) as import("@/types").Activity[]}
         nextRace={nextRace}
+        latestTest={latestTest}
       />
     </AppShell>
   );

@@ -2,19 +2,22 @@
 
 import Link from "next/link";
 import {
-  MapPin, Clock, TrendingUp, Zap,
+  MapPin, TrendingUp, Zap,
   Heart, Calendar, Target, ChevronRight,
-  Award, AlertTriangle, Brain, Flag, Timer, Dumbbell
+  Award, AlertTriangle, Brain, Flag, Timer, Dumbbell, Flame,
 } from "lucide-react";
 import { StatCard } from "@/components/shared/StatCard";
 import { PaceBadge, RunTypeBadge } from "@/components/shared/Badges";
 import { WeeklyVolumeChart } from "@/components/charts/WeeklyVolumeChart";
+import { FitnessCard } from "@/components/dashboard/FitnessCard";
 import {
   totalDistanceKm, totalDurationSeconds, longestRun, bestPace,
   monthlyVolumeKm,
   secondsToPaceString, secondsToReadable, formatDate, formatDistanceKm, groupByWeek,
 } from "@/lib/utils";
-import type { Run, Goal, CoachReport, SyncLog, Activity, Race } from "@/types";
+import { computeTrainingLoad, computeRunStreak } from "@/lib/training-load";
+import { computeMetrics } from "@/lib/performance";
+import type { Run, Goal, CoachReport, SyncLog, Activity, Race, PerformanceTest } from "@/types";
 
 interface Props {
   runs: Run[];
@@ -24,6 +27,7 @@ interface Props {
   weekActivities: Activity[];
   recentActivities: Activity[];
   nextRace?: Race | null;
+  latestTest?: PerformanceTest | null;
 }
 
 function sportIcon(sportType: string): string {
@@ -61,6 +65,7 @@ export function DashboardContent({
   weekActivities,
   recentActivities,
   nextRace,
+  latestTest,
 }: Props) {
   const totalDist  = totalDistanceKm(runs);
   const totalDur   = totalDurationSeconds(runs);
@@ -69,6 +74,17 @@ export function DashboardContent({
   const monthly    = monthlyVolumeKm(runs);
   const lastRun    = runs[0] ?? null;
   const weeklyData = groupByWeek(runs).slice(-12);
+
+  // Training load (CTL/ATL/TSB) — uses LTHR + threshold pace if test available
+  const testMetrics = latestTest
+    ? computeMetrics(latestTest.distance_km * 1000, latestTest.time_seconds, latestTest.avg_hr ?? undefined)
+    : null;
+  const lthr = testMetrics?.lthr ?? null;
+  const thresholdPace = testMetrics?.paces.find(p => p.name === "threshold")?.pace_min_sec ?? null;
+  const fitnessData = computeTrainingLoad(runs, lthr, thresholdPace, 90);
+
+  // Running streak
+  const runStreak = computeRunStreak(runs);
 
   const avgPace = totalDist > 0
     ? Math.round(totalDur / totalDist)
@@ -187,12 +203,21 @@ export function DashboardContent({
           </p>
           <p className="text-xs text-surface-500 mt-0.5">esta semana</p>
         </div>
-        <div className="card p-4">
-          <p className="stat-label mb-1">Horas de treino</p>
-          <p className="text-2xl font-black text-green-300 tabular-nums">
-            {weekTotalHours > 0 ? weekTotalHours.toFixed(1) : "—"}
+        {/* Streak card */}
+        <div className="card p-4 relative overflow-hidden">
+          {runStreak >= 3 && (
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-orange-500 to-yellow-400 rounded-t-xl" />
+          )}
+          <div className="flex items-center justify-between mb-1">
+            <p className="stat-label">Sequência</p>
+            {runStreak >= 3 && <Flame className="w-3.5 h-3.5 text-orange-400" />}
+          </div>
+          <p className={`text-2xl font-black tabular-nums ${runStreak >= 3 ? "text-orange-300" : "text-surface-100"}`}>
+            {runStreak}
           </p>
-          <p className="text-xs text-surface-500 mt-0.5">horas esta semana</p>
+          <p className="text-xs text-surface-500 mt-0.5">
+            {runStreak === 1 ? "dia seguido" : runStreak > 1 ? "dias seguidos" : "dias"}
+          </p>
         </div>
       </div>
 
@@ -377,6 +402,11 @@ export function DashboardContent({
           </Link>
         ) : null}
       </div>
+
+      {/* CTL/ATL/TSB Fitness Card */}
+      {fitnessData.length > 7 && (
+        <FitnessCard data={fitnessData} />
+      )}
 
       {/* Coach Executive Summary */}
       {latestReport && (
