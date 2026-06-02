@@ -4,29 +4,36 @@ import { useState, useRef, useEffect } from "react";
 import {
   CalendarDays, Sparkles, Loader2, Send, RotateCcw,
   MessageCircle, ChevronDown, ChevronUp,
-  Moon, Wind, Timer, Repeat, Zap, Trophy, FlaskConical,
+  Moon, Wind, Timer, Repeat, Zap, Trophy, FlaskConical, Dumbbell,
 } from "lucide-react";
 import type { WeeklyPlanData, WeeklyPlanDay, PlanChatMessage } from "@/types";
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function getCurrentMondayStr(): string {
+  const now = new Date();
+  const daysSinceMonday = (now.getDay() + 6) % 7;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - daysSinceMonday);
+  return monday.toISOString().slice(0, 10);
+}
 
 // ─── Type → visual style map ─────────────────────────────────────────────────
 
 interface TypeStyle {
-  bg: string;
-  border: string;
-  text: string;
-  dot: string;
-  icon: React.ReactNode;
+  bg: string; border: string; text: string; dot: string; icon: React.ReactNode;
 }
 
 const TYPE_STYLES: Record<string, TypeStyle> = {
-  rest:      { bg: "bg-surface-700/40",  border: "border-surface-600/60",   text: "text-surface-400",  dot: "bg-surface-500",  icon: <Moon       className="w-3.5 h-3.5" /> },
-  easy:      { bg: "bg-green-500/10",    border: "border-green-500/30",     text: "text-green-400",    dot: "bg-green-500",    icon: <Wind       className="w-3.5 h-3.5" /> },
-  recovery:  { bg: "bg-cyan-500/10",     border: "border-cyan-500/30",      text: "text-cyan-400",     dot: "bg-cyan-500",     icon: <Wind       className="w-3.5 h-3.5" /> },
-  tempo:     { bg: "bg-yellow-500/10",   border: "border-yellow-500/30",    text: "text-yellow-400",   dot: "bg-yellow-500",   icon: <Timer      className="w-3.5 h-3.5" /> },
-  intervals: { bg: "bg-red-500/10",      border: "border-red-500/30",       text: "text-red-400",      dot: "bg-red-400",      icon: <Repeat     className="w-3.5 h-3.5" /> },
-  long_run:  { bg: "bg-purple-500/10",   border: "border-purple-500/30",    text: "text-purple-400",   dot: "bg-purple-500",   icon: <Zap        className="w-3.5 h-3.5" /> },
+  rest:      { bg: "bg-surface-700/40",  border: "border-surface-600/60",   text: "text-surface-400",  dot: "bg-surface-500",  icon: <Moon         className="w-3.5 h-3.5" /> },
+  easy:      { bg: "bg-green-500/10",    border: "border-green-500/30",     text: "text-green-400",    dot: "bg-green-500",    icon: <Wind         className="w-3.5 h-3.5" /> },
+  recovery:  { bg: "bg-cyan-500/10",     border: "border-cyan-500/30",      text: "text-cyan-400",     dot: "bg-cyan-500",     icon: <Wind         className="w-3.5 h-3.5" /> },
+  tempo:     { bg: "bg-yellow-500/10",   border: "border-yellow-500/30",    text: "text-yellow-400",   dot: "bg-yellow-500",   icon: <Timer        className="w-3.5 h-3.5" /> },
+  intervals: { bg: "bg-red-500/10",      border: "border-red-500/30",       text: "text-red-400",      dot: "bg-red-400",      icon: <Repeat       className="w-3.5 h-3.5" /> },
+  long_run:  { bg: "bg-purple-500/10",   border: "border-purple-500/30",    text: "text-purple-400",   dot: "bg-purple-500",   icon: <Zap          className="w-3.5 h-3.5" /> },
   test:      { bg: "bg-pink-500/10",     border: "border-pink-500/30",      text: "text-pink-400",     dot: "bg-pink-500",     icon: <FlaskConical className="w-3.5 h-3.5" /> },
-  race:      { bg: "bg-brand-500/15",    border: "border-brand-500/40",     text: "text-brand-400",    dot: "bg-brand-500",    icon: <Trophy     className="w-3.5 h-3.5" /> },
+  race:      { bg: "bg-brand-500/15",    border: "border-brand-500/40",     text: "text-brand-400",    dot: "bg-brand-500",    icon: <Trophy       className="w-3.5 h-3.5" /> },
+  strength:  { bg: "bg-blue-500/10",     border: "border-blue-500/30",      text: "text-blue-400",     dot: "bg-blue-500",     icon: <Dumbbell     className="w-3.5 h-3.5" /> },
 };
 
 function typeStyle(type: string): TypeStyle {
@@ -36,15 +43,23 @@ function typeStyle(type: string): TypeStyle {
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface Props {
-  initialPlan: WeeklyPlanData | null;
-  paces?:      { easy?: string; threshold?: string; long?: string; interval?: string } | null;
-  onPlanSaved?: (plan: WeeklyPlanData) => void;
+  initialPlan:  WeeklyPlanData | null;
+  initialReportId?: string | null;
+  paces?:       { easy?: string; threshold?: string; long?: string; interval?: string } | null;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function WeeklyPlanCard({ initialPlan, paces, onPlanSaved }: Props) {
-  const [plan,         setPlan]         = useState<WeeklyPlanData | null>(initialPlan);
+export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
+  const currentMonday = getCurrentMondayStr();
+
+  // Only use initialPlan if it's from the current week
+  const seedPlan = initialPlan?.week_start === currentMonday ? initialPlan : null;
+
+  const [plan,         setPlan]         = useState<WeeklyPlanData | null>(seedPlan);
+  const [reportId,     setReportId]     = useState<string | null>(
+    seedPlan ? (initialReportId ?? null) : null
+  );
   const [selectedDay,  setSelectedDay]  = useState<WeeklyPlanDay | null>(null);
   const [generating,   setGenerating]   = useState(false);
   const [genError,     setGenError]     = useState<string | null>(null);
@@ -69,20 +84,20 @@ export function WeeklyPlanCard({ initialPlan, paces, onPlanSaved }: Props) {
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
-  async function handleGenerate() {
+  async function handleGenerate(force = false) {
     setGenerating(true);
     setGenError(null);
     try {
       const res  = await fetch("/api/coach/weekly-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paces }),
+        body: JSON.stringify({ paces, force }),
       });
       const data = await res.json();
       if (res.ok && data.plan) {
         setPlan(data.plan as WeeklyPlanData);
+        setReportId(data.reportId ?? null);
         setChatMessages([]);
-        onPlanSaved?.(data.plan as WeeklyPlanData);
       } else {
         setGenError(data.error ?? "Erro ao gerar plano.");
       }
@@ -98,9 +113,7 @@ export function WeeklyPlanCard({ initialPlan, paces, onPlanSaved }: Props) {
     if (!msg || !plan || chatLoading) return;
 
     const userMsg: PlanChatMessage = {
-      role:      "user",
-      content:   msg,
-      timestamp: new Date().toISOString(),
+      role: "user", content: msg, timestamp: new Date().toISOString(),
     };
     const newHistory = [...chatMessages, userMsg];
     setChatMessages(newHistory);
@@ -115,77 +128,77 @@ export function WeeklyPlanCard({ initialPlan, paces, onPlanSaved }: Props) {
           message:     msg,
           currentPlan: plan,
           chatHistory: newHistory,
+          reportId,
         }),
       });
       const data = await res.json();
       if (res.ok) {
-        setChatMessages(prev => [
-          ...prev,
-          {
-            role:      "assistant" as const,
-            content:   data.assistantMessage as string,
-            timestamp: new Date().toISOString(),
-          },
-        ]);
+        setChatMessages(prev => [...prev, {
+          role: "assistant" as const,
+          content: data.assistantMessage as string,
+          timestamp: new Date().toISOString(),
+        }]);
         if (data.updatedPlan) {
           setPlan(data.updatedPlan as WeeklyPlanData);
         }
       } else {
-        setChatMessages(prev => [
-          ...prev,
-          { role: "assistant" as const, content: data.error ?? "Erro ao processar.", timestamp: new Date().toISOString() },
-        ]);
+        setChatMessages(prev => [...prev, {
+          role: "assistant" as const,
+          content: data.error ?? "Erro ao processar.",
+          timestamp: new Date().toISOString(),
+        }]);
       }
     } catch {
-      setChatMessages(prev => [
-        ...prev,
-        { role: "assistant" as const, content: "Erro de conexão. Tente novamente.", timestamp: new Date().toISOString() },
-      ]);
+      setChatMessages(prev => [...prev, {
+        role: "assistant" as const,
+        content: "Erro de conexão. Tente novamente.",
+        timestamp: new Date().toISOString(),
+      }]);
     } finally {
       setChatLoading(false);
     }
   }
 
-  // ── Empty state ──────────────────────────────────────────────────────────
+  // ── Empty state (no plan for current week) ───────────────────────────────
 
   if (!plan) {
     return (
       <div className="card p-5">
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-brand-500/20 flex items-center justify-center">
-              <CalendarDays className="w-5 h-5 text-brand-400" />
-            </div>
-            <div>
-              <h2 className="font-bold text-surface-100">Plano semanal IA</h2>
-              <p className="text-xs text-surface-500">7 dias personalizados + ajustes via chat</p>
-            </div>
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-9 h-9 rounded-xl bg-brand-500/20 flex items-center justify-center">
+            <CalendarDays className="w-5 h-5 text-brand-400" />
           </div>
-          <button
-            onClick={handleGenerate}
-            disabled={generating}
-            className="btn-primary text-xs py-1.5 px-3 shrink-0"
-          >
-            {generating ? (
-              <><Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1.5" />Gerando…</>
-            ) : (
-              <><Sparkles className="w-3.5 h-3.5 inline mr-1.5" />Gerar plano</>
-            )}
-          </button>
+          <div>
+            <h2 className="font-bold text-surface-100">Plano semanal IA</h2>
+            <p className="text-xs text-surface-500">Semana de {currentMonday}</p>
+          </div>
         </div>
 
         {genError && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-3">
+          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-4">
             <p className="text-sm text-red-400">{genError}</p>
           </div>
         )}
 
-        <div className="text-center py-8 text-surface-500">
-          <CalendarDays className="w-8 h-8 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">Plano 7 dias com tipo, ritmo e descrição de cada treino</p>
-          <p className="text-xs mt-1 text-surface-600">
-            Ajuste conversando: &quot;muda o longão pro domingo&quot;, &quot;adiciona tiro na quarta&quot;…
-          </p>
+        <div className="text-center py-6 space-y-4">
+          <div className="text-surface-500">
+            <CalendarDays className="w-8 h-8 mx-auto mb-3 opacity-30" />
+            <p className="text-sm">Nova semana — sem plano gerado ainda</p>
+            <p className="text-xs mt-1 text-surface-600">
+              3 corridas + 4 musculações · ajuste via chat depois de gerar
+            </p>
+          </div>
+          <button
+            onClick={() => handleGenerate(false)}
+            disabled={generating}
+            className="btn-primary mx-auto"
+          >
+            {generating ? (
+              <><Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1.5" />Gerando…</>
+            ) : (
+              <><Sparkles className="w-3.5 h-3.5 inline mr-1.5" />Gerar plano desta semana</>
+            )}
+          </button>
         </div>
       </div>
     );
@@ -198,7 +211,7 @@ export function WeeklyPlanCard({ initialPlan, paces, onPlanSaved }: Props) {
   return (
     <div className="card p-5 space-y-4">
 
-      {/* Header */}
+      {/* Header — no prominent regenerate button (to not waste calls) */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-brand-500/20 flex items-center justify-center">
@@ -209,15 +222,16 @@ export function WeeklyPlanCard({ initialPlan, paces, onPlanSaved }: Props) {
             <p className="text-xs text-surface-500">Semana de {plan.week_start}</p>
           </div>
         </div>
+        {/* Regenerate: subtle, only accessible intentionally */}
         <button
-          onClick={handleGenerate}
+          onClick={() => handleGenerate(true)}
           disabled={generating}
-          title="Regenerar plano"
-          className="flex items-center gap-1.5 text-xs text-surface-400 hover:text-surface-200 transition-colors py-1.5 px-2.5 rounded-lg hover:bg-surface-700"
+          title="Regenerar plano (gera novo plano desta semana)"
+          className="flex items-center gap-1 text-[11px] text-surface-600 hover:text-surface-400 transition-colors py-1 px-2 rounded-lg hover:bg-surface-700/50"
         >
           {generating
-            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            : <RotateCcw className="w-3.5 h-3.5" />}
+            ? <Loader2 className="w-3 h-3 animate-spin" />
+            : <RotateCcw className="w-3 h-3" />}
           <span className="hidden sm:inline">Regenerar</span>
         </button>
       </div>
@@ -233,11 +247,9 @@ export function WeeklyPlanCard({ initialPlan, paces, onPlanSaved }: Props) {
       {/* 7-day grid */}
       <div className="grid grid-cols-7 gap-1.5">
         {plan.days.map((day) => {
-          const s         = typeStyle(day.type);
+          const s          = typeStyle(day.type);
           const isSelected = selectedDay?.day === day.day;
-          const shortLabel = day.label.length > 9
-            ? day.label.slice(0, 8) + "…"
-            : day.label;
+          const shortLabel = day.label.length > 9 ? day.label.slice(0, 8) + "…" : day.label;
 
           return (
             <button
@@ -259,14 +271,10 @@ export function WeeklyPlanCard({ initialPlan, paces, onPlanSaved }: Props) {
                 {shortLabel}
               </span>
               {day.distance_km != null && (
-                <span className="text-[9px] text-surface-500 font-medium">
-                  {day.distance_km}km
-                </span>
+                <span className="text-[9px] text-surface-500 font-medium">{day.distance_km}km</span>
               )}
-              {!day.distance_km && day.duration_min != null && (
-                <span className="text-[9px] text-surface-500">
-                  {day.duration_min}min
-                </span>
+              {day.distance_km == null && day.duration_min != null && (
+                <span className="text-[9px] text-surface-500">{day.duration_min}min</span>
               )}
             </button>
           );
@@ -282,25 +290,17 @@ export function WeeklyPlanCard({ initialPlan, paces, onPlanSaved }: Props) {
               {selectedDay.dayPt} — {selectedDay.label}
             </span>
             <div className="ml-auto flex items-center gap-2 text-xs text-surface-400">
-              {selectedDay.distance_km != null && (
-                <span>{selectedDay.distance_km} km</span>
-              )}
-              {selectedDay.duration_min != null && (
-                <span>{selectedDay.duration_min} min</span>
-              )}
+              {selectedDay.distance_km != null && <span>{selectedDay.distance_km} km</span>}
+              {selectedDay.duration_min != null && <span>{selectedDay.duration_min} min</span>}
             </div>
           </div>
-
           {selectedDay.pace && (
             <p className="text-xs text-surface-400">
               <span className="text-surface-500">Ritmo: </span>
               <span className="font-medium">{selectedDay.pace}</span>
             </p>
           )}
-
-          <p className="text-sm text-surface-300 leading-relaxed">
-            {selectedDay.description}
-          </p>
+          <p className="text-sm text-surface-300 leading-relaxed">{selectedDay.description}</p>
         </div>
       )}
 
@@ -319,7 +319,7 @@ export function WeeklyPlanCard({ initialPlan, paces, onPlanSaved }: Props) {
           )}
         </span>
         {showChat
-          ? <ChevronUp   className="w-4 h-4 text-surface-500" />
+          ? <ChevronUp className="w-4 h-4 text-surface-500" />
           : <ChevronDown className="w-4 h-4 text-surface-500" />}
       </button>
 
@@ -329,20 +329,15 @@ export function WeeklyPlanCard({ initialPlan, paces, onPlanSaved }: Props) {
 
           {/* Message history */}
           {chatMessages.length > 0 && (
-            <div className="space-y-2 max-h-52 overflow-y-auto pr-1 scrollbar-thin">
+            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
               {chatMessages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={[
-                      "max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed",
-                      msg.role === "user"
-                        ? "bg-brand-500/20 text-surface-100 rounded-br-sm"
-                        : "bg-surface-700 text-surface-300 rounded-bl-sm",
-                    ].join(" ")}
-                  >
+                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={[
+                    "max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed",
+                    msg.role === "user"
+                      ? "bg-brand-500/20 text-surface-100 rounded-br-sm"
+                      : "bg-surface-700 text-surface-300 rounded-bl-sm",
+                  ].join(" ")}>
                     {msg.content}
                   </div>
                 </div>
@@ -370,12 +365,9 @@ export function WeeklyPlanCard({ initialPlan, paces, onPlanSaved }: Props) {
               value={chatInput}
               onChange={e => setChatInput(e.target.value)}
               onKeyDown={e => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage();
-                }
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
               }}
-              placeholder="Ex: muda o longão pro domingo, adiciona tiro na quarta…"
+              placeholder="Ex: remove o treino de quinta, adiciona musculação…"
               className="flex-1 bg-surface-700 border border-surface-600 rounded-xl px-3.5 py-2.5 text-sm text-surface-200 placeholder:text-surface-500 focus:outline-none focus:border-brand-500 transition-colors"
               disabled={chatLoading}
             />
@@ -389,12 +381,11 @@ export function WeeklyPlanCard({ initialPlan, paces, onPlanSaved }: Props) {
           </div>
 
           <p className="text-[11px] text-surface-600 text-center">
-            Peça ajustes no plano ou tire dúvidas sobre os treinos
+            Peça ajustes — o plano é salvo automaticamente quando mudado
           </p>
         </div>
       )}
 
-      {/* Generation error */}
       {genError && (
         <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3">
           <p className="text-sm text-red-400">{genError}</p>

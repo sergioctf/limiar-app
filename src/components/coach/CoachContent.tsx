@@ -71,7 +71,10 @@ export function CoachContent({ reports, cycles, tests: initialTests }: Props) {
   const initialWeeklyPlan = useMemo((): WeeklyPlanData | null => {
     if (!latestWeekReport?.full_report) return null;
     try {
-      return JSON.parse(latestWeekReport.full_report) as WeeklyPlanData;
+      const parsed = JSON.parse(latestWeekReport.full_report) as WeeklyPlanData;
+      // Validate it's a structured plan (has days array), not old text format
+      if (!Array.isArray(parsed.days)) return null;
+      return parsed;
     } catch {
       return null; // old text-format reports — show empty state
     }
@@ -268,6 +271,7 @@ export function CoachContent({ reports, cycles, tests: initialTests }: Props) {
           {/* Interactive weekly plan — always shown */}
           <WeeklyPlanCard
             initialPlan={initialWeeklyPlan}
+            initialReportId={latestWeekReport?.id ?? null}
             paces={pacesForPlan}
           />
         </div>

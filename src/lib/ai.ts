@@ -202,7 +202,7 @@ export async function generateStructuredWeeklyPlan(
   vdot?: number | null,
 ): Promise<WeeklyPlanData | null> {
   const systemPrompt = `
-Você é um treinador de corrida especialista. Gere um plano semanal de treino estruturado para um corredor brasileiro.
+Você é um treinador de corrida e musculação especialista. Gere um plano semanal de treino estruturado para um corredor brasileiro.
 RESPONDA SOMENTE com um objeto JSON válido — sem texto antes nem depois, sem markdown, sem código fence.
 
 Formato JSON obrigatório:
@@ -211,8 +211,8 @@ Formato JSON obrigatório:
     {
       "day": "Mon"|"Tue"|"Wed"|"Thu"|"Fri"|"Sat"|"Sun",
       "dayPt": "Segunda"|"Terça"|"Quarta"|"Quinta"|"Sexta"|"Sábado"|"Domingo",
-      "type": "rest"|"easy"|"tempo"|"intervals"|"long_run"|"recovery"|"test"|"race",
-      "label": string (ex: "Rodagem", "Tiro 400m", "Longão", "Descanso"),
+      "type": "rest"|"easy"|"tempo"|"intervals"|"long_run"|"recovery"|"test"|"race"|"strength",
+      "label": string (ex: "Musculação", "Rodagem", "Tiro 400m", "Longão", "Descanso"),
       "distance_km": number | null,
       "duration_min": number | null,
       "pace": string | null (ex: "6:00–6:20/km"),
@@ -222,13 +222,16 @@ Formato JSON obrigatório:
   "ai_message": string (1-2 frases proativas: observação sobre o histórico ou pergunta para engajar o atleta)
 }
 
-Regras:
-- Inclua TODOS os 7 dias (Mon a Sun)
-- Estrutura base: 3 corridas/semana + 4 dias descanso/cross
-- Se houver dados de pace, use-os nas prescrições
-- Se houver prova próxima, adapte o volume e intensidade
-- Se não souber o pace, use referências por RPE (esforço percebido)
-- ai_message deve ser específica e baseada nos dados reais do atleta
+REGRAS OBRIGATÓRIAS — nunca viole estas regras:
+1. Inclua TODOS os 7 dias (Mon a Sun)
+2. DOMINGO (Sun) é SEMPRE "rest" — nunca coloque treino no domingo
+3. Máximo 3 corridas por semana — não coloque corrida em mais de 3 dias
+4. MUSCULAÇÃO 4x/semana — use type "strength", label "Musculação" em 4 dias da semana
+5. Template padrão: Seg=Musculação, Ter=Corrida, Qua=Musculação, Qui=Musculação, Sex=Corrida, Sáb=Corrida/Prova, Dom=Descanso
+6. Se houver prova no sábado, o sábado é "race" e a semana é de redução de volume
+7. Se houver dados de pace, use-os nas prescrições de corrida
+8. Para musculação, duration_min deve ter valor (ex: 60), distance_km = null
+9. ai_message deve ser específica e baseada nos dados reais do atleta
 `.trim();
 
   const recent = recentRuns.slice(0, 10).sort((a,b) => b.date.localeCompare(a.date));
@@ -291,16 +294,25 @@ export async function processPlanFeedback(
   recentRuns: Run[],
 ): Promise<{ updatedPlan: WeeklyPlanData | null; assistantMessage: string } | null> {
   const systemPrompt = `
-Você é um treinador de corrida interativo. O atleta tem um plano semanal e pode pedir ajustes.
-RESPONDA SOMENTE com um objeto JSON válido — sem texto antes nem depois, sem markdown.
+Você é um treinador de corrida e musculação interativo. O atleta tem um plano semanal e você deve ajustá-lo conforme pedido.
+RESPONDA SOMENTE com um objeto JSON válido — sem texto antes nem depois, sem markdown, sem código fence.
 
-Se o atleta pedir mudança no plano, retorne:
-{"action":"update","updatedPlan":{...plano completo com todos os 7 dias...},"message":"Explicação breve da mudança"}
+REGRA CRÍTICA: Se o atleta pedir QUALQUER mudança no plano (remover treino, trocar dia, ajustar distância, mudar tipo de treino, adicionar atividade), você OBRIGATORIAMENTE deve:
+1. Fazer a mudança no plano JSON
+2. Retornar action:"update" com o plano COMPLETO e ATUALIZADO (todos os 7 dias)
+3. NUNCA confirmar uma mudança sem incluir o updatedPlan — isso seria um erro grave
 
-Se for uma pergunta ou conversa sem mudança no plano, retorne:
+Formato para mudança no plano (use SEMPRE que o atleta pedir qualquer ajuste):
+{"action":"update","updatedPlan":{"days":[...7 dias completos...],"week_start":"YYYY-MM-DD","generated_at":"ISO"},"message":"Descrição breve do que foi mudado"}
+
+Formato para pergunta/dúvida SEM mudança no plano:
 {"action":"reply","message":"Sua resposta em português"}
 
-O plano deve sempre ter todos os 7 dias no formato WeeklyPlanDay.
+Regras do plano (sempre respeite ao atualizar):
+- DOMINGO sempre "rest" — nunca coloque treino no domingo
+- Máximo 3 corridas por semana
+- 4x musculação por semana (type:"strength")
+- Cada dia deve ter: day, dayPt, type, label, distance_km, duration_min, pace, description
 `.trim();
 
   const planStr = JSON.stringify(currentPlan.days.map(d => ({

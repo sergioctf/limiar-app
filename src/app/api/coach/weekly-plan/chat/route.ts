@@ -1,7 +1,8 @@
 /**
  * POST /api/coach/weekly-plan/chat
- * Processa feedback do atleta sobre o plano semanal e retorna plano atualizado ou resposta.
- * Body: { message: string, currentPlan: WeeklyPlanData, chatHistory: PlanChatMessage[] }
+ * Processa feedback do atleta sobre o plano semanal.
+ * Quando o AI atualiza o plano, persiste automaticamente no DB.
+ * Body: { message, currentPlan, chatHistory, reportId? }
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
@@ -38,6 +39,30 @@ export async function POST(request: NextRequest) {
 
   if (!result) {
     return NextResponse.json({ error: "AI processing failed" }, { status: 422 });
+  }
+
+  // If AI updated the plan, persist it in the DB immediately
+  if (result.updatedPlan) {
+    const reportId = body.reportId as string | undefined;
+    const weekStart = (result.updatedPlan as WeeklyPlanData).week_start;
+    const updatedJson = JSON.stringify(result.updatedPlan);
+
+    if (reportId) {
+      // Update the specific report we know about
+      await admin
+        .from("coach_reports")
+        .update({ full_report: updatedJson, updated_at: new Date().toISOString() })
+        .eq("id", reportId)
+        .eq("user_id", user.id);
+    } else if (weekStart) {
+      // Fallback: find by week_start
+      await admin
+        .from("coach_reports")
+        .update({ full_report: updatedJson, updated_at: new Date().toISOString() })
+        .eq("user_id", user.id)
+        .eq("period_type", "week")
+        .eq("period_start", weekStart);
+    }
   }
 
   return NextResponse.json(result);

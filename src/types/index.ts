@@ -310,7 +310,7 @@ export interface PerformanceTest {
 
 export type PlanDayType =
   | "rest" | "easy" | "tempo" | "intervals"
-  | "long_run" | "recovery" | "test" | "race";
+  | "long_run" | "recovery" | "test" | "race" | "strength";
 
 export interface WeeklyPlanDay {
   day:         "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
