@@ -1,44 +1,54 @@
 "use client";
 
 import Link from "next/link";
+import { useState, useMemo } from "react";
 import {
   MapPin, TrendingUp, Zap,
   Heart, Calendar, Target, ChevronRight,
-  Award, AlertTriangle, Brain, Flag, Timer, Dumbbell, Flame,
+  Award, AlertTriangle, Brain, Flag, Dumbbell, Flame,
+  Activity as ActivityIcon, Bike, Waves, PersonStanding, Wind, Plus,
 } from "lucide-react";
 import { StatCard } from "@/components/shared/StatCard";
 import { PaceBadge, RunTypeBadge } from "@/components/shared/Badges";
 import { WeeklyVolumeChart } from "@/components/charts/WeeklyVolumeChart";
 import { FitnessCard } from "@/components/dashboard/FitnessCard";
+import { AchievementsCard } from "@/components/achievements/AchievementsCard";
+import { PersonalRecordsCard } from "@/components/achievements/PersonalRecordsCard";
 import {
   totalDistanceKm, totalDurationSeconds, longestRun, bestPace,
   monthlyVolumeKm,
-  secondsToPaceString, secondsToReadable, formatDate, formatDistanceKm, groupByWeek,
+  secondsToPaceString, formatDate, formatDistanceKm, groupByWeek,
+  computeTrainingDays, type TrainingDayFilter,
 } from "@/lib/utils";
 import { computeTrainingLoad, computeRunStreak } from "@/lib/training-load";
 import { computeMetrics } from "@/lib/performance";
+import { detectAchievements } from "@/lib/achievements";
+import { analyzeHistoricalComparison } from "@/lib/historical-comparison";
 import type { Run, Goal, CoachReport, SyncLog, Activity, Race, PerformanceTest } from "@/types";
 
 interface Props {
+  userName?: string | null;
   runs: Run[];
   latestReport: CoachReport | null;
   goals: Goal[];
   lastSync: SyncLog | null;
   weekActivities: Activity[];
   recentActivities: Activity[];
+  activitiesHistory: Array<{ date: string; sport_type: string }>;
   nextRace?: Race | null;
   latestTest?: PerformanceTest | null;
 }
 
-function sportIcon(sportType: string): string {
-  const t = sportType?.toLowerCase() ?? "";
-  if (t.includes("run") || t.includes("trail"))  return "🏃";
-  if (t.includes("weight") || t.includes("workout") || t.includes("crossfit") || t.includes("gym")) return "🏋️";
-  if (t.includes("ride") || t.includes("bike") || t.includes("cycling")) return "🚴";
-  if (t.includes("swim"))                         return "🏊";
-  if (t.includes("walk") || t.includes("hike"))   return "🚶";
-  if (t.includes("yoga") || t.includes("pilates")) return "🧘";
-  return "⚡";
+function SportIcon({ type }: { type: string }) {
+  const t = type?.toLowerCase() ?? "";
+  const cls = "w-4 h-4 shrink-0";
+  if (t.includes("run") || t.includes("trail"))                             return <ActivityIcon className={cls} />;
+  if (t.includes("weight") || t.includes("workout") || t.includes("crossfit") || t.includes("gym")) return <Dumbbell className={cls} />;
+  if (t.includes("ride") || t.includes("bike") || t.includes("cycling"))   return <Bike        className={cls} />;
+  if (t.includes("swim"))                                                   return <Waves       className={cls} />;
+  if (t.includes("walk") || t.includes("hike"))                            return <PersonStanding className={cls} />;
+  if (t.includes("yoga") || t.includes("pilates"))                         return <Wind        className={cls} />;
+  return <Zap className={cls} />;
 }
 
 function greetingByHour(): string {
@@ -58,15 +68,18 @@ function todayPtBR(): string {
 }
 
 export function DashboardContent({
+  userName,
   runs,
   latestReport,
   goals,
   lastSync,
   weekActivities,
   recentActivities,
+  activitiesHistory,
   nextRace,
   latestTest,
 }: Props) {
+  const firstName  = userName?.trim().split(" ")[0] || null;
   const totalDist  = totalDistanceKm(runs);
   const totalDur   = totalDurationSeconds(runs);
   const longest    = longestRun(runs);
@@ -90,12 +103,7 @@ export function DashboardContent({
     ? Math.round(totalDur / totalDist)
     : null;
 
-  const nextGoal = goals.find((g) => g.race_date) ?? goals[0] ?? null;
-
-  // Race countdown
-  const daysToRace = nextGoal?.race_date
-    ? Math.ceil((new Date(nextGoal.race_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-    : null;
+  // (goals prop kept for compat but not displayed on dashboard — managed via /goals page)
 
   // Training readiness: % of 4-week volume trend (last week vs best of prior 3)
   const last4Weeks = groupByWeek(runs).slice(-4);
@@ -160,6 +168,15 @@ export function DashboardContent({
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 6);
 
+  // Training days filter state
+  const [dayFilter, setDayFilter] = useState<TrainingDayFilter>("all");
+
+  // Training days comparison: this week vs 3-week avg vs 3-month avg
+  const trainingDays = useMemo(
+    () => computeTrainingDays(runs, activitiesHistory, dayFilter),
+    [runs, activitiesHistory, dayFilter]
+  );
+
   // Training balance (last 30 days)
   const balance30RunCount   = recentRuns.length;
   const balance30GymCount   = recentActivities.filter((a) => {
@@ -168,21 +185,65 @@ export function DashboardContent({
   }).length;
   const balance30OtherCount = recentActivities.length - balance30GymCount;
 
+  // Achievements and historical comparison
+  const achievements = useMemo(() => detectAchievements(runs), [runs]);
+  const historicalRecords = useMemo(() => analyzeHistoricalComparison(runs), [runs]);
+
+  // New user with no data at all yet — show a guided welcome instead of zeroed-out cards
+  const isNewUser = runs.length === 0 && recentActivities.length === 0;
+
   return (
-    <div className="space-y-6 max-w-4xl mx-auto animate-fade-in">
+    <div className="space-y-6 max-w-4xl mx-auto animate-scale-in">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="page-header">{greetingByHour()}, Sérgio</h1>
+          <h1 className="page-header">
+            {greetingByHour()}{firstName ? `, ${firstName}` : ""}
+          </h1>
           <p className="text-surface-500 text-sm mt-0.5 capitalize">{todayPtBR()}</p>
         </div>
         <Link href="/runs/new" className="btn-primary">
-          <span className="text-base leading-none">🏃</span>
+          <Plus className="w-4 h-4" />
           <span className="hidden sm:inline">Nova corrida</span>
         </Link>
       </div>
 
+      {/* Welcome card for brand-new users */}
+      {isNewUser && (
+        <div className="card p-5 border-brand-500/30 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center shrink-0">
+              <Zap className="w-5 h-5 text-brand-400" />
+            </div>
+            <div>
+              <h2 className="font-bold text-surface-100">Bem-vindo ao Limiar!</h2>
+              <p className="text-xs text-surface-500">Vamos começar em 2 passos rápidos</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Link href="/settings" className="card-hover p-4 flex flex-col gap-2">
+              <span className="w-8 h-8 rounded-lg bg-orange-500/15 flex items-center justify-center">
+                <ActivityIcon className="w-4 h-4 text-orange-400" />
+              </span>
+              <p className="text-sm font-semibold text-surface-100">Conectar Strava</p>
+              <p className="text-xs text-surface-500">Importe suas corridas automaticamente, com pace, FC e GPS.</p>
+            </Link>
+            <Link href="/runs/new" className="card-hover p-4 flex flex-col gap-2">
+              <span className="w-8 h-8 rounded-lg bg-brand-500/15 flex items-center justify-center">
+                <Plus className="w-4 h-4 text-brand-400" />
+              </span>
+              <p className="text-sm font-semibold text-surface-100">Adicionar corrida manual</p>
+              <p className="text-xs text-surface-500">Sem Strava? Registre seus treinos manualmente.</p>
+            </Link>
+          </div>
+          <p className="text-xs text-surface-600">
+            Depois disso, o treinador IA começa a gerar planos e relatórios personalizados pra você.
+          </p>
+        </div>
+      )}
+
       {/* Esta semana overview */}
+      {!isNewUser && (
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="card p-4">
           <p className="stat-label mb-1">Corridas</p>
@@ -220,6 +281,118 @@ export function DashboardContent({
           </p>
         </div>
       </div>
+      )}
+
+      {/* Training days comparison */}
+      {!isNewUser && (
+      <div className="card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="section-title flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 text-brand-400" />
+            Dias de treino
+          </h2>
+        </div>
+
+        {/* Filter pills */}
+        {(() => {
+          const filters: Array<{ key: TrainingDayFilter; label: string }> = [
+            { key: "all",   label: "Treinos"    },
+            { key: "runs",  label: "Corridas"   },
+            { key: "gym",   label: "Musculação" },
+            { key: "other", label: "Outras"     },
+          ];
+          return (
+            <div className="flex gap-1.5 mb-3 flex-wrap">
+              {filters.map(f => (
+                <button
+                  key={f.key}
+                  onClick={() => setDayFilter(f.key)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                    dayFilter === f.key
+                      ? "bg-brand-500 text-white"
+                      : "bg-surface-700 text-surface-400 hover:text-surface-200"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: "Esta semana",    value: trainingDays.thisWeek,   color: "text-brand-300",   bg: "bg-brand-500",   note: "seg → hoje" },
+            { label: "Média 3 sem.",   value: trainingDays.avg3Weeks,  color: "text-surface-200", bg: "bg-surface-400", note: "últimas 3" },
+            { label: "Média 3 meses",  value: trainingDays.avg3Months, color: "text-surface-400", bg: "bg-surface-600", note: "últimas 12" },
+          ].map(({ label, value, color, bg, note }) => {
+            const display = Number.isInteger(value) ? value.toString() : value.toFixed(1);
+            const barPct  = Math.min(100, (value / 7) * 100);
+            return (
+              <div key={label} className="text-center space-y-1.5">
+                <p className="text-[11px] text-surface-500 uppercase tracking-wide leading-tight">{label}</p>
+                <p className={`text-2xl font-black tabular-nums ${color}`}>{display}</p>
+                <p className="text-[10px] text-surface-600">{note}</p>
+                {/* Mini bar */}
+                <div className="h-1.5 rounded-full bg-surface-700 mx-2 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 opacity-70 ${bg}`}
+                    style={{ width: `${barPct}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {/* Visual balance gauge −100% → +100% vs 3-week avg */}
+        {trainingDays.avg3Weeks > 0 && (() => {
+          const raw      = ((trainingDays.thisWeek - trainingDays.avg3Weeks) / trainingDays.avg3Weeks) * 100;
+          const clamped  = Math.max(-100, Math.min(100, raw));
+          const absC     = Math.abs(clamped);
+          // bar fill: each 1% of delta = 0.5% of bar width (bar = -100→+100 = 200 units in 100% width)
+          const fillW    = `${absC * 0.5}%`;
+          const isNeg    = clamped < 0;
+
+          const { label, barColor, textColor } =
+            clamped < -50 ? { label: "muito abaixo",  barColor: "bg-red-500",     textColor: "text-red-400"     } :
+            clamped < -20 ? { label: "abaixo",        barColor: "bg-yellow-500",  textColor: "text-yellow-400"  } :
+            clamped >  50 ? { label: "muito acima",   barColor: "bg-emerald-400", textColor: "text-emerald-400" } :
+            clamped >  20 ? { label: "acima",         barColor: "bg-green-500",   textColor: "text-green-400"   } :
+                            { label: "na média",      barColor: "bg-surface-400", textColor: "text-surface-400" };
+
+          return (
+            <div className="mt-3 pt-3 border-t border-surface-700/50 space-y-1.5">
+              {/* Scale labels */}
+              <div className="flex justify-between text-[9px] text-surface-600 px-0.5">
+                <span>muito abaixo</span>
+                <span>abaixo</span>
+                <span>na média</span>
+                <span>acima</span>
+                <span>muito acima</span>
+              </div>
+
+              {/* Bar */}
+              <div className="relative h-2 rounded-full bg-surface-700 overflow-hidden">
+                {/* Center anchor line */}
+                <div className="absolute inset-y-0 left-1/2 w-px bg-surface-500 z-10" />
+                {/* Fill */}
+                <div
+                  className={`absolute inset-y-0 rounded-full transition-all duration-500 ${barColor}`}
+                  style={isNeg
+                    ? { right: "50%", width: fillW }
+                    : { left:  "50%", width: fillW }}
+                />
+              </div>
+
+              {/* Status label */}
+              <div className="flex items-center justify-center gap-1.5">
+                <span className={`text-xs font-semibold ${textColor}`}>{label}</span>
+                <span className="text-[10px] text-surface-600">vs. média 3 semanas</span>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+      )}
 
       {/* Activity feed + Race countdown */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -242,8 +415,8 @@ export function DashboardContent({
                       href={`/runs/${item.id}`}
                       className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-surface-700/50 transition-colors"
                     >
-                      <span className="text-base leading-none w-6 text-center shrink-0">
-                        {sportIcon(item.sport_type)}
+                      <span className="w-6 flex items-center justify-center shrink-0 text-surface-400">
+                        <SportIcon type={item.sport_type} />
                       </span>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-surface-200 font-medium truncate">{item.name}</p>
@@ -255,8 +428,8 @@ export function DashboardContent({
                     </Link>
                   ) : (
                     <div className="flex items-center gap-2 rounded-lg px-2 py-1.5">
-                      <span className="text-base leading-none w-6 text-center shrink-0">
-                        {sportIcon(item.sport_type)}
+                      <span className="w-6 flex items-center justify-center shrink-0 text-surface-400">
+                        <SportIcon type={item.sport_type} />
                       </span>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-surface-200 font-medium truncate">{item.name}</p>
@@ -273,11 +446,12 @@ export function DashboardContent({
           )}
         </div>
 
-        {/* Race countdown — prefers races table, falls back to goals */}
+        {/* Race countdown — races table only */}
         {nextRace ? (() => {
           const raceDay  = new Date(nextRace.race_date + "T12:00:00");
           const today2   = new Date(); today2.setHours(0,0,0,0);
           const raceDays = Math.round((raceDay.getTime() - today2.getTime()) / (1000 * 60 * 60 * 24));
+          if (raceDays < 0) return null;
           return (
             <Link href="/races" className="card-hover p-4 block relative overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-brand-500 to-brand-300 rounded-t-xl" />
@@ -319,88 +493,23 @@ export function DashboardContent({
               </div>
             </Link>
           );
-        })() : nextGoal && daysToRace !== null ? (
-          <Link href="/goals" className="card-hover p-4 block relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-brand-500 to-brand-300 rounded-t-xl" />
+        })() : (
+          /* No upcoming race — CTA */
+          <Link href="/races" className="card-hover p-4 block group">
             <div className="flex items-center justify-between mb-3">
-              <p className="stat-label">Próxima corrida</p>
-              <Flag className="w-4 h-4 text-brand-400" />
+              <p className="stat-label">Próxima prova</p>
+              <Flag className="w-4 h-4 text-surface-600" />
             </div>
-            <p className="font-bold text-surface-100 text-sm line-clamp-1">{nextGoal.race_name}</p>
-            <p className="text-xs text-surface-500 mt-0.5">
-              {nextGoal.distance_km} km · {nextGoal.race_date ? formatDate(nextGoal.race_date) : ""}
-            </p>
-            <div className="flex items-end gap-2 mt-3">
-              <span className={`text-3xl font-black tabular-nums leading-none ${
-                daysToRace <= 7  ? "text-red-400" :
-                daysToRace <= 30 ? "text-yellow-400" : "text-brand-300"
-              }`}>
-                {daysToRace > 0 ? daysToRace : 0}
-              </span>
-              <span className="text-sm text-surface-400 mb-0.5">
-                {daysToRace === 1 ? "dia" : "dias"}
-              </span>
-              {nextGoal.target_time_seconds && (
-                <span className="ml-auto flex items-center gap-1 badge bg-brand-500/15 text-brand-300">
-                  <Timer className="w-3 h-3" />
-                  {secondsToReadable(nextGoal.target_time_seconds)}
-                </span>
-              )}
-            </div>
-            <div className="mt-3">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-surface-500">Prontidão semanal</span>
-                <span className="text-xs font-semibold text-surface-300">{readinessPct}%</span>
+            <div className="flex flex-col items-center justify-center py-4 gap-2 text-center">
+              <div className="w-10 h-10 rounded-xl bg-surface-700 flex items-center justify-center group-hover:bg-brand-500/20 transition-colors">
+                <Plus className="w-5 h-5 text-surface-500 group-hover:text-brand-400 transition-colors" />
               </div>
-              <div className="h-1.5 bg-surface-700 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    readinessPct >= 80 ? "bg-green-500" :
-                    readinessPct >= 50 ? "bg-brand-500" : "bg-yellow-500"
-                  }`}
-                  style={{ width: `${readinessPct}%` }}
-                />
-              </div>
+              <p className="text-sm text-surface-500 group-hover:text-surface-300 transition-colors">
+                Adicionar próxima prova
+              </p>
             </div>
           </Link>
-        ) : nextGoal ? (
-          <Link href="/goals" className="card-hover p-4 block">
-            <p className="stat-label mb-2">Próxima meta</p>
-            <p className="font-semibold text-surface-100 text-sm">{nextGoal.race_name}</p>
-            <div className="flex items-center gap-3 mt-3 flex-wrap">
-              <span className="font-bold text-surface-100 tabular-nums">{nextGoal.distance_km} km</span>
-              {nextGoal.target_time_seconds && (
-                <span className="badge bg-brand-500/15 text-brand-300">
-                  alvo {secondsToReadable(nextGoal.target_time_seconds)}
-                </span>
-              )}
-            </div>
-          </Link>
-        ) : lastRun ? (
-          <Link href={`/runs/${lastRun.id}`} className="card-hover p-4 block">
-            <p className="stat-label mb-2">Última corrida</p>
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="font-semibold text-surface-100 text-sm line-clamp-1">{lastRun.name}</p>
-                <p className="text-xs text-surface-500 mt-0.5">{formatDate(lastRun.date)}</p>
-              </div>
-              <RunTypeBadge type={lastRun.type} />
-            </div>
-            <div className="flex items-center gap-3 mt-3 flex-wrap">
-              <span className="font-bold text-surface-100 tabular-nums">
-                {formatDistanceKm(lastRun.distance_km)}
-              </span>
-              {lastRun.avg_pace_seconds_per_km && (
-                <PaceBadge paceSeconds={lastRun.avg_pace_seconds_per_km} />
-              )}
-              {lastRun.avg_hr && (
-                <span className="flex items-center gap-1 text-xs text-surface-500">
-                  <Heart className="w-3 h-3" /> {lastRun.avg_hr} bpm
-                </span>
-              )}
-            </div>
-          </Link>
-        ) : null}
+        )}
       </div>
 
       {/* CTL/ATL/TSB Fitness Card */}
@@ -458,6 +567,7 @@ export function DashboardContent({
       )}
 
       {/* Stats grid (trimmed to 6 most important) */}
+      {!isNewUser && (
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <StatCard label="Total de corridas" value={runs.length} icon={Target} />
         <StatCard
@@ -493,6 +603,7 @@ export function DashboardContent({
           icon={Calendar}
         />
       </div>
+      )}
 
       {/* Weekly volume chart */}
       {weeklyData.length > 0 && (
@@ -507,7 +618,16 @@ export function DashboardContent({
         </div>
       )}
 
+      {/* Achievements & Personal Records */}
+      {!isNewUser && (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <AchievementsCard achievements={achievements} />
+        <PersonalRecordsCard records={historicalRecords} />
+      </div>
+      )}
+
       {/* Training balance */}
+      {!isNewUser && (
       <div className="card p-4">
         <div className="flex items-center gap-2 mb-3">
           <Dumbbell className="w-4 h-4 text-surface-400" />
@@ -545,6 +665,7 @@ export function DashboardContent({
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
