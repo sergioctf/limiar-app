@@ -328,3 +328,79 @@ begin
     ', t, t);
   end loop;
 end $$;
+
+-- ─────────────────────────────────────────────────────────────
+-- COACH CHAT MESSAGES  (Phase 3 — Coach Memory)
+-- ─────────────────────────────────────────────────────────────
+create table if not exists coach_chat_messages (
+  id          uuid default uuid_generate_v4() primary key,
+  user_id     uuid not null references auth.users(id) on delete cascade,
+  report_id   uuid references coach_reports(id) on delete set null,
+  role        text not null check (role in ('user', 'assistant')),
+  content     text not null,
+  created_at  timestamptz default now() not null
+);
+
+create index if not exists chat_messages_user_report
+  on coach_chat_messages(user_id, report_id, created_at);
+
+alter table coach_chat_messages enable row level security;
+
+create policy "Users can manage own chat messages"
+  on coach_chat_messages for all using (auth.uid() = user_id);
+
+-- ─────────────────────────────────────────────────────────────
+-- ATHLETE NOTES  (Phase 3 — Coach Memory)
+-- ─────────────────────────────────────────────────────────────
+create table if not exists athlete_notes (
+  id          uuid default uuid_generate_v4() primary key,
+  user_id     uuid not null references auth.users(id) on delete cascade,
+  category    text not null
+                check (category in ('injury','preference','availability','goal','observation')),
+  content     text not null,
+  source      text not null default 'chat',
+  active      boolean not null default true,
+  created_at  timestamptz default now() not null,
+  updated_at  timestamptz default now() not null
+);
+
+create index if not exists athlete_notes_user_active
+  on athlete_notes(user_id, active, created_at desc);
+
+alter table athlete_notes enable row level security;
+
+create policy "Users can manage own athlete notes"
+  on athlete_notes for all using (auth.uid() = user_id);
+
+-- updated_at trigger for athlete_notes
+drop trigger if exists set_updated_at on athlete_notes;
+create trigger set_updated_at before update on athlete_notes
+  for each row execute procedure set_updated_at();
+
+-- ─────────────────────────────────────────────────────────────
+-- PUSH NOTIFICATIONS
+-- ─────────────────────────────────────────────────────────────
+create table if not exists push_subscriptions (
+  id          uuid default uuid_generate_v4() primary key,
+  user_id     uuid not null references auth.users(id) on delete cascade,
+  endpoint    text not null,
+  p256dh_key  text not null,
+  auth_key    text not null,
+  user_agent  text,
+  created_at  timestamptz default now() not null,
+  updated_at  timestamptz default now() not null,
+  unique(user_id, endpoint)
+);
+
+create index if not exists push_subscriptions_user_created
+  on push_subscriptions(user_id, created_at desc);
+
+alter table push_subscriptions enable row level security;
+
+create policy "Users can manage own push subscriptions"
+  on push_subscriptions for all using (auth.uid() = user_id);
+
+-- updated_at trigger for push_subscriptions
+drop trigger if exists set_updated_at on push_subscriptions;
+create trigger set_updated_at before update on push_subscriptions
+  for each row execute procedure set_updated_at();
