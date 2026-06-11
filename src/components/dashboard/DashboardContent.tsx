@@ -15,6 +15,7 @@ import { FitnessCard } from "@/components/dashboard/FitnessCard";
 import { AchievementsCard } from "@/components/achievements/AchievementsCard";
 import { PersonalRecordsCard } from "@/components/achievements/PersonalRecordsCard";
 import { TargetRaceCard } from "@/components/dashboard/TargetRaceCard";
+import { CountUp } from "@/components/shared/CountUp";
 import { OvertrainingAlert } from "@/components/dashboard/OvertrainingAlert";
 import {
   totalDistanceKm, totalDurationSeconds, longestRun, bestPace,
@@ -263,24 +264,24 @@ export function DashboardContent({
 
       {/* Esta semana overview */}
       {!isNewUser && (
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 stagger-in">
         <div className="card p-4">
           <p className="stat-label mb-1">Corridas</p>
-          <p className="text-2xl font-black text-surface-100 tabular-nums">{weekRuns.length}</p>
+          <CountUp value={weekRuns.length} className="text-2xl font-black text-surface-100 tabular-nums block" />
           <p className="text-xs text-surface-500 mt-0.5">{weekRunKm.toFixed(1)} km</p>
         </div>
         <div className="card p-4">
           <p className="stat-label mb-1">Musculação</p>
-          <p className="text-2xl font-black text-blue-300 tabular-nums">{weekGymCount}</p>
+          <CountUp value={weekGymCount} className="text-2xl font-black text-blue-300 tabular-nums block" />
           <p className="text-xs text-surface-500 mt-0.5">
             {weekGymMinutes > 0 ? `${Math.round(weekGymMinutes)} min` : "—"}
           </p>
         </div>
         <div className="card p-4">
           <p className="stat-label mb-1">Calorias</p>
-          <p className="text-2xl font-black text-orange-300 tabular-nums">
-            {weekCalories > 0 ? weekCalories.toLocaleString("pt-BR") : "—"}
-          </p>
+          {weekCalories > 0
+            ? <CountUp value={weekCalories} className="text-2xl font-black text-orange-300 tabular-nums block" />
+            : <p className="text-2xl font-black text-orange-300 tabular-nums">—</p>}
           <p className="text-xs text-surface-500 mt-0.5">esta semana</p>
         </div>
         {/* Streak card */}

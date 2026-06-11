@@ -40,6 +40,30 @@
     50% { opacity: 0.7; }
   }
 
+  @keyframes confetti-fall {
+    0%   { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+    100% { transform: translate(var(--dx, 0), 70vh) rotate(var(--rot, 360deg)); opacity: 0; }
+  }
+
+  /* Staggered entrance — apply .stagger-in to a container; direct children
+     fade/slide up in sequence. */
+  .stagger-in > * {
+    opacity: 0;
+    animation: slideInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .stagger-in > *:nth-child(1) { animation-delay: 0.04s; }
+  .stagger-in > *:nth-child(2) { animation-delay: 0.10s; }
+  .stagger-in > *:nth-child(3) { animation-delay: 0.16s; }
+  .stagger-in > *:nth-child(4) { animation-delay: 0.22s; }
+  .stagger-in > *:nth-child(5) { animation-delay: 0.28s; }
+  .stagger-in > *:nth-child(6) { animation-delay: 0.34s; }
+  .stagger-in > *:nth-child(7) { animation-delay: 0.40s; }
+  .stagger-in > *:nth-child(8) { animation-delay: 0.46s; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .stagger-in > * { opacity: 1; animation: none; }
+  }
+
   * {
     @apply border-surface-700;
   }

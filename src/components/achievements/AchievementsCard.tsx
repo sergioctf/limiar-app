@@ -1,20 +1,41 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Trophy, ChevronRight, Lock } from "lucide-react";
 import type { Achievement } from "@/lib/achievements";
+import { Confetti } from "@/components/shared/Confetti";
 
 interface AchievementsCardProps {
   achievements: Achievement[];
 }
 
+const SEEN_KEY = "limiar_seen_badges";
+
 export function AchievementsCard({ achievements }: AchievementsCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [celebrate, setCelebrate] = useState(false);
   const unlockedCount = achievements.filter(a => a.unlocked).length;
   const displayCount = expanded ? achievements.length : 6;
 
+  // Fire a confetti burst when a badge unlocks that the user hasn't seen before
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const unlockedIds = achievements.filter(a => a.unlocked).map(a => a.id).sort();
+    if (unlockedIds.length === 0) return;
+    try {
+      const seen: string[] = JSON.parse(localStorage.getItem(SEEN_KEY) ?? "[]");
+      const hasNew = unlockedIds.some(id => !seen.includes(id));
+      // Only celebrate when we have a prior snapshot (avoid firing on first ever load)
+      if (hasNew && seen.length > 0) setCelebrate(true);
+      localStorage.setItem(SEEN_KEY, JSON.stringify(unlockedIds));
+    } catch {
+      // ignore storage errors
+    }
+  }, [achievements]);
+
   return (
     <div className="card p-5 space-y-4">
+      <Confetti trigger={celebrate} onDone={() => setCelebrate(false)} />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
