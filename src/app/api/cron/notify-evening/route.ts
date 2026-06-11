@@ -7,7 +7,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
 import { getMondayStr, getWorkoutForDate, formatWorkoutNotification } from "@/lib/plan-notify";
-import type { WeeklyPlanDay } from "@/types";
+import { computeWeeklyInsights, formatWeeklyInsightsPush } from "@/lib/weekly-insights";
+import type { WeeklyPlanDay, Run } from "@/types";
 
 export const maxDuration = 60;
 
@@ -25,6 +26,12 @@ export async function GET(request: NextRequest) {
   const tomorrow = new Date(now.getTime() + 86400000);
   const admin    = createAdminClient();
 
+  // Is it Sunday night in BRT (UTC-3)? The cron fires at 22:00 BRT.
+  // `?weekly=1` forces the weekly recap for manual testing on any day.
+  const brtNow = new Date(now.getTime() - 3 * 3600000);
+  const forceWeekly = request.nextUrl.searchParams.get("weekly") === "1";
+  const isSundayBRT = brtNow.getUTCDay() === 0 || forceWeekly;
+
   const { data: subs } = await admin
     .from("push_subscriptions")
     .select("user_id")
@@ -39,6 +46,28 @@ export async function GET(request: NextRequest) {
 
   for (const userId of userIds) {
     try {
+      // ── Sunday night: weekly recap ────────────────────────────────────────
+      if (isSundayBRT) {
+        try {
+          const fourteenAgo = new Date(brtNow.getTime() - 14 * 86400000).toISOString().slice(0, 10);
+          const { data: weekRuns } = await admin
+            .from("runs")
+            .select("date, distance_km, duration_seconds")
+            .eq("user_id", userId)
+            .is("deleted_at", null)
+            .gte("date", fourteenAgo);
+
+          const insights = computeWeeklyInsights((weekRuns ?? []) as Run[], brtNow);
+          const recap = formatWeeklyInsightsPush(insights);
+          if (recap) {
+            await sendPushToUser(admin, userId, { ...recap, icon: "/api/icons/192" });
+          }
+        } catch {
+          // non-critical — weekly recap is best-effort
+        }
+      }
+
+      // ── Tomorrow's workout ────────────────────────────────────────────────
       const mondayStr = getMondayStr(tomorrow);
 
       const { data: plans } = await admin
@@ -52,7 +81,7 @@ export async function GET(request: NextRequest) {
       const workout = getWorkoutForDate(admin, plans ?? [], tomorrow) as WeeklyPlanDay | null;
 
       if (!workout) {
-        results[userId] = "no-plan";
+        results[userId] = isSundayBRT ? "weekly-recap-only" : "no-plan";
         continue;
       }
 
