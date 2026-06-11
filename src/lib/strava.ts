@@ -10,10 +10,58 @@ export interface StravaToken {
   athlete?: { id: number; firstname: string; lastname: string };
 }
 
+/** Error with the HTTP status attached so callers can react (401 vs 429 vs 5xx). */
+export class StravaApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "StravaApiError";
+    this.status = status;
+  }
+}
+
+const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+/**
+ * fetch with retry/backoff for transient Strava failures.
+ * Retries network errors, 429 (respecting Retry-After) and 5xx — up to 3 attempts.
+ * 4xx other than 429 fail immediately (retrying won't help).
+ */
+async function stravaFetch(url: string, init: RequestInit, attempts = 3): Promise<Response> {
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const res = await fetch(url, init);
+      if (res.ok) return res;
+
+      // Client errors (expired token, bad request): no point retrying
+      if (res.status !== 429 && res.status < 500) {
+        throw new StravaApiError(`Strava respondeu ${res.status}`, res.status);
+      }
+
+      lastError = new StravaApiError(`Strava respondeu ${res.status}`, res.status);
+      if (attempt === attempts) break;
+
+      const retryAfter = Number(res.headers.get("Retry-After")) || 0;
+      await sleep(retryAfter > 0 ? retryAfter * 1000 : 500 * Math.pow(2, attempt - 1));
+    } catch (err) {
+      if (err instanceof StravaApiError && err.status !== 429 && err.status < 500) throw err;
+      lastError = err;
+      if (attempt === attempts) break;
+      await sleep(500 * Math.pow(2, attempt - 1));
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new StravaApiError("Falha de rede ao falar com o Strava", 0);
+}
+
 export async function refreshStravaToken(
   refreshToken: string
 ): Promise<StravaToken> {
-  const res = await fetch("https://www.strava.com/oauth/token", {
+  const res = await stravaFetch("https://www.strava.com/oauth/token", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -23,7 +71,6 @@ export async function refreshStravaToken(
       refresh_token: refreshToken,
     }),
   });
-  if (!res.ok) throw new Error("Failed to refresh Strava token");
   return res.json();
 }
 
@@ -38,10 +85,9 @@ export async function getStravaActivities(
     per_page: String(perPage),
     ...(after ? { after: String(after) } : {}),
   });
-  const res = await fetch(`${STRAVA_API_BASE}/athlete/activities?${params}`, {
+  const res = await stravaFetch(`${STRAVA_API_BASE}/athlete/activities?${params}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) throw new Error("Failed to fetch Strava activities");
   return res.json();
 }
 
@@ -49,10 +95,9 @@ export async function getStravaActivity(
   accessToken: string,
   activityId: number
 ): Promise<unknown> {
-  const res = await fetch(`${STRAVA_API_BASE}/activities/${activityId}`, {
+  const res = await stravaFetch(`${STRAVA_API_BASE}/activities/${activityId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) throw new Error(`Failed to fetch activity ${activityId}`);
   return res.json();
 }
 

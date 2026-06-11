@@ -4,6 +4,7 @@ import {
   refreshStravaToken,
   getStravaActivities,
   stravaActivityToRun,
+  StravaApiError,
 } from "@/lib/strava";
 import { isProbableDuplicate } from "@/lib/utils";
 import { analyzeRun } from "@/lib/ai";
@@ -211,7 +212,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ imported, updated, ignored, activitiesImported, success: true });
   } catch (err) {
     console.error("Strava sync error:", err);
-    const message = err instanceof Error ? err.message : "Sync error";
+
+    // Friendly, actionable messages by failure class
+    let message = err instanceof Error ? err.message : "Erro no sync";
+    let status  = 500;
+    if (err instanceof StravaApiError) {
+      if (err.status === 401 || err.status === 403) {
+        message = "Conexão com o Strava expirou — desconecte e reconecte em Configurações.";
+        status  = 401;
+      } else if (err.status === 429) {
+        message = "O Strava limitou as requisições — aguarde alguns minutos e tente de novo.";
+        status  = 429;
+      } else {
+        message = "Strava indisponível no momento — já tentamos 3 vezes. Tente novamente em instantes.";
+        status  = 502;
+      }
+    }
 
     await admin.from("sync_logs").insert({
       user_id:             user.id,
@@ -223,6 +239,6 @@ export async function POST(request: NextRequest) {
       activities_ignored:  0,
     }).catch(() => {});
 
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status });
   }
 }
