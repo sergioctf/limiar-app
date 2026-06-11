@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, TrendingUp, Heart, Activity, GitCompare } from "lucide-react";
+import { BarChart3, TrendingUp, Heart, Activity, GitCompare, FileText } from "lucide-react";
+import { MonthlyReportModal } from "@/components/reports/MonthlyReportModal";
 import { WeeklyVolumeChart } from "./WeeklyVolumeChart";
 import { MonthlyVolumeChart } from "./MonthlyVolumeChart";
 import { PaceTrendChart } from "./PaceTrendChart";
@@ -17,6 +18,7 @@ interface Props { runs: Run[] }
 
 export function AnalyticsContent({ runs }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("volume");
+  const [showReport, setShowReport] = useState(false);
 
   const weeklyData  = groupByWeek(runs);
   const monthlyData = groupByMonth(runs);
@@ -35,10 +37,23 @@ export function AnalyticsContent({ runs }: Props) {
 
   return (
     <div className="space-y-5 max-w-4xl mx-auto animate-fade-in">
-      <div>
-        <h1 className="page-header">Gráficos</h1>
-        <p className="text-surface-500 text-sm">{runs.length} corridas analisadas</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="page-header">Gráficos</h1>
+          <p className="text-surface-500 text-sm">{runs.length} corridas analisadas</p>
+        </div>
+        {runs.length > 0 && (
+          <button
+            onClick={() => setShowReport(true)}
+            className="btn-ghost text-brand-400 hover:text-brand-300 text-xs flex items-center gap-1.5 shrink-0"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Relatório</span> PDF
+          </button>
+        )}
       </div>
+
+      {showReport && <MonthlyReportModal runs={runs} onClose={() => setShowReport(false)} />}
 
       {/* Tabs */}
       <div className="flex gap-1 bg-surface-700 rounded-xl p-1 overflow-x-auto">
