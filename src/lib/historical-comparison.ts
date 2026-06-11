@@ -29,7 +29,12 @@ const DISTANCES = [
   { distance: 42.2, label: "Maratona" },
 ];
 
-const TOLERANCE = 0.5; // ±0.5km to match distance category
+// Proportional tolerance so the buckets capture real-world runs of any user.
+// 5K → ±0.6, 10K → ±1.0, Meia → ±1.7, Maratona → ±3.4 km.
+// (A run only counts toward the longest bucket it qualifies for — see filter below.)
+function toleranceFor(distance: number): number {
+  return Math.max(0.6, distance * 0.08);
+}
 
 /**
  * Analyze runs and generate historical comparisons (PRs, month-over-month)
@@ -45,9 +50,10 @@ export function analyzeHistoricalComparison(runs: Run[]): DistanceRecord[] {
   const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10);
 
   return DISTANCES.map(({ distance, label }) => {
-    // Find all runs matching this distance (within tolerance)
+    // Find all runs matching this distance (within proportional tolerance)
+    const tol = toleranceFor(distance);
     const matchingRuns = runs.filter(
-      r => Math.abs(r.distance_km - distance) <= TOLERANCE
+      r => Math.abs(r.distance_km - distance) <= tol
     );
 
     if (matchingRuns.length === 0) {
