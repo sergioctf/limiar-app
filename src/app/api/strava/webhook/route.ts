@@ -17,7 +17,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { refreshStravaToken, getStravaActivity, stravaActivityToRun } from "@/lib/strava";
 import { analyzeRun } from "@/lib/ai";
-import { isProbableDuplicate } from "@/lib/utils";
+import { isProbableDuplicate, formatDistanceKm } from "@/lib/utils";
+import { sendPushToUser } from "@/lib/push";
 
 // Permite até 60s (necessário para IA + Strava fetch)
 export const maxDuration = 60;
@@ -242,6 +243,18 @@ export async function POST(request: NextRequest) {
               .from("runs")
               .update({ coach_feedback: feedback, source: "strava+ai" })
               .eq("id", savedRunId);
+          }
+
+          // Push: avisa que a corrida foi importada e analisada
+          if (!duplicate) {
+            const distLabel = savedRun.distance_km ? formatDistanceKm(savedRun.distance_km) : "";
+            sendPushToUser(admin, userId, {
+              title: "Corrida analisada! 🏃",
+              body:  `${savedRun.name ?? "Sua corrida"} (${distLabel}) já tem feedback do treinador.`,
+              url:   `/runs/${savedRunId}`,
+              tag:   "limiar-run-analyzed",
+              icon:  "/limiar_icone_app.png",
+            }).catch(() => {});
           }
         }
       } catch (aiErr) {

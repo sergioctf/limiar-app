@@ -30,7 +30,9 @@ CREATE INDEX IF NOT EXISTS races_user_date_idx
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  if (searchParams.get("secret") !== "limiar_admin_2026") {
+  const secret = searchParams.get("secret");
+  const adminSecret = process.env.ADMIN_SECRET ?? "limiar_admin_2026";
+  if (secret !== adminSecret) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

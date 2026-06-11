@@ -7,9 +7,37 @@
 @layer base {
   :root {
     --color-brand: 249 115 22;        /* orange-500 */
-    --color-surface-900: 15 23 42;    /* slate-900 */
-    --color-surface-800: 30 41 59;    /* slate-800 */
-    --color-surface-700: 51 65 85;    /* slate-700 */
+    --color-surface-900: 10 10 10;    /* near-black */
+    --color-surface-800: 20 20 20;    /* card bg */
+    --color-surface-700: 35 35 35;    /* border / elevated */
+    --animation-duration-fast: 150ms;
+    --animation-duration-normal: 300ms;
+    --animation-duration-slow: 500ms;
+  }
+
+  @keyframes slideInUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  @keyframes slideInDown {
+    from { transform: translateY(-20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  @keyframes fadeInScale {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  @keyframes shimmer {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  @keyframes pulse-smooth {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
   }
 
   * {
@@ -18,11 +46,32 @@
 
   body {
     @apply bg-surface-900 text-surface-300 font-sans antialiased;
+    /* Prevent text selection flash on tap */
+    -webkit-tap-highlight-color: transparent;
+    /* Safe area for notch/dynamic island */
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Remove 300ms tap delay on ALL interactive elements */
+  button, a, input, select, textarea, label, [role="button"] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   /* Mobile-first scrollbar */
   ::-webkit-scrollbar {
     @apply w-1.5 h-1.5;
+  }
+
+  /* Hide scrollbar but keep scrollability */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
   ::-webkit-scrollbar-track {
     @apply bg-surface-800;
@@ -43,25 +92,25 @@
 
   .btn-primary {
     @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-xl
-           bg-brand-500 hover:bg-brand-600 active:bg-brand-700
+           bg-brand-500 hover:bg-brand-600 active:scale-95 active:bg-brand-700
            text-white font-semibold text-sm
-           transition-colors duration-150
+           transition-all duration-150 ease-smooth
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-secondary {
     @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-xl
-           bg-surface-700 hover:bg-surface-600
+           bg-surface-700 hover:bg-surface-600 active:scale-95
            text-surface-200 font-medium text-sm
-           transition-colors duration-150
+           transition-all duration-150 ease-smooth
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-ghost {
     @apply inline-flex items-center gap-2 px-3 py-2 rounded-xl
-           text-surface-400 hover:text-surface-200 hover:bg-surface-700/60
+           text-surface-400 hover:text-surface-200 hover:bg-surface-700/60 active:scale-95
            font-medium text-sm
-           transition-colors duration-150;
+           transition-all duration-150 ease-smooth;
   }
 
   .input {

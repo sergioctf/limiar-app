@@ -3,9 +3,12 @@
 import { useState } from "react";
 import {
   Activity, CheckCircle2, XCircle, RefreshCw, Link2, Link2Off,
-  User, LogOut, Clock, Check, AlertCircle, Loader2
+  User, LogOut, Clock, Check, AlertCircle, Loader2, Bell, Smartphone, Edit2
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { PushNotificationButton } from "@/components/PushNotificationButton";
+import { InstallPWAButton } from "@/components/InstallPWAButton";
+import { EditProfileModal } from "@/components/profile/EditProfileModal";
 import type { SyncLog } from "@/types";
 
 interface StravaConn {
@@ -17,18 +20,21 @@ interface StravaConn {
 interface Props {
   userEmail: string;
   userName: string;
+  userUsername?: string | null;
   stravaConnection: StravaConn | null;
   syncLogs: SyncLog[];
   stravaRunsCount: number;
 }
 
 export function SettingsContent({
-  userEmail, userName, stravaConnection, syncLogs, stravaRunsCount
+  userEmail, userName, userUsername, stravaConnection, syncLogs, stravaRunsCount
 }: Props) {
   const [syncing, setSyncing]     = useState(false);
   const [syncResult, setSyncResult] = useState<{ imported: number; updated: number; ignored: number } | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [displayName, setDisplayName] = useState(userName);
 
   const supabase = createClient();
 
@@ -72,22 +78,36 @@ export function SettingsContent({
           </div>
           <h2 className="section-title">Conta</h2>
         </div>
-        <div className="space-y-2 text-sm">
+        <div className="space-y-2 text-sm mb-4">
           <div className="flex items-center justify-between">
             <span className="text-surface-500">Nome</span>
-            <span className="text-surface-200">{userName || "—"}</span>
+            <span className="text-surface-200">{displayName || "—"}</span>
           </div>
+          {userUsername && (
+            <div className="flex items-center justify-between">
+              <span className="text-surface-500">Username</span>
+              <span className="text-surface-200">@{userUsername}</span>
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <span className="text-surface-500">Email</span>
             <span className="text-surface-200">{userEmail}</span>
           </div>
         </div>
-        <button
-          onClick={handleLogout}
-          className="btn-ghost mt-4 text-red-400 hover:bg-red-400/10"
-        >
-          <LogOut className="w-4 h-4" /> Sair da conta
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setEditProfileOpen(true)}
+            className="btn-secondary flex-1"
+          >
+            <Edit2 className="w-4 h-4" /> Editar perfil
+          </button>
+          <button
+            onClick={handleLogout}
+            className="btn-ghost text-red-400 hover:bg-red-400/10 px-3"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Strava integration */}
@@ -221,7 +241,34 @@ export function SettingsContent({
         </div>
       )}
 
-      {/* Webhook status */}
+      {/* Install PWA */}
+      <div className="card p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-9 h-9 rounded-xl bg-surface-700 flex items-center justify-center shrink-0">
+            <Smartphone className="w-5 h-5 text-surface-300" />
+          </div>
+          <div>
+            <h2 className="section-title">Instalar app</h2>
+            <p className="text-xs text-surface-500">Adicione à tela inicial para acesso rápido</p>
+          </div>
+        </div>
+        <InstallPWAButton />
+      </div>
+
+      {/* Push Notifications */}
+      <div className="card p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-9 h-9 rounded-xl bg-brand-500/20 flex items-center justify-center shrink-0">
+            <Bell className="w-5 h-5 text-brand-400" />
+          </div>
+          <div>
+            <h2 className="section-title">Notificações push</h2>
+            <p className="text-xs text-surface-500">Treino do dia às 05:30h · amanhã às 22:00h</p>
+          </div>
+        </div>
+        <PushNotificationButton />
+      </div>
+
       <div className="card p-4 border-green-500/20 bg-green-500/5">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
@@ -231,6 +278,15 @@ export function SettingsContent({
           Novas corridas no Strava aparecem aqui automaticamente, com análise IA gerada na hora.
         </p>
       </div>
+
+      {/* Edit Profile Modal */}
+      <EditProfileModal
+        isOpen={editProfileOpen}
+        onClose={() => setEditProfileOpen(false)}
+        onSuccess={() => setDisplayName(userName)}
+        initialName={displayName}
+        initialUsername={userUsername || ""}
+      />
     </div>
   );
 }

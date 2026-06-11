@@ -18,6 +18,21 @@ function getCurrentMondayStr(): string {
   return monday.toISOString().slice(0, 10);
 }
 
+function getTodayDayKey(): WeeklyPlanDay["day"] {
+  const keys: WeeklyPlanDay["day"][] = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  return keys[new Date().getDay()];
+}
+
+function formatWeekRange(mondayStr: string): string {
+  const mon = new Date(mondayStr + "T12:00:00");
+  const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+  const months = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+  if (mon.getMonth() === sun.getMonth()) {
+    return `${mon.getDate()} a ${sun.getDate()} de ${months[mon.getMonth()]}`;
+  }
+  return `${mon.getDate()} ${months[mon.getMonth()]} – ${sun.getDate()} ${months[sun.getMonth()]}`;
+}
+
 // ─── Type → visual style map ─────────────────────────────────────────────────
 
 interface TypeStyle {
@@ -33,7 +48,7 @@ const TYPE_STYLES: Record<string, TypeStyle> = {
   long_run:  { bg: "bg-purple-500/10",   border: "border-purple-500/30",    text: "text-purple-400",   dot: "bg-purple-500",   icon: <Zap          className="w-3.5 h-3.5" /> },
   test:      { bg: "bg-pink-500/10",     border: "border-pink-500/30",      text: "text-pink-400",     dot: "bg-pink-500",     icon: <FlaskConical className="w-3.5 h-3.5" /> },
   race:      { bg: "bg-brand-500/15",    border: "border-brand-500/40",     text: "text-brand-400",    dot: "bg-brand-500",    icon: <Trophy       className="w-3.5 h-3.5" /> },
-  strength:  { bg: "bg-blue-500/10",     border: "border-blue-500/30",      text: "text-blue-400",     dot: "bg-blue-500",     icon: <Dumbbell     className="w-3.5 h-3.5" /> },
+  strength:  { bg: "bg-surface-700/50",   border: "border-surface-600/60",   text: "text-surface-300",  dot: "bg-surface-400",  icon: <Dumbbell     className="w-3.5 h-3.5" /> },
 };
 
 function typeStyle(type: string): TypeStyle {
@@ -67,15 +82,40 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
   const [chatMessages, setChatMessages] = useState<PlanChatMessage[]>([]);
   const [chatInput,    setChatInput]    = useState("");
   const [chatLoading,  setChatLoading]  = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-select first training day when plan loads
+  // Auto-select TODAY's day when plan loads (fallback to first training day)
   useEffect(() => {
     if (plan?.days) {
-      const first = plan.days.find(d => d.type !== "rest") ?? plan.days[0] ?? null;
-      setSelectedDay(first);
+      const DAY_KEYS: WeeklyPlanDay["day"][] = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+      const todayKey = DAY_KEYS[new Date().getDay()];
+      const todayDay = plan.days.find(d => d.day === todayKey);
+      const fallback = plan.days.find(d => d.type !== "rest") ?? plan.days[0] ?? null;
+      setSelectedDay(todayDay ?? fallback);
     }
   }, [plan]);
+
+  // Load chat history from DB when reportId is available
+  useEffect(() => {
+    if (!reportId || historyLoaded) return;
+    setHistoryLoaded(true);
+    fetch(`/api/coach/chat-messages?reportId=${reportId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data.messages) && data.messages.length > 0) {
+          const loaded: PlanChatMessage[] = data.messages.map(
+            (m: { role: string; content: string; created_at: string }) => ({
+              role:      m.role as "user" | "assistant",
+              content:   m.content,
+              timestamp: m.created_at,
+            })
+          );
+          setChatMessages(loaded);
+        }
+      })
+      .catch(() => {});
+  }, [reportId, historyLoaded]);
 
   // Scroll chat to bottom on new messages
   useEffect(() => {
@@ -206,6 +246,7 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
 
   // ── Plan loaded ──────────────────────────────────────────────────────────
 
+  const todayKey = getTodayDayKey();
   const selStyle = selectedDay ? typeStyle(selectedDay.type) : null;
 
   return (
@@ -219,7 +260,7 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
           </div>
           <div>
             <h2 className="font-bold text-surface-100">Plano semanal IA</h2>
-            <p className="text-xs text-surface-500">Semana de {plan.week_start}</p>
+            <p className="text-xs text-surface-500">{formatWeekRange(plan.week_start)}</p>
           </div>
         </div>
         {/* Regenerate: subtle, only accessible intentionally */}
@@ -245,36 +286,44 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
       )}
 
       {/* 7-day grid */}
-      <div className="grid grid-cols-7 gap-1.5">
+      <div className="grid grid-cols-7 gap-1">
         {plan.days.map((day) => {
           const s          = typeStyle(day.type);
           const isSelected = selectedDay?.day === day.day;
-          const shortLabel = day.label.length > 9 ? day.label.slice(0, 8) + "…" : day.label;
+          const isToday    = day.day === todayKey;
+          const shortLabel = day.label.length > 7 ? day.label.slice(0, 6) + "…" : day.label;
 
           return (
             <button
               key={day.day}
               onClick={() => setSelectedDay(isSelected ? null : day)}
               className={[
-                "flex flex-col items-center gap-1 py-3 px-1 rounded-xl border transition-all duration-150",
+                "relative flex flex-col items-center gap-0.5 py-2.5 px-0.5 rounded-xl border transition-colors duration-100 active:opacity-80",
                 s.bg, s.border,
-                isSelected
-                  ? "ring-2 ring-brand-400/50 scale-[1.05] shadow-lg shadow-brand-500/10"
-                  : "hover:scale-[1.02]",
+                isSelected ? "ring-2 ring-brand-400/60 shadow-sm shadow-brand-500/20" : "",
               ].join(" ")}
             >
-              <span className="text-[10px] font-bold text-surface-400 uppercase tracking-wide">
+              {/* Today indicator dot */}
+              {isToday && (
+                <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-brand-400" />
+              )}
+              <span className={`text-[10px] font-bold uppercase tracking-wide ${isToday ? "text-brand-400" : "text-surface-400"}`}>
                 {day.day.slice(0, 2)}
               </span>
-              <div className={`w-2 h-2 rounded-full ${s.dot}`} />
-              <span className={`text-[9px] font-semibold ${s.text} text-center leading-tight`}>
+              <div className={`w-2 h-2 rounded-full shrink-0 ${s.dot}`} />
+              <span className={`text-[9px] font-semibold ${s.text} text-center leading-tight hidden xs:block`}>
                 {shortLabel}
               </span>
+              {/* On mobile: only show metric if selected, always on sm+ */}
               {day.distance_km != null && (
-                <span className="text-[9px] text-surface-500 font-medium">{day.distance_km}km</span>
+                <span className={`text-[9px] text-surface-500 font-medium ${isSelected ? "block" : "hidden sm:block"}`}>
+                  {day.distance_km}km
+                </span>
               )}
               {day.distance_km == null && day.duration_min != null && (
-                <span className="text-[9px] text-surface-500">{day.duration_min}min</span>
+                <span className={`text-[9px] text-surface-500 ${isSelected ? "block" : "hidden sm:block"}`}>
+                  {day.duration_min}m
+                </span>
               )}
             </button>
           );

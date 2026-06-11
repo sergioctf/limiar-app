@@ -6,6 +6,10 @@ import {
   stravaActivityToRun,
 } from "@/lib/strava";
 import { isProbableDuplicate } from "@/lib/utils";
+import { analyzeRun } from "@/lib/ai";
+
+// Allow up to 90s — bulk sync + AI analysis for top 3 runs
+export const maxDuration = 90;
 
 export async function POST(request: NextRequest) {
   const supabase = createClient();
@@ -69,6 +73,9 @@ export async function POST(request: NextRequest) {
     // Run sport types — go to `runs` table
     const RUN_TYPES = new Set(["Run", "TrailRun", "VirtualRun", "Treadmill"]);
 
+    // Track newly imported run IDs for post-sync AI analysis
+    const newlyImportedRunIds: string[] = [];
+
     // Fetch activities from Strava
     let imported = 0, updated = 0, ignored = 0, activitiesImported = 0;
     let page = 1;
@@ -125,8 +132,12 @@ export async function POST(request: NextRequest) {
               if (idx !== -1) manualRuns!.splice(idx, 1);
             }
           } else {
-            const { error } = await admin.from("runs").insert({ ...run, synced_at: new Date().toISOString() });
-            if (!error) { imported++; existingIds.add(act.id); }
+            const { error, data: inserted } = await admin.from("runs").insert({ ...run, synced_at: new Date().toISOString() }).select("id").single();
+            if (!error) {
+              imported++;
+              existingIds.add(act.id);
+              if (inserted?.id) newlyImportedRunIds.push(inserted.id);
+            }
           }
         } else {
           // ── ACTIVITIES TABLE (gym, bike, swim, etc.) ─────────────────────
@@ -157,6 +168,33 @@ export async function POST(request: NextRequest) {
 
       if (activities.length < 50) break;
       page++;
+    }
+
+    // ── 🤖 Auto-analyze top 3 newly imported runs ──────────────────────────
+    // Sequential (not parallel) to respect Groq rate limits
+    if (newlyImportedRunIds.length > 0) {
+      try {
+        const { data: allRuns } = await admin
+          .from("runs")
+          .select("*")
+          .eq("user_id", user.id)
+          .is("deleted_at", null)
+          .order("date", { ascending: false });
+
+        const toAnalyze = newlyImportedRunIds.slice(0, 3); // max 3 per sync
+        for (const runId of toAnalyze) {
+          const run = (allRuns ?? []).find((r: { id: string }) => r.id === runId);
+          if (!run || run.coach_feedback) continue;
+          const feedback = await analyzeRun(run, allRuns ?? []);
+          if (feedback) {
+            await admin.from("runs")
+              .update({ coach_feedback: feedback, source: "strava+ai" })
+              .eq("id", runId);
+          }
+        }
+      } catch {
+        // Non-critical — don't fail the sync
+      }
     }
 
     // Log sync

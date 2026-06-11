@@ -3,8 +3,8 @@
 import { useState, useMemo } from "react";
 import {
   Brain, ChevronDown, ChevronUp, Award, AlertTriangle,
-  TrendingUp, Calendar, BookOpen, Flag, Layers,
-  Sparkles, Loader2, Activity, FlaskConical,
+  TrendingUp, Calendar, CalendarDays, BookOpen, Flag, Layers,
+  Sparkles, Loader2, Activity, FlaskConical, User,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { computeMetrics, paceToString } from "@/lib/performance";
@@ -16,8 +16,9 @@ import { TestHistoryCard }      from "@/components/coach/TestHistoryCard";
 import { TestForm }             from "@/components/coach/TestForm";
 import { WeeklyPlanCard }       from "@/components/coach/WeeklyPlanCard";
 import { VdotEvolutionChart }   from "@/components/coach/VdotEvolutionChart";
+import { AthleteProfileCard }   from "@/components/coach/AthleteProfileCard";
 
-type Tab = "zonas" | "testes" | "relatorios";
+type Tab = "zonas" | "testes" | "relatorios" | "perfil";
 
 interface Props {
   reports: CoachReport[];
@@ -32,6 +33,21 @@ export function CoachContent({ reports, cycles, tests: initialTests }: Props) {
   // Tests state (updated locally on add/delete)
   const [tests, setTests] = useState<PerformanceTest[]>(initialTests);
   const [showTestForm, setShowTestForm] = useState(false);
+
+  // New pattern alerts badge — counts pattern_detector notes from last 7 days
+  const [patternAlerts, setPatternAlerts] = useState(0);
+  useState(() => {
+    fetch("/api/coach/memory")
+      .then(r => r.json())
+      .then((data: { notes?: Array<{ source: string; created_at: string }> }) => {
+        const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+        const fresh = (data.notes ?? []).filter(
+          n => n.source === "pattern_detector" && n.created_at >= sevenDaysAgo
+        );
+        setPatternAlerts(fresh.length);
+      })
+      .catch(() => {});
+  });
 
   // Full AI analysis state
   const [analyzing,      setAnalyzing]      = useState(false);
@@ -110,10 +126,11 @@ export function CoachContent({ reports, cycles, tests: initialTests }: Props) {
 
   // ── Tabs ─────────────────────────────────────────────────────────────────────
 
-  const tabs: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
-    { key: "zonas",     label: "Zonas & Plano", icon: <Activity className="w-3.5 h-3.5" /> },
+  const tabs: Array<{ key: Tab; label: string; icon: React.ReactNode; badge?: number }> = [
+    { key: "zonas",     label: "Zonas & Plano", icon: <Activity     className="w-3.5 h-3.5" /> },
     { key: "testes",    label: "Testes 3km",    icon: <FlaskConical className="w-3.5 h-3.5" /> },
-    { key: "relatorios",label: "Relatórios",    icon: <Brain className="w-3.5 h-3.5" /> },
+    { key: "perfil",    label: "Perfil IA",     icon: <User         className="w-3.5 h-3.5" />, badge: patternAlerts },
+    { key: "relatorios",label: "Relatórios",    icon: <Brain        className="w-3.5 h-3.5" /> },
   ];
 
   return (
@@ -125,20 +142,25 @@ export function CoachContent({ reports, cycles, tests: initialTests }: Props) {
         </p>
       </div>
 
-      {/* Tab bar */}
-      <div className="flex gap-1 bg-surface-700 rounded-xl p-1">
+      {/* Tab bar — 2×2 on mobile, single row on sm+ */}
+      <div className="grid grid-cols-2 sm:flex gap-1 bg-surface-700 rounded-xl p-1">
         {tabs.map(tab => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex items-center justify-center gap-1.5 py-2.5 sm:py-2 px-2 sm:px-3 rounded-lg text-[11px] sm:text-xs font-semibold transition-colors duration-100 active:opacity-70 sm:flex-1 ${
               activeTab === tab.key
                 ? "bg-brand-500 text-white"
                 : "text-surface-400 hover:text-surface-200"
             }`}
           >
             {tab.icon}
-            <span className="hidden sm:inline">{tab.label}</span>
+            <span className="truncate">{tab.label}</span>
+            {tab.badge ? (
+              <span className="w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none shrink-0">
+                {tab.badge > 9 ? "9+" : tab.badge}
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
@@ -290,6 +312,11 @@ export function CoachContent({ reports, cycles, tests: initialTests }: Props) {
         />
       )}
 
+      {/* ── TAB: Perfil IA ───────────────────────────────────────────────────────── */}
+      {activeTab === "perfil" && (
+        <AthleteProfileCard />
+      )}
+
       {/* ── TAB: Relatórios ─────────────────────────────────────────────────────── */}
       {activeTab === "relatorios" && (
         <div className="space-y-3">
@@ -304,101 +331,116 @@ export function CoachContent({ reports, cycles, tests: initialTests }: Props) {
                 <div key={report.id} className="card overflow-hidden">
                   <button
                     onClick={() => setExpanded(isOpen ? null : report.id)}
-                    className="w-full p-5 text-left hover:bg-surface-700/30 transition-colors"
+                    className="w-full p-3 sm:p-4 text-left active:bg-surface-700/40 transition-colors duration-100"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center shrink-0">
-                          <Brain className="w-5 h-5 text-brand-400" />
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2 sm:gap-2.5 min-w-0 flex-1">
+                        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-brand-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                          <Brain className="w-4 h-4 text-brand-400" />
                         </div>
-                        <div>
-                          <h3 className="font-bold text-surface-100 text-sm">{report.title}</h3>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <Calendar className="w-3 h-3 text-surface-600" />
-                            <span className="text-xs text-surface-500">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-bold text-surface-100 text-xs sm:text-sm leading-snug line-clamp-2">
+                            {report.title}
+                          </h3>
+                          <div className="flex items-center gap-1 sm:gap-1.5 mt-1 flex-wrap">
+                            <span className="text-[11px] sm:text-xs text-surface-500">
                               {formatDate(report.report_date)}
                             </span>
-                            <span className="badge bg-surface-700 text-surface-400 text-xs">
+                            <span className="badge bg-surface-700 text-surface-500 text-[9px] sm:text-[10px] px-1.5 py-0">
                               {report.period_type}
                             </span>
                           </div>
                         </div>
                       </div>
                       {isOpen
-                        ? <ChevronUp   className="w-4 h-4 text-surface-500 shrink-0 mt-1" />
-                        : <ChevronDown className="w-4 h-4 text-surface-500 shrink-0 mt-1" />}
+                        ? <ChevronUp   className="w-4 h-4 text-surface-500 shrink-0 mt-0.5" />
+                        : <ChevronDown className="w-4 h-4 text-surface-500 shrink-0 mt-0.5" />}
                     </div>
 
                     {report.summary && (
-                      <p className="text-sm text-surface-400 mt-3 leading-relaxed line-clamp-3">
+                      <p className="text-xs sm:text-sm text-surface-400 mt-2 sm:mt-2.5 leading-relaxed line-clamp-2 pl-9 sm:pl-[42px]">
                         {report.summary}
                       </p>
                     )}
                   </button>
 
                   {isOpen && (
-                    <div className="border-t border-surface-700 p-5 space-y-5">
+                    <div className="border-t border-surface-700 p-3 sm:p-4 space-y-3 sm:space-y-4">
                       {report.strengths && (
-                        <div className="bg-green-500/10 rounded-xl p-4 border border-green-500/20">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Award className="w-4 h-4 text-green-400" />
-                            <span className="text-sm font-semibold text-green-400">Pontos fortes</span>
+                        <div className="bg-green-500/10 rounded-lg sm:rounded-xl p-2.5 sm:p-3 border border-green-500/20">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <Award className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-green-400 shrink-0" />
+                            <span className="text-[11px] sm:text-xs font-semibold text-green-400 uppercase tracking-tight">Pontos fortes</span>
                           </div>
-                          <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-line">
+                          <p className="text-xs sm:text-sm text-surface-300 leading-relaxed whitespace-pre-line break-words">
                             {report.strengths}
                           </p>
                         </div>
                       )}
 
                       {report.weaknesses && (
-                        <div className="bg-yellow-500/10 rounded-xl p-4 border border-yellow-500/20">
-                          <div className="flex items-center gap-2 mb-2">
-                            <AlertTriangle className="w-4 h-4 text-yellow-400" />
-                            <span className="text-sm font-semibold text-yellow-400">Pontos de atenção</span>
+                        <div className="bg-yellow-500/10 rounded-lg sm:rounded-xl p-2.5 sm:p-3 border border-yellow-500/20">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <AlertTriangle className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-yellow-400 shrink-0" />
+                            <span className="text-[11px] sm:text-xs font-semibold text-yellow-400 uppercase tracking-tight">Atenção</span>
                           </div>
-                          <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-line">
+                          <p className="text-xs sm:text-sm text-surface-300 leading-relaxed whitespace-pre-line break-words">
                             {report.weaknesses}
                           </p>
                         </div>
                       )}
 
                       {report.recommendations && (
-                        <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <TrendingUp className="w-4 h-4 text-brand-400" />
-                            <span className="text-sm font-semibold text-brand-400">Recomendações</span>
+                        <div className="bg-surface-700/30 rounded-lg sm:rounded-xl p-2.5 sm:p-3">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <TrendingUp className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-brand-400 shrink-0" />
+                            <span className="text-[11px] sm:text-xs font-semibold text-brand-400 uppercase tracking-tight">Recomendações</span>
                           </div>
-                          <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-line">
+                          <p className="text-xs sm:text-sm text-surface-300 leading-relaxed whitespace-pre-line break-words">
                             {report.recommendations}
                           </p>
                         </div>
                       )}
 
                       {report.projections && (
-                        <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <Flag className="w-4 h-4 text-blue-400" />
-                            <span className="text-sm font-semibold text-blue-400">Projeções</span>
+                        <div className="bg-surface-700/30 rounded-lg sm:rounded-xl p-2.5 sm:p-3">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <Flag className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-surface-400 shrink-0" />
+                            <span className="text-[11px] sm:text-xs font-semibold text-surface-400 uppercase tracking-tight">Projeções</span>
                           </div>
-                          <p className="text-sm text-surface-300 leading-relaxed">
+                          <p className="text-xs sm:text-sm text-surface-300 leading-relaxed">
                             {report.projections}
                           </p>
                         </div>
                       )}
 
-                      {report.full_report && (
+                      {/* Only show full_report for non-weekly reports (weekly = JSON plan, not readable) */}
+                      {report.full_report && report.period_type !== "week" && (
                         <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <BookOpen className="w-4 h-4 text-surface-500" />
-                            <span className="text-sm font-semibold text-surface-400">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <BookOpen className="w-3.5 h-3.5 text-surface-500 shrink-0" />
+                            <span className="text-xs font-semibold text-surface-400 uppercase tracking-wide">
                               Relatório completo
                             </span>
                           </div>
-                          <div className="bg-surface-700/50 rounded-xl p-4 max-h-96 overflow-y-auto">
-                            <p className="text-xs text-surface-400 leading-relaxed whitespace-pre-wrap font-mono">
+                          <div className="bg-surface-700/50 rounded-xl p-3 max-h-64 overflow-y-auto">
+                            <p className="text-xs text-surface-400 leading-relaxed whitespace-pre-wrap">
                               {report.full_report}
                             </p>
                           </div>
+                        </div>
+                      )}
+
+                      {/* For weekly plan reports: show brief summary instead of raw JSON */}
+                      {report.period_type === "week" && report.summary && !report.strengths && (
+                        <div className="bg-surface-700/30 rounded-xl p-3">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <CalendarDays className="w-3.5 h-3.5 text-brand-400 shrink-0" />
+                            <span className="text-xs font-semibold text-brand-400 uppercase tracking-wide">Resumo da semana</span>
+                          </div>
+                          <p className="text-sm text-surface-300 leading-relaxed">
+                            {report.summary}
+                          </p>
                         </div>
                       )}
                     </div>

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Activity, Mail, Lock, Loader2, TrendingUp, Key } from "lucide-react";
+import { Mail, Lock, Loader2, Key } from "lucide-react";
 
 const ACCESS_CODE = "Manoela Pinheiro";
 
@@ -65,11 +65,13 @@ export default function AuthPage() {
     <div className="min-h-screen bg-surface-900 flex flex-col items-center justify-center p-4">
       {/* Brand */}
       <div className="flex flex-col items-center mb-10">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-brand flex items-center justify-center mb-4 shadow-lg shadow-brand-500/30">
-          <Activity className="w-9 h-9 text-white" strokeWidth={2.5} />
-        </div>
-        <h1 className="text-3xl font-bold text-surface-100 tracking-tight">Limiar</h1>
-        <p className="text-surface-500 text-sm mt-1">Seu hub de performance na corrida</p>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/limiar_logo.png"
+          alt="Limiar — Performance · Saúde · Evolução"
+          className="w-72 max-w-[85vw] select-none"
+          draggable={false}
+        />
       </div>
 
       {/* Card */}
@@ -171,10 +173,9 @@ export default function AuthPage() {
       </div>
 
       {/* Footer */}
-      <div className="mt-8 flex items-center gap-2 text-surface-600 text-xs">
-        <TrendingUp className="w-3.5 h-3.5" />
-        <span>Evolução contínua — corrida com inteligência</span>
-      </div>
+      <p className="mt-8 text-surface-600 text-xs tracking-wide">
+        PERFORMANCE · SAÚDE · EVOLUÇÃO
+      </p>
     </div>
   );
 }

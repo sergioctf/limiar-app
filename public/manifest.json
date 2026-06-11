@@ -1,0 +1,64 @@
+{
+  "name": "Limiar",
+  "short_name": "Limiar",
+  "description": "Performance · Saúde · Evolução",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#f97316",
+  "orientation": "portrait",
+  "categories": ["sports", "fitness", "health"],
+  "icons": [
+    {
+      "src": "/limiar_icone_app.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/limiar_icone_app.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/limiar_icone_app.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/limiar_icone_app.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/limiar_icone_app.png",
+      "sizes": "540x720",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "/limiar_icone_app.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Plano semanal",
+      "url": "/coach",
+      "description": "Ver plano de treino da semana"
+    },
+    {
+      "name": "Corridas",
+      "url": "/runs",
+      "description": "Histórico de corridas"
+    }
+  ]
+}

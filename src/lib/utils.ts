@@ -235,6 +235,104 @@ export function runTypeLabel(type: string): string {
   return labels[type] ?? type;
 }
 
+/** Returns YYYY-MM-DD of the Monday of the week containing `d` */
+function getMondayOf(d: Date): string {
+  const day = new Date(d);
+  const dow = (day.getDay() + 6) % 7; // 0=Mon
+  day.setDate(day.getDate() - dow);
+  return day.toISOString().slice(0, 10);
+}
+
+function addDaysStr(dateStr: string, days: number): string {
+  const d = new Date(dateStr + "T12:00:00");
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+export interface TrainingDaysStats {
+  thisWeek:   number;
+  avg3Weeks:  number;
+  avg3Months: number;
+}
+
+export type TrainingDayFilter = "all" | "runs" | "gym" | "other";
+
+interface ActivityDay { date: string; sport_type: string }
+
+function isGymType(t: string): boolean {
+  const lower = t.toLowerCase();
+  return lower.includes("weight") || lower.includes("workout") ||
+         lower.includes("crossfit") || lower.includes("gym") ||
+         lower.includes("strength") || lower.includes("pilates") ||
+         lower.includes("yoga");
+}
+
+function isRunType(t: string): boolean {
+  const lower = t.toLowerCase();
+  return lower.includes("run") || lower.includes("trail") || lower === "treadmill";
+}
+
+/**
+ * Returns unique training dates in a date range, based on the active filter.
+ *   "all"   = days with ≥1 run OR ≥1 activity
+ *   "runs"  = days with ≥1 run
+ *   "gym"   = days with ≥1 gym activity
+ *   "other" = days with ≥1 activity (not run, not gym)
+ */
+function daysInRange(
+  runs: Run[],
+  activities: ActivityDay[],
+  from: string,
+  to:   string,
+  filter: TrainingDayFilter,
+): number {
+  const dates = new Set<string>();
+
+  if (filter === "all" || filter === "runs") {
+    runs.filter(r => r.date >= from && r.date <= to).forEach(r => dates.add(r.date));
+  }
+  if (filter === "all" || filter === "gym") {
+    activities.filter(a => a.date >= from && a.date <= to && isGymType(a.sport_type))
+      .forEach(a => dates.add(a.date));
+  }
+  if (filter === "other") {
+    activities.filter(a => a.date >= from && a.date <= to && !isRunType(a.sport_type) && !isGymType(a.sport_type))
+      .forEach(a => dates.add(a.date));
+  }
+  // "all": also include non-gym, non-run activities
+  if (filter === "all") {
+    activities.filter(a => a.date >= from && a.date <= to && !isRunType(a.sport_type) && !isGymType(a.sport_type))
+      .forEach(a => dates.add(a.date));
+  }
+
+  return dates.size;
+}
+
+export function computeTrainingDays(
+  runs:       Run[],
+  activities: ActivityDay[] = [],
+  filter:     TrainingDayFilter = "all",
+): TrainingDaysStats {
+  const now        = new Date();
+  const thisMonday = getMondayOf(now);
+  const todayStr   = now.toISOString().slice(0, 10);
+
+  const thisWeek = daysInRange(runs, activities, thisMonday, todayStr, filter);
+
+  const weekCount = (weeksBack: number) => {
+    const monday = addDaysStr(thisMonday, -7 * weeksBack);
+    const sunday = addDaysStr(monday, 6);
+    return daysInRange(runs, activities, monday, sunday, filter);
+  };
+
+  const prev3  = [1, 2, 3].map(weekCount);
+  const prev12 = Array.from({ length: 12 }, (_, i) => weekCount(i + 1));
+
+  const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
+
+  return { thisWeek, avg3Weeks: avg(prev3), avg3Months: avg(prev12) };
+}
+
 export function sourceLabel(source: string): string {
   const labels: Record<string, string> = {
     strava: "Strava",

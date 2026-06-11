@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Activity,
   LayoutDashboard,
   ListOrdered,
   Target,
@@ -17,6 +16,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { LimiarMark } from "@/components/LimiarMark";
 
 const navItems = [
   { href: "/",           icon: LayoutDashboard, label: "Dashboard" },
@@ -42,12 +42,10 @@ export function Sidebar() {
     <aside className="hidden lg:flex flex-col w-60 min-h-screen bg-surface-800 border-r border-surface-700 px-3 py-6">
       {/* Logo */}
       <Link href="/" className="flex items-center gap-3 px-3 mb-8">
-        <div className="w-9 h-9 rounded-xl bg-gradient-brand flex items-center justify-center">
-          <Activity className="w-5 h-5 text-white" strokeWidth={2.5} />
-        </div>
+        <LimiarMark size={36} />
         <div>
-          <span className="text-surface-100 font-bold text-lg leading-none">Limiar</span>
-          <p className="text-surface-500 text-xs leading-none mt-0.5">Performance</p>
+          <span className="text-surface-100 font-bold text-lg leading-none tracking-tight">LIMIAR</span>
+          <p className="text-surface-500 text-[10px] leading-none mt-0.5 tracking-widest uppercase">Performance</p>
         </div>
       </Link>
 

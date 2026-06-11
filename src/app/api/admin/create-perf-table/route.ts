@@ -6,8 +6,9 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 
-const ADMIN_SECRET = "limiar_admin_2026";
-const SUPABASE_PROJECT_ID = "ydalnbvdtoxcnfukedsf";
+// Admin routes should be removed or heavily restricted before multi-user production
+const ADMIN_SECRET = process.env.ADMIN_SECRET ?? "limiar_admin_2026";
+const SUPABASE_PROJECT_ID = process.env.SUPABASE_PROJECT_ID ?? "ydalnbvdtoxcnfukedsf";
 
 const CREATE_SQL = `
 CREATE TABLE IF NOT EXISTS performance_tests (

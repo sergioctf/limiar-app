@@ -152,6 +152,11 @@ export function RunForm({ userId, runId, initial }: Props) {
             tagList.map((tag) => ({ run_id: run.id, tag }))
           );
         }
+
+        // 🤖 Trigger AI analysis in background — don't await (navigate immediately)
+        if (savedRunId) {
+          fetch(`/api/runs/${savedRunId}/analyze`, { method: "POST" }).catch(() => {});
+        }
       }
 
       router.push(savedRunId ? `/runs/${savedRunId}` : "/runs");

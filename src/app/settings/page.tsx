@@ -11,7 +11,7 @@ export default async function SettingsPage() {
   const [{ data: conn }, { data: syncLogs }, { data: profile }] = await Promise.all([
     supabase.from("strava_connections").select("athlete_id, scope, updated_at").eq("user_id", user.id).maybeSingle(),
     supabase.from("sync_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(5),
-    supabase.from("profiles").select("name, email").eq("id", user.id).single(),
+    supabase.from("profiles").select("name, username, email").eq("id", user.id).single(),
   ]);
 
   const { count: stravaRunsCount } = await supabase
@@ -25,6 +25,7 @@ export default async function SettingsPage() {
       <SettingsContent
         userEmail={user.email ?? ""}
         userName={profile?.name ?? ""}
+        userUsername={profile?.username ?? null}
         stravaConnection={conn ?? null}
         syncLogs={syncLogs ?? []}
         stravaRunsCount={stravaRunsCount ?? 0}

@@ -27,7 +27,7 @@ export function MobileBottomNav() {
                     bg-surface-800/95 backdrop-blur-md
                     border-t border-surface-700
                     flex items-center
-                    safe-area-pb">
+                    pb-safe">
       {navItems.map(({ href, icon: Icon, label }) => {
         const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
         return (
@@ -35,14 +35,14 @@ export function MobileBottomNav() {
             key={href}
             href={href}
             className={cn(
-              "flex-1 flex flex-col items-center gap-0.5 py-2.5 text-xs font-medium transition-colors duration-150",
-              active ? "text-brand-400" : "text-surface-500"
+              "flex-1 flex flex-col items-center gap-0.5 py-3.5 px-2 text-xs font-medium transition-colors duration-150 min-h-16 justify-center",
+              active ? "text-brand-400" : "text-surface-500 hover:text-surface-300"
             )}
           >
             <Icon
               className={cn(
-                "w-5 h-5 mb-0.5",
-                active && "drop-shadow-[0_0_6px_rgba(249,115,22,0.6)]"
+                "w-[22px] h-[22px]",
+                active && "drop-shadow-[0_0_8px_rgba(249,115,22,0.7)]"
               )}
             />
             {label}

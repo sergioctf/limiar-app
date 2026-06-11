@@ -337,6 +337,37 @@ export interface PlanChatMessage {
 }
 
 // ─────────────────────────────────────────────────────────
+// Coach Memory — athlete notes extracted from conversations
+// ─────────────────────────────────────────────────────────
+
+export type AthleteNoteCategory =
+  | "injury"        // lesões, dores
+  | "preference"    // preferências de treino
+  | "availability"  // disponibilidade (dias, horários)
+  | "goal"          // objetivos de performance
+  | "observation";  // observações gerais
+
+export interface AthleteNote {
+  id:         string;
+  user_id:    string;
+  category:   AthleteNoteCategory;
+  content:    string;
+  source:     string;   // "chat" | "run_analysis" | "plan" | "manual"
+  active:     boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoachChatMessage {
+  id:         string;
+  user_id:    string;
+  report_id:  string | null;
+  role:       "user" | "assistant";
+  content:    string;
+  created_at: string;
+}
+
+// ─────────────────────────────────────────────────────────
 // Races (official race results + upcoming target races)
 // ─────────────────────────────────────────────────────────
 

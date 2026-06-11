@@ -2,11 +2,27 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/AppShell";
 import { DashboardContent } from "@/components/dashboard/DashboardContent";
+import { DashboardWithRefresh } from "@/components/dashboard/DashboardWithRefresh";
 
 export default async function DashboardPage() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth");
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // Fetch profile (display name) — fallback to auth metadata
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("name")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  // Use profile.name, or fallback to auth metadata, or email
+  const displayName = profile?.name ||
+    (user.user_metadata?.full_name as string | undefined) ||
+    user.email?.split("@")[0] ||
+    "Usuário";
 
   // Fetch all runs
   const { data: runs } = await supabase
@@ -24,12 +40,13 @@ export default async function DashboardPage() {
     .order("report_date", { ascending: false })
     .limit(1);
 
-  // Fetch active/upcoming goals
+  // Fetch active/upcoming goals — only future race dates (or null date)
   const { data: goals } = await supabase
     .from("goals")
     .select("*")
     .eq("user_id", user.id)
     .in("status", ["active", "upcoming"])
+    .or(`race_date.is.null,race_date.gt.${todayStr}`)
     .order("race_date", { ascending: true })
     .limit(3);
 
@@ -68,8 +85,19 @@ export default async function DashboardPage() {
     .order("date", { ascending: false })
     .limit(10);
 
+  // Fetch 90 days of activities (date + sport_type only) for training days filter
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+  const { data: activitiesHistory } = await supabase
+    .from("activities")
+    .select("date, sport_type")
+    .eq("user_id", user.id)
+    .gte("date", ninetyDaysAgo.toISOString().slice(0, 10))
+    .is("deleted_at", null)
+    .order("date", { ascending: false });
+
   // Fetch next upcoming target race (future date, no result yet)
-  const todayStr = new Date().toISOString().slice(0, 10);
   let nextRace: import("@/types").Race | null = null;
   try {
     const supabaseAdmin = (await import("@/lib/supabase/server")).createAdminClient();
@@ -108,16 +136,20 @@ export default async function DashboardPage() {
 
   return (
     <AppShell>
-      <DashboardContent
-        runs={runsWithTags}
+      <DashboardWithRefresh>
+        <DashboardContent
+          userName={displayName}
+          runs={runsWithTags}
         latestReport={reports?.[0] ?? null}
         goals={goals ?? []}
         lastSync={syncLogs?.[0] ?? null}
         weekActivities={(weekActivities ?? []) as import("@/types").Activity[]}
         recentActivities={(recentActivities ?? []) as import("@/types").Activity[]}
+        activitiesHistory={(activitiesHistory ?? []) as Array<{ date: string; sport_type: string }>}
         nextRace={nextRace}
         latestTest={latestTest}
       />
+      </DashboardWithRefresh>
     </AppShell>
   );
 }

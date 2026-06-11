@@ -10,7 +10,7 @@
  * o que comporta centenas de corridas confortavelmente.
  */
 
-import type { Run, WeeklyPlanData, WeeklyPlanDay, PlanChatMessage } from "@/types";
+import type { Run, WeeklyPlanData, WeeklyPlanDay, PlanChatMessage, AthleteNoteCategory } from "@/types";
 import { secondsToPaceString, secondsToReadable } from "@/lib/utils";
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
@@ -200,6 +200,7 @@ export async function generateStructuredWeeklyPlan(
   paces?: { easy?: string; threshold?: string; long?: string; interval?: string } | null,
   nextRace?: { name: string; date: string; distance_km: number } | null,
   vdot?: number | null,
+  athleteProfile?: string | null,
 ): Promise<WeeklyPlanData | null> {
   const systemPrompt = `
 Você é um treinador de corrida e musculação especialista. Gere um plano semanal de treino estruturado para um corredor brasileiro.
@@ -249,11 +250,16 @@ REGRAS OBRIGATÓRIAS — nunca viole estas regras:
 
   const vdotStr = vdot ? `VDOT atual: ${vdot.toFixed(1)}` : "";
 
+  const profileStr = athleteProfile
+    ? `\nPERFIL DO ATLETA (memória acumulada — use para personalizar o plano):\n${athleteProfile}`
+    : "";
+
   const userPrompt = `
 Semana de ${weekStart}.
 ${vdotStr}
 ${raceStr}
 ${pacesStr}
+${profileStr}
 ${historyStr}
 
 Gere o plano semanal em JSON conforme o formato especificado.
@@ -292,6 +298,7 @@ export async function processPlanFeedback(
   currentPlan: WeeklyPlanData,
   chatHistory: PlanChatMessage[],
   recentRuns: Run[],
+  athleteProfile?: string | null,
 ): Promise<{ updatedPlan: WeeklyPlanData | null; assistantMessage: string } | null> {
   const systemPrompt = `
 Você é um treinador de corrida e musculação interativo. O atleta tem um plano semanal e você deve ajustá-lo conforme pedido.
@@ -324,13 +331,17 @@ Regras do plano (sempre respeite ao atualizar):
 
   const recentStr = recentRuns.slice(0, 5).map(fmtRun).join("\n");
 
+  const profileStr = athleteProfile
+    ? `\nPERFIL DO ATLETA (memória acumulada):\n${athleteProfile}\n`
+    : "";
+
   const userPrompt = `
 PLANO ATUAL:
 ${planStr}
 
 CORRIDAS RECENTES:
 ${recentStr}
-
+${profileStr}
 HISTÓRICO DA CONVERSA:
 ${historyStr}
 
@@ -362,5 +373,56 @@ MENSAGEM DO ATLETA: ${userMessage}
   } catch (err) {
     console.error("[AI] Failed to parse plan feedback JSON:", err, "\nRaw:", raw);
     return null;
+  }
+}
+
+/**
+ * Analisa uma mensagem do atleta + resposta do assistente e extrai notas sobre o atleta.
+ * Retorna array de notas (pode ser vazio se nada relevante foi dito).
+ */
+export async function extractAthleteNotes(
+  userMessage: string,
+  assistantResponse: string,
+): Promise<Array<{ category: AthleteNoteCategory; content: string }>> {
+  const systemPrompt = `
+Você é um assistente de extração de dados. Analise a conversa entre um atleta e seu treinador IA.
+Extraia APENAS informações factuais e específicas sobre o atleta que valem a pena lembrar para treinos futuros.
+RESPONDA SOMENTE com um array JSON — sem texto antes nem depois, sem markdown.
+
+Categorias disponíveis:
+- "injury": lesões, dores, problemas físicos (ex: "dor no joelho esquerdo ao correr acima de 10km")
+- "preference": preferências de treino (ex: "prefere treinar de manhã", "não gosta de treinos de velocidade")
+- "availability": disponibilidade (ex: "disponível seg/qua/sex", "não treina domingos")
+- "goal": objetivos de performance (ex: "quer correr meia maratona em mai/24 abaixo de 2h")
+- "observation": observações relevantes (ex: "trabalha muitas horas", "tem histórico de lesões no tornozelo")
+
+Regras:
+1. Extraia apenas fatos NOVOS, ESPECÍFICOS e ACIONÁVEIS
+2. Ignore agradecimentos, confirmações genéricas ("ok", "entendido"), perguntas sobre o plano
+3. Se nada relevante foi dito, retorne []
+4. Máximo 3 notas por conversa — apenas o mais importante
+
+Formato: [{"category": "tipo", "content": "fato específico e conciso"}]
+`.trim();
+
+  const userPrompt = `
+Atleta: ${userMessage}
+Treinador: ${assistantResponse}
+`.trim();
+
+  const raw = await callGroq(systemPrompt, userPrompt, 300);
+  if (!raw) return [];
+
+  try {
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+    const parsed = JSON.parse(cleaned) as Array<{ category: string; content: string }>;
+    if (!Array.isArray(parsed)) return [];
+
+    const validCategories: AthleteNoteCategory[] = ["injury","preference","availability","goal","observation"];
+    return parsed
+      .filter(n => validCategories.includes(n.category as AthleteNoteCategory) && n.content?.trim())
+      .map(n => ({ category: n.category as AthleteNoteCategory, content: n.content.trim() }));
+  } catch {
+    return [];
   }
 }

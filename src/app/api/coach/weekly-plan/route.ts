@@ -101,12 +101,31 @@ export async function POST(request: NextRequest) {
     vdot = (testData?.[0]?.vdot as number | null) ?? null;
   } catch { /* table may not exist yet */ }
 
+  // Athlete profile from memory (graceful fallback)
+  let athleteProfile: string | null = null;
+  try {
+    const { data: notes } = await admin
+      .from("athlete_notes")
+      .select("category, content")
+      .eq("user_id", user.id)
+      .eq("active", true)
+      .order("created_at", { ascending: false })
+      .limit(30);
+
+    if (notes && notes.length > 0) {
+      athleteProfile = notes
+        .map((n: { category: string; content: string }) => `[${n.category}] ${n.content}`)
+        .join("\n");
+    }
+  } catch { /* table may not exist yet */ }
+
   const plan = await generateStructuredWeeklyPlan(
     weekStartStr,
     recentRuns ?? [],
     paces,
     nextRace,
     vdot,
+    athleteProfile,
   );
 
   if (!plan) {

@@ -1,14 +1,30 @@
 /**
  * GET /api/admin/migrate?secret=limiar_admin_2026
  * Runs one-time DB migrations — safe to run multiple times (IF NOT EXISTS).
+ *
+ * Rate limited: 5 requests per hour per IP
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { checkRateLimit, getClientIP } from "@/lib/admin-rate-limit";
 
 export async function GET(request: NextRequest) {
   const secret = request.nextUrl.searchParams.get("secret");
-  if (secret !== process.env.ADMIN_SECRET) {
+  const adminSecret = process.env.ADMIN_SECRET ?? "limiar_admin_2026";
+
+  if (secret !== adminSecret) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Rate limit: 5 requests per hour per IP
+  const clientIP = getClientIP(request);
+  const { allowed, remaining, resetAt } = checkRateLimit(`admin:migrate:${clientIP}`, 5, 60 * 60 * 1000);
+
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Rate limited", resetAt: new Date(resetAt).toISOString() },
+      { status: 429 }
+    );
   }
 
   const admin = createAdminClient();
@@ -70,5 +86,18 @@ export async function GET(request: NextRequest) {
   } as never);
   results.create_indexes = e4 ? `error: ${e4.message}` : "ok";
 
-  return NextResponse.json(results);
+  // Audit log
+  const success = !Object.values(results).some(v => typeof v === "string" && v.startsWith("error"));
+  await admin
+    .from("admin_audit_logs")
+    .insert({
+      action:       "migrate",
+      client_ip:    clientIP,
+      success,
+      results:      results,
+      performed_at: new Date().toISOString(),
+    })
+    .catch((err: unknown) => console.error("[migrate] Audit log failed:", err));
+
+  return NextResponse.json({ ...results, remaining, message: "Migration complete" });
 }
