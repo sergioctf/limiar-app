@@ -67,6 +67,7 @@ export interface FriendStats {
   username: string | null;
   isMe: boolean;
   weekKm: number;
+  lastWeekKm: number;
   monthKm: number;
   streak: number;
   best5kSeconds: number | null;

@@ -67,6 +67,13 @@ export async function GET() {
     const list = (runs ?? []) as Run[];
     const weekKm  = list.filter(r => r.date >= mon).reduce((s, r) => s + r.distance_km, 0);
     const monthKm = list.filter(r => r.date >= monthStart).reduce((s, r) => s + r.distance_km, 0);
+    // Previous calendar week (Mon..Sun before the current Monday)
+    const prevMon = new Date(`${mon}T12:00:00`);
+    prevMon.setDate(prevMon.getDate() - 7);
+    const prevMonStr = prevMon.toISOString().slice(0, 10);
+    const lastWeekKm = list
+      .filter(r => r.date >= prevMonStr && r.date < mon)
+      .reduce((s, r) => s + r.distance_km, 0);
     const prof = profileMap.get(id);
 
     stats.push({
@@ -75,6 +82,7 @@ export async function GET() {
       username: prof?.username ?? null,
       isMe: id === user.id,
       weekKm: Math.round(weekKm * 10) / 10,
+      lastWeekKm: Math.round(lastWeekKm * 10) / 10,
       monthKm: Math.round(monthKm * 10) / 10,
       streak: computeRunStreak(list),
       best5kSeconds: bestForDistance(list, 5),

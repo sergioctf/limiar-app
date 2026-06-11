@@ -7,6 +7,8 @@ import {
   Calendar, Zap, Clock, Crown, AlertCircle, RefreshCw,
 } from "lucide-react";
 import { secondsToReadable } from "@/lib/utils";
+import { FriendsFeed } from "@/components/friends/FriendsFeed";
+import { WeeklyChallengeCard } from "@/components/friends/WeeklyChallengeCard";
 import type { FriendSummary, FriendStats } from "@/types";
 
 interface Props {
@@ -204,6 +206,9 @@ export function FriendsContent({ myUsername, myName }: Props) {
         </div>
       )}
 
+      {/* Weekly challenge (needs at least one friend) */}
+      {!loading && <WeeklyChallengeCard stats={stats} />}
+
       {/* Leaderboard */}
       <div className="card p-4">
         <div className="flex items-center gap-2 mb-3">
@@ -262,6 +267,9 @@ export function FriendsContent({ myUsername, myName }: Props) {
           </div>
         )}
       </div>
+
+      {/* Activity feed with kudos */}
+      <FriendsFeed />
 
       {/* Outgoing pending */}
       {outgoing.length > 0 && (
