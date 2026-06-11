@@ -15,6 +15,7 @@ import { FitnessCard } from "@/components/dashboard/FitnessCard";
 import { AchievementsCard } from "@/components/achievements/AchievementsCard";
 import { PersonalRecordsCard } from "@/components/achievements/PersonalRecordsCard";
 import { TargetRaceCard } from "@/components/dashboard/TargetRaceCard";
+import { OvertrainingAlert } from "@/components/dashboard/OvertrainingAlert";
 import {
   totalDistanceKm, totalDurationSeconds, longestRun, bestPace,
   monthlyVolumeKm,
@@ -26,6 +27,7 @@ import { computeMetrics } from "@/lib/performance";
 import { detectAchievements } from "@/lib/achievements";
 import { analyzeHistoricalComparison } from "@/lib/historical-comparison";
 import { pickTargetComparison } from "@/lib/target-comparison";
+import { detectOvertraining } from "@/lib/overtraining";
 import type { Run, Goal, CoachReport, SyncLog, Activity, Race, PerformanceTest } from "@/types";
 
 interface Props {
@@ -197,6 +199,12 @@ export function DashboardContent({
     [goals, latestTest]
   );
 
+  // Overtraining risk assessment (TSB + ACWR + streak + volume jump)
+  const overtraining = useMemo(
+    () => detectOvertraining(runs, lthr, thresholdPace),
+    [runs, lthr, thresholdPace]
+  );
+
   // New user with no data at all yet — show a guided welcome instead of zeroed-out cards
   const isNewUser = runs.length === 0 && recentActivities.length === 0;
 
@@ -215,6 +223,9 @@ export function DashboardContent({
           <span className="hidden sm:inline">Nova corrida</span>
         </Link>
       </div>
+
+      {/* Overtraining risk alert — only shows when caution/high */}
+      {!isNewUser && <OvertrainingAlert assessment={overtraining} />}
 
       {/* Welcome card for brand-new users */}
       {isNewUser && (
