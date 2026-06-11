@@ -8,12 +8,14 @@ import {
 import {
   secondsToReadable, secondsToPaceString, formatDate
 } from "@/lib/utils";
-import type { Goal, Projection, RaceStrategy } from "@/types";
+import type { Goal, Projection, RaceStrategy, PerformanceTest } from "@/types";
+import { SmartGoalsCard } from "@/components/goals/SmartGoalsCard";
 
 interface Props {
   goals: Goal[];
   projections: Projection[];
   strategies: RaceStrategy[];
+  latestTest?: PerformanceTest | null;
 }
 
 const SCENARIO_LABELS: Record<string, { label: string; color: string; icon: React.ElementType }> = {
@@ -26,7 +28,7 @@ const SCENARIO_LABELS: Record<string, { label: string; color: string; icon: Reac
 
 const DISTANCES = [5, 10, 15, 21.1, 42.2];
 
-export function GoalsContent({ goals, projections, strategies }: Props) {
+export function GoalsContent({ goals, projections, strategies, latestTest = null }: Props) {
   const [activeTab, setActiveTab] = useState<"goals" | "projections" | "strategies">("goals");
   const [expandedGoal, setExpandedGoal] = useState<string | null>(goals[0]?.id ?? null);
   const [expandedStrategy, setExpandedStrategy] = useState<string | null>(null);
@@ -65,6 +67,9 @@ export function GoalsContent({ goals, projections, strategies }: Props) {
       {/* Goals tab */}
       {activeTab === "goals" && (
         <div className="space-y-3">
+          {/* Smart goal suggestions based on current fitness */}
+          <SmartGoalsCard latestTest={latestTest} />
+
           {goals.length === 0 ? (
             <div className="card p-8 text-center text-surface-500">Nenhuma meta cadastrada ainda.</div>
           ) : (
