@@ -46,11 +46,16 @@ export function EditProfileModal({
         .update({
           name: name.trim(),
           username: username.trim() || null,
-          updated_at: new Date().toISOString(),
         })
         .eq("id", user.id);
 
-      if (err) throw err;
+      if (err) {
+        // Friendly message for the unique-username conflict
+        if (err.code === "23505" || /duplicate|unique/i.test(err.message)) {
+          throw new Error("Esse username já está em uso. Escolha outro.");
+        }
+        throw err;
+      }
 
       setSuccess(true);
       setTimeout(() => {
