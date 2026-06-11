@@ -14,6 +14,7 @@ import { WeeklyVolumeChart } from "@/components/charts/WeeklyVolumeChart";
 import { FitnessCard } from "@/components/dashboard/FitnessCard";
 import { AchievementsCard } from "@/components/achievements/AchievementsCard";
 import { PersonalRecordsCard } from "@/components/achievements/PersonalRecordsCard";
+import { TargetRaceCard } from "@/components/dashboard/TargetRaceCard";
 import {
   totalDistanceKm, totalDurationSeconds, longestRun, bestPace,
   monthlyVolumeKm,
@@ -24,6 +25,7 @@ import { computeTrainingLoad, computeRunStreak } from "@/lib/training-load";
 import { computeMetrics } from "@/lib/performance";
 import { detectAchievements } from "@/lib/achievements";
 import { analyzeHistoricalComparison } from "@/lib/historical-comparison";
+import { pickTargetComparison } from "@/lib/target-comparison";
 import type { Run, Goal, CoachReport, SyncLog, Activity, Race, PerformanceTest } from "@/types";
 
 interface Props {
@@ -189,6 +191,12 @@ export function DashboardContent({
   const achievements = useMemo(() => detectAchievements(runs), [runs]);
   const historicalRecords = useMemo(() => analyzeHistoricalComparison(runs), [runs]);
 
+  // Target race comparison (current fitness vs goal target)
+  const targetComparison = useMemo(
+    () => pickTargetComparison(goals, latestTest ?? null),
+    [goals, latestTest]
+  );
+
   // New user with no data at all yet — show a guided welcome instead of zeroed-out cards
   const isNewUser = runs.length === 0 && recentActivities.length === 0;
 
@@ -281,6 +289,11 @@ export function DashboardContent({
           </p>
         </div>
       </div>
+      )}
+
+      {/* Target race comparison — current fitness vs goal */}
+      {!isNewUser && targetComparison && (
+        <TargetRaceCard comparison={targetComparison} />
       )}
 
       {/* Training days comparison */}
