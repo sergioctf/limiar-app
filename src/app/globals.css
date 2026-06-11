@@ -45,6 +45,15 @@
     100% { transform: translate(var(--dx, 0), 70vh) rotate(var(--rot, 360deg)); opacity: 0; }
   }
 
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-7px); }
+  }
+  .animate-float { animation: float 3s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-float { animation: none; }
+  }
+
   /* Staggered entrance — apply .stagger-in to a container; direct children
      fade/slide up in sequence. */
   .stagger-in > * {

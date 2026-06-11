@@ -16,6 +16,7 @@ import { AchievementsCard } from "@/components/achievements/AchievementsCard";
 import { PersonalRecordsCard } from "@/components/achievements/PersonalRecordsCard";
 import { TargetRaceCard } from "@/components/dashboard/TargetRaceCard";
 import { CountUp } from "@/components/shared/CountUp";
+import { OnboardingTour } from "@/components/onboarding/OnboardingTour";
 import { OvertrainingAlert } from "@/components/dashboard/OvertrainingAlert";
 import {
   totalDistanceKm, totalDurationSeconds, longestRun, bestPace,
@@ -211,6 +212,9 @@ export function DashboardContent({
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto animate-scale-in">
+      {/* First-visit guided tour (force with ?tour=1) */}
+      <OnboardingTour enabled={isNewUser} />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
