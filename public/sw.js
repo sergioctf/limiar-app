@@ -58,55 +58,119 @@ self.addEventListener("notificationclick", (event) => {
   );
 });
 
-// ── Fetch: cache-first for API calls, network-first for pages ────────────────
+// ── Offline cache ─────────────────────────────────────────────────────────────
 
-const CACHE_NAME = "limiar-cache-v1";
+const CACHE_NAME  = "limiar-cache-v2";
+const OFFLINE_URL = "/offline";
 
-// Data endpoints to cache (GET only)
+// Precached on install so the offline fallback always works
+const PRECACHE_URLS = [OFFLINE_URL, "/manifest.json", "/limiar_icone_app.png"];
+
+// Data endpoints worth serving stale when offline (GET only)
 const CACHEABLE_API_PATHS = [
   "/api/coach/weekly-plan",
   "/api/coach/full-analysis",
   "/api/performance-tests",
+  "/api/friends",
 ];
+
+// Static assets: hashed Next.js chunks, fonts and images are immutable
+function isStaticAsset(url) {
+  return (
+    url.pathname.startsWith("/_next/static/") ||
+    url.pathname.startsWith("/api/icons/") ||
+    /\.(png|jpg|jpeg|webp|svg|ico|woff2?)$/.test(url.pathname)
+  );
+}
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-  const url = new URL(request.url);
 
-  // Only cache GET requests
-  if (request.method !== "GET") {
-    event.respondWith(fetch(request));
+  // Non-GET (and cross-origin POSTs etc.): let the browser handle natively
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+
+  // 1. Page navigations: network-first → cached page → offline fallback
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(async () => {
+          const cache = await caches.open(CACHE_NAME);
+          return (await cache.match(request))
+              || (await cache.match(OFFLINE_URL))
+              || new Response("Offline", { status: 503 });
+        })
+    );
     return;
   }
 
-  // Cache API calls for performance data
-  if (CACHEABLE_API_PATHS.some(path => url.pathname.includes(path))) {
+  // 2. Static assets: stale-while-revalidate
+  if (isStaticAsset(url)) {
     event.respondWith(
-      caches.open(CACHE_NAME).then(cache =>
-        fetch(request)
-          .then(response => {
-            // Cache successful responses
-            if (response.status === 200) {
-              cache.put(request, response.clone());
-            }
+      caches.open(CACHE_NAME).then(async (cache) => {
+        const cached = await cache.match(request);
+        const network = fetch(request)
+          .then((response) => {
+            if (response.ok) cache.put(request, response.clone());
             return response;
           })
-          .catch(() => {
-            // On network error, fall back to cache
-            return cache.match(request) || new Response("Offline — cached data not available", { status: 503 });
+          .catch(() => cached);
+        return cached || network;
+      })
+    );
+    return;
+  }
+
+  // 3. Selected data APIs: network-first with cache fallback
+  if (CACHEABLE_API_PATHS.some((path) => url.pathname.includes(path))) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then((cache) =>
+        fetch(request)
+          .then((response) => {
+            if (response.status === 200) cache.put(request, response.clone());
+            return response;
           })
+          .catch(async () =>
+            (await cache.match(request))
+              || new Response(JSON.stringify({ offline: true }), {
+                   status: 503,
+                   headers: { "Content-Type": "application/json" },
+                 })
+          )
       )
     );
     return;
   }
 
-  // For all other requests, let the browser handle it normally
-  event.respondWith(fetch(request).catch(() => new Response("", { status: 503 })));
+  // 4. Everything else: untouched (browser default)
 });
 
-// ── Install / activate: skip waiting so new SW takes over immediately ────────
+// ── Install / activate ────────────────────────────────────────────────────────
 
-self.addEventListener("install",  () => self.skipWaiting());
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .catch(() => {}) // precache failures must not block install
+      .then(() => self.skipWaiting())
+  );
+});
+
 self.addEventListener("activate", (event) => {
-  event.waitUntil(clients.claim());
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(
+        keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
+      ))
+      .then(() => clients.claim())
+  );
 });
