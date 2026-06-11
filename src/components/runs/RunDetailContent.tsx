@@ -17,6 +17,7 @@ import {
 } from "@/lib/utils";
 import type { Run } from "@/types";
 import { cn } from "@/lib/utils";
+import { RouteReplay } from "@/components/runs/RouteReplay";
 
 interface Props { run: Run }
 
@@ -213,6 +214,11 @@ export function RunDetailContent({ run }: Props) {
           </div>
         )}
       </div>
+
+      {/* ── ROUTE REPLAY ────────────────────────────────────────────────────── */}
+      {run.map_polyline && (
+        <RouteReplay polyline={run.map_polyline} distanceKm={run.distance_km} />
+      )}
 
       {/* ── NOTES ───────────────────────────────────────────────────────────── */}
       <div className="card p-5">
