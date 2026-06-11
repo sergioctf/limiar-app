@@ -13,6 +13,7 @@ import {
   TrendingUp,
   CalendarDays,
   Trophy,
+  Users,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,7 @@ const navItems = [
   { href: "/calendar",   icon: CalendarDays,    label: "Calendário"},
   { href: "/analytics",  icon: BarChart3,       label: "Gráficos"  },
   { href: "/goals",      icon: Target,          label: "Metas"     },
+  { href: "/friends",    icon: Users,           label: "Amigos"    },
   { href: "/coach",      icon: FileText,        label: "Treinador" },
   { href: "/settings",   icon: Settings,        label: "Config."   },
 ];

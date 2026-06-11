@@ -32,7 +32,45 @@ export interface Profile {
   id: string;
   email: string;
   name: string | null;
+  username: string | null;
   created_at: string;
+}
+
+// ─────────────────────────────────────────────────────────
+// Social (friends + leaderboard)
+// ─────────────────────────────────────────────────────────
+
+export type FriendshipStatus = "pending" | "accepted";
+
+export interface Friendship {
+  id: string;
+  requester_id: string;
+  addressee_id: string;
+  status: FriendshipStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A friend entry as returned by the friends API (joined with profile). */
+export interface FriendSummary {
+  friendshipId: string;
+  userId: string;
+  name: string | null;
+  username: string | null;
+  direction?: "incoming" | "outgoing"; // only for pending requests
+}
+
+/** Aggregated, privacy-safe stats for the leaderboard. */
+export interface FriendStats {
+  userId: string;
+  name: string | null;
+  username: string | null;
+  isMe: boolean;
+  weekKm: number;
+  monthKm: number;
+  streak: number;
+  best5kSeconds: number | null;
+  best10kSeconds: number | null;
 }
 
 export interface StravaConnection {
