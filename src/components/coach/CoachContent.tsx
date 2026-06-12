@@ -18,7 +18,9 @@ import { WeeklyPlanCard }       from "@/components/coach/WeeklyPlanCard";
 import { VdotEvolutionChart }   from "@/components/coach/VdotEvolutionChart";
 import { AthleteProfileCard }   from "@/components/coach/AthleteProfileCard";
 import { PlanAdherenceCard }    from "@/components/coach/PlanAdherenceCard";
+import { AerobicEfficiencyCard } from "@/components/coach/AerobicEfficiencyCard";
 import type { WeekAdherence }   from "@/lib/plan-adherence";
+import type { EfficiencyTrend } from "@/lib/aerobic-efficiency";
 
 type Tab = "zonas" | "testes" | "relatorios" | "perfil";
 
@@ -27,9 +29,10 @@ interface Props {
   cycles:  TrainingCycle[];
   tests:   PerformanceTest[];
   adherenceHistory?: WeekAdherence[];
+  efficiencyTrend?: EfficiencyTrend | null;
 }
 
-export function CoachContent({ reports, cycles, tests: initialTests, adherenceHistory = [] }: Props) {
+export function CoachContent({ reports, cycles, tests: initialTests, adherenceHistory = [], efficiencyTrend = null }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("zonas");
   const [expanded,  setExpanded]  = useState<string | null>(reports[0]?.id ?? null);
 
@@ -301,6 +304,9 @@ export function CoachContent({ reports, cycles, tests: initialTests, adherenceHi
           {adherenceHistory.length > 0 && (
             <PlanAdherenceCard history={adherenceHistory} />
           )}
+
+          {/* Aerobic efficiency trend (pace ÷ HR) */}
+          {efficiencyTrend && <AerobicEfficiencyCard trend={efficiencyTrend} />}
 
           {/* Interactive weekly plan — always shown */}
           <WeeklyPlanCard
