@@ -376,6 +376,41 @@ export interface PlanChatMessage {
 }
 
 // ─────────────────────────────────────────────────────────
+// Macro plan — long-term periodization toward a target race
+// ─────────────────────────────────────────────────────────
+
+export type MacroRaceType = "5k" | "10k" | "half" | "marathon" | "ultra" | "triathlon" | "other";
+export type MacroPhase = "base" | "build" | "peak" | "taper" | "race";
+
+export interface MacroPlanWeek {
+  week_start:  string;     // Monday YYYY-MM-DD
+  phase:       MacroPhase;
+  target_km:   number;
+  focus:       string;     // e.g. "volume aeróbico"
+  key_workout: string;     // e.g. "longão 16km"
+}
+
+export interface MacroPlanData {
+  weeks:           MacroPlanWeek[];
+  phases_summary:  Array<{ phase: MacroPhase; weeks: number; description: string }>;
+  rationale:       string;
+  adaptation_note?: string;
+  adapted_at?:      string;
+}
+
+export interface MacroPlan {
+  id:           string;
+  user_id:      string;
+  race_type:    MacroRaceType;
+  race_label:   string;
+  target_month: string;     // YYYY-MM (estimated — editable)
+  status:       "active" | "completed" | "cancelled";
+  plan_json:    MacroPlanData;
+  created_at:   string;
+  updated_at:   string;
+}
+
+// ─────────────────────────────────────────────────────────
 // Coach Memory — athlete notes extracted from conversations
 // ─────────────────────────────────────────────────────────
 

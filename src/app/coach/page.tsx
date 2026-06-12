@@ -4,6 +4,7 @@ import { AppShell }     from "@/components/layout/AppShell";
 import { CoachContent } from "@/components/coach/CoachContent";
 import { computeAdherenceHistory } from "@/lib/plan-adherence";
 import { computeAerobicEfficiency } from "@/lib/aerobic-efficiency";
+import { loadActiveMacroPlan } from "@/lib/macro-plan";
 import type { PerformanceTest } from "@/types";
 
 export default async function CoachPage() {
@@ -81,6 +82,16 @@ export default async function CoachPage() {
 
   const efficiencyTrend = computeAerobicEfficiency(runRows);
 
+  // Long-term macro plan + actual km per week (for progress display)
+  const macroPlan = await loadActiveMacroPlan(admin, user.id).catch(() => null);
+  const weeklyActualKm: Record<string, number> = {};
+  for (const r of runRows) {
+    const d = new Date(`${r.date}T12:00:00`);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    const mon = d.toISOString().slice(0, 10);
+    weeklyActualKm[mon] = (weeklyActualKm[mon] ?? 0) + r.distance_km;
+  }
+
   return (
     <AppShell>
       <CoachContent
@@ -89,6 +100,8 @@ export default async function CoachPage() {
         tests={tests}
         adherenceHistory={adherenceHistory}
         efficiencyTrend={efficiencyTrend}
+        macroPlan={macroPlan}
+        weeklyActualKm={weeklyActualKm}
       />
     </AppShell>
   );

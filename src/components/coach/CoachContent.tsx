@@ -20,8 +20,10 @@ import { AthleteProfileCard }   from "@/components/coach/AthleteProfileCard";
 import { PlanAdherenceCard }    from "@/components/coach/PlanAdherenceCard";
 import { AerobicEfficiencyCard } from "@/components/coach/AerobicEfficiencyCard";
 import { ProactiveAdjustBanner } from "@/components/coach/ProactiveAdjustBanner";
+import { MacroPlanCard }        from "@/components/coach/MacroPlanCard";
 import type { WeekAdherence }   from "@/lib/plan-adherence";
 import type { EfficiencyTrend } from "@/lib/aerobic-efficiency";
+import type { MacroPlan }       from "@/types";
 
 type Tab = "zonas" | "testes" | "relatorios" | "perfil";
 
@@ -31,9 +33,11 @@ interface Props {
   tests:   PerformanceTest[];
   adherenceHistory?: WeekAdherence[];
   efficiencyTrend?: EfficiencyTrend | null;
+  macroPlan?: MacroPlan | null;
+  weeklyActualKm?: Record<string, number>;
 }
 
-export function CoachContent({ reports, cycles, tests: initialTests, adherenceHistory = [], efficiencyTrend = null }: Props) {
+export function CoachContent({ reports, cycles, tests: initialTests, adherenceHistory = [], efficiencyTrend = null, macroPlan = null, weeklyActualKm = {} }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("zonas");
   const [expanded,  setExpanded]  = useState<string | null>(reports[0]?.id ?? null);
 
@@ -300,6 +304,9 @@ export function CoachContent({ reports, cycles, tests: initialTests, adherenceHi
               </div>
             </>
           )}
+
+          {/* Long-term periodization toward the target race */}
+          <MacroPlanCard initialPlan={macroPlan} weeklyActualKm={weeklyActualKm} />
 
           {/* Proactive coach: replan the rest of the week after deviations */}
           {adherenceHistory.length > 0 && (

@@ -17,6 +17,7 @@ import {
 } from "@/lib/ai";
 import { detectPatterns } from "@/lib/patterns";
 import { sendPushToUser } from "@/lib/push";
+import { adaptMacroPlanForUser } from "@/lib/macro-plan";
 import type { Run, Activity } from "@/types";
 
 // 5 minutes — enough for multiple users + AI calls
@@ -372,6 +373,13 @@ export async function GET(request: NextRequest) {
       results.push(result);
     } catch (err) {
       results.push({ userId: profile.id as string, error: err instanceof Error ? err.message : "unknown", summary: "error", plan: "error", patterns: "error" });
+    }
+
+    // Auto-adapt the long-term macro plan to last week's real execution
+    try {
+      await adaptMacroPlanForUser(admin, profile.id as string);
+    } catch {
+      // best-effort — never fail the weekly report over this
     }
   }
 

@@ -10,7 +10,7 @@
  * o que comporta centenas de corridas confortavelmente.
  */
 
-import type { Run, WeeklyPlanData, WeeklyPlanDay, PlanChatMessage, AthleteNoteCategory } from "@/types";
+import type { Run, WeeklyPlanData, WeeklyPlanDay, PlanChatMessage, AthleteNoteCategory, MacroPlanData, MacroPlanWeek, MacroRaceType } from "@/types";
 import { secondsToPaceString, secondsToReadable } from "@/lib/utils";
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
@@ -286,6 +286,148 @@ Gere o plano semanal em JSON conforme o formato especificado.
     };
   } catch (err) {
     console.error("[AI] Failed to parse weekly plan JSON:", err, "\nRaw:", raw);
+    return null;
+  }
+}
+
+// ─── Macro plan (long-term periodization) ────────────────────────────────────
+
+const RACE_TYPE_INFO: Record<MacroRaceType, string> = {
+  "5k":        "5 km — foco em velocidade e VO2max",
+  "10k":       "10 km — equilíbrio entre limiar e velocidade",
+  "half":      "Meia-maratona (21,1 km) — limiar e resistência aeróbica",
+  "marathon":  "Maratona (42,2 km) — volume, longões progressivos e nutrição",
+  "ultra":     "Ultramaratona — volume alto, tempo em pé, terreno",
+  "triathlon": "Triathlon/Ironman (corrida) — corrida sob fadiga, brick runs",
+  "other":     "Prova de corrida",
+};
+
+/**
+ * Gera um macro-plano periodizado da próxima segunda-feira até a prova-alvo.
+ * Fases clássicas: base → build → peak → taper, com progressão de volume
+ * segura (~10%/semana) e semanas de recuperação a cada 3-4 semanas.
+ */
+export async function generateMacroPlan(
+  raceType: MacroRaceType,
+  raceLabel: string,
+  targetMonth: string,            // YYYY-MM
+  weekStarts: string[],           // Mondays from next week until race month
+  currentWeeklyKm: number,
+  vdot: number | null,
+  recentSummary: string,
+): Promise<MacroPlanData | null> {
+  const systemPrompt = `
+Você é um treinador de corrida especialista em periodização. Monte um plano de LONGO PRAZO semana a semana até a prova-alvo.
+RESPONDA SOMENTE com JSON válido, sem markdown:
+{
+  "weeks": [
+    { "week_start": "YYYY-MM-DD", "phase": "base"|"build"|"peak"|"taper"|"race", "target_km": number, "focus": string curto, "key_workout": string curto }
+  ],
+  "phases_summary": [ { "phase": "base", "weeks": number, "description": string 1 frase } ],
+  "rationale": string (2-3 frases sobre a estratégia geral)
+}
+
+REGRAS DE PERIODIZAÇÃO:
+1. Use EXATAMENTE as datas de week_start fornecidas, nessa ordem
+2. Progressão de volume máxima ~10% por semana; a cada 3-4 semanas, uma semana de recuperação (-20-30%)
+3. Fases na ordem: base (volume aeróbico) → build (qualidade/limiar) → peak (específico de prova) → taper (1-3 semanas, redução 40-60%) → race na última semana
+4. target_km realista partindo do volume atual do atleta — nunca dobre o volume de uma vez
+5. key_workout específico e curto (ex: "longão 18km", "6x800m 5K pace", "tempo 8km")
+6. focus com 2-4 palavras
+`.trim();
+
+  const userPrompt = `
+PROVA-ALVO: ${raceLabel} (${RACE_TYPE_INFO[raceType]})
+MÊS ESTIMADO DA PROVA: ${targetMonth}
+VOLUME SEMANAL ATUAL: ~${Math.round(currentWeeklyKm)} km/semana
+${vdot ? `VDOT ATUAL: ${vdot.toFixed(1)}` : ""}
+
+SEMANAS DISPONÍVEIS (week_start de cada uma, em ordem):
+${weekStarts.join(", ")}
+
+HISTÓRICO RECENTE:
+${recentSummary}
+
+Gere o macro-plano em JSON cobrindo TODAS as semanas listadas.
+`.trim();
+
+  const raw = await callGroq(systemPrompt, userPrompt, 3000);
+  if (!raw) return null;
+
+  try {
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+    const parsed = JSON.parse(cleaned) as MacroPlanData;
+    if (!Array.isArray(parsed.weeks) || parsed.weeks.length === 0) return null;
+    return {
+      weeks: parsed.weeks,
+      phases_summary: parsed.phases_summary ?? [],
+      rationale: parsed.rationale ?? "",
+    };
+  } catch (err) {
+    console.error("[AI] Failed to parse macro plan:", err, "\nRaw:", raw?.slice(0, 400));
+    return null;
+  }
+}
+
+/**
+ * Adapta o macro-plano à realidade: compara as últimas semanas planejadas vs
+ * executadas e reescreve SOMENTE as semanas futuras (passado preservado).
+ */
+export async function adaptMacroPlan(
+  plan: MacroPlanData,
+  raceLabel: string,
+  targetMonth: string,
+  executionSummary: string,
+  vdot: number | null,
+): Promise<{ weeks: MacroPlanWeek[]; note: string } | null> {
+  const today = new Date().toISOString().slice(0, 10);
+  const pastWeeks   = plan.weeks.filter(w => w.week_start <  today);
+  const futureWeeks = plan.weeks.filter(w => w.week_start >= today);
+  if (futureWeeks.length === 0) return null;
+
+  const systemPrompt = `
+Você é um treinador de corrida. O atleta tem um macro-plano até a prova, mas a execução real divergiu do planejado.
+Reescreva SOMENTE as semanas futuras listadas, ajustando volume e foco à realidade — se o atleta correu menos, reduza a rampa; se correu mais e bem, pode progredir.
+RESPONDA SOMENTE com JSON válido:
+{
+  "weeks": [ { "week_start": "YYYY-MM-DD", "phase": "...", "target_km": number, "focus": string, "key_workout": string } ],
+  "note": string (2 frases: o que mudou e por quê)
+}
+REGRAS: use exatamente as mesmas datas week_start futuras; mantenha taper antes da prova; progressão ≤10%/semana a partir do volume REAL atual.
+`.trim();
+
+  const userPrompt = `
+PROVA: ${raceLabel} em ${targetMonth}
+${vdot ? `VDOT: ${vdot.toFixed(1)}` : ""}
+
+EXECUÇÃO RECENTE (planejado vs real):
+${executionSummary}
+
+SEMANAS FUTURAS A REESCREVER (datas):
+${futureWeeks.map(w => w.week_start).join(", ")}
+
+PLANO FUTURO ATUAL (para referência):
+${futureWeeks.map(w => `${w.week_start}: ${w.target_km}km [${w.phase}] ${w.focus}`).join("\n")}
+
+Gere o JSON com as semanas futuras ajustadas.
+`.trim();
+
+  const raw = await callGroq(systemPrompt, userPrompt, 2500);
+  if (!raw) return null;
+
+  try {
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+    const parsed = JSON.parse(cleaned) as { weeks: MacroPlanWeek[]; note?: string };
+    if (!Array.isArray(parsed.weeks) || parsed.weeks.length === 0) return null;
+
+    const futureSet = new Set(futureWeeks.map(w => w.week_start));
+    const newFuture = parsed.weeks.filter(w => futureSet.has(w.week_start));
+    if (newFuture.length === 0) return null;
+
+    const merged = [...pastWeeks, ...newFuture].sort((a, b) => (a.week_start < b.week_start ? -1 : 1));
+    return { weeks: merged, note: parsed.note ?? "Plano ajustado à execução real." };
+  } catch (err) {
+    console.error("[AI] Failed to parse macro adaptation:", err);
     return null;
   }
 }
