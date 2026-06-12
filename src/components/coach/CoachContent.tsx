@@ -17,6 +17,8 @@ import { TestForm }             from "@/components/coach/TestForm";
 import { WeeklyPlanCard }       from "@/components/coach/WeeklyPlanCard";
 import { VdotEvolutionChart }   from "@/components/coach/VdotEvolutionChart";
 import { AthleteProfileCard }   from "@/components/coach/AthleteProfileCard";
+import { PlanAdherenceCard }    from "@/components/coach/PlanAdherenceCard";
+import type { WeekAdherence }   from "@/lib/plan-adherence";
 
 type Tab = "zonas" | "testes" | "relatorios" | "perfil";
 
@@ -24,9 +26,10 @@ interface Props {
   reports: CoachReport[];
   cycles:  TrainingCycle[];
   tests:   PerformanceTest[];
+  adherenceHistory?: WeekAdherence[];
 }
 
-export function CoachContent({ reports, cycles, tests: initialTests }: Props) {
+export function CoachContent({ reports, cycles, tests: initialTests, adherenceHistory = [] }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("zonas");
   const [expanded,  setExpanded]  = useState<string | null>(reports[0]?.id ?? null);
 
@@ -292,6 +295,11 @@ export function CoachContent({ reports, cycles, tests: initialTests }: Props) {
                 )}
               </div>
             </>
+          )}
+
+          {/* Plan adherence — planned vs done */}
+          {adherenceHistory.length > 0 && (
+            <PlanAdherenceCard history={adherenceHistory} />
           )}
 
           {/* Interactive weekly plan — always shown */}
