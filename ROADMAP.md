@@ -26,9 +26,19 @@ treino, recuperação, composição corporal e nutrição conversando entre si.
 | 2.3 | **Nutrição base** | TMB (Mifflin-St Jeor c/ peso atual) + TDEE somando gasto real das corridas/treinos → meta calórica do dia; dicas de dieta IA contextuais (dia de longão = mais carbo; descanso = menos); fueling pré/durante/pós treinos longos |
 | 2.4 | **Índice de prontidão 0-100** | TSB + sono + dor + RPE (+HRV futuro) → score com cor no dashboard; alimenta briefing das 5:30 e o ajuste proativo da semana ("prontidão 38 → troquei o tiro de hoje por rodagem") |
 
-### Fase 3 — Corpo completo (a definir no brainstorm)
-Candidatos: progressão de força/cargas, hidratação, exames de sangue de corredor,
-HRV, mobilidade/prevenção, "Limiar Score" unificado. → ver brainstorm abaixo.
+### Fase 3 — Corpo completo (decisões do brainstorm 12/06)
+**Decidido com o Sérgio:**
+- ❌ Progressão de força/cargas — fora (não registra cargas, não absorver)
+- ❌ Painel de exames de sangue — fora ("demais")
+- ✅ Balança: **Xiaomi S400** — investigar Web Bluetooth (protocolo BLE pode ser
+  cifrado no S400; fallback garantido = entrada manual caprichada; ponte
+  Health Connect só se virar app nativo)
+- ✅ **Limiar Score**: fica SÓ na página de Saúde (não vai pro dashboard)
+- ✅ Mantidos p/ Fase 3: hidratação/taxa de suor (peso pré/pós-longão),
+  periodização nutricional, correlação dor×volume, recuperação ativa sugerida
+
+→ Nova página `/health` concentra: check-in, peso/bioimpedância, nutrição,
+prontidão detalhada e Limiar Score.
 
 ---
 > Esforço: 🟢 pequeno (horas) · 🟡 médio (1-2 sessões) · 🔴 grande (várias sessões)
