@@ -1,6 +1,36 @@
 # Limiar — Mapa de Próximos Passos
 
 > Atualizado em 2026-06-12. Documento vivo: priorize, risque, adicione.
+
+---
+
+## 🚀 PLANO DE EXECUÇÃO ACORDADO (12/06/2026)
+
+**Visão**: transformar o Limiar em um app de **performance completa do corpo** —
+treino, recuperação, composição corporal e nutrição conversando entre si.
+
+### Fase 1 — Treinador Nível 2 (treinos estruturados + relógio)
+| # | Entrega | Detalhe |
+|---|---------|---------|
+| 1.1 | **Modelo de treino estruturado** | Steps tipados: aquecimento / intervalo / recuperação / desaquecimento, com repetições (ex: 10' Z2 + 6×(800m @4:30 + 400m trote) + 10' leve). Salvo no plano semanal |
+| 1.2 | **IA gera estruturado** | O plano semanal passa a prescrever steps completos, não só "tiro 400m" |
+| 1.3 | **Builder visual** | Editar/criar treino estruturado na mão (drag de blocos) |
+| 1.4 | **Export para relógio** | `.FIT` (Garmin/Coros/Wahoo/Zepp) + `.ZWO` (Zwift). Apple Watch: sem API pública p/ PWA — caminho é app companion (WorkOutDoors importa) ou futura versão nativa via WorkoutKit. Documentar limitação honestamente |
+| 1.5 | **Tela "treino de hoje"** | Passos do treino na tela, com paces-alvo das zonas do atleta |
+
+### Fase 2 — Saúde & Corpo (check-in → prontidão)
+| # | Entrega | Detalhe |
+|---|---------|---------|
+| 2.1 | **Check-in diário (20s)** | Sono (horas + qualidade 1-5), dor (mapa corporal + intensidade), humor/energia, RPE do treino de ontem |
+| 2.2 | **Peso & bioimpedância** | Entrada rápida + série temporal: peso, % gordura, massa muscular, água, gordura visceral. **Xiaomi**: não há API pública oficial; caminhos reais → (a) Web Bluetooth lendo a balança direto no Chrome Android (protocolo Mi Scale é conhecido/openScale), (b) Health Connect/Apple Health como ponte (exige app nativo/Capacitor), (c) entrada manual caprichada como fallback garantido. Investigar (a) primeiro |
+| 2.3 | **Nutrição base** | TMB (Mifflin-St Jeor c/ peso atual) + TDEE somando gasto real das corridas/treinos → meta calórica do dia; dicas de dieta IA contextuais (dia de longão = mais carbo; descanso = menos); fueling pré/durante/pós treinos longos |
+| 2.4 | **Índice de prontidão 0-100** | TSB + sono + dor + RPE (+HRV futuro) → score com cor no dashboard; alimenta briefing das 5:30 e o ajuste proativo da semana ("prontidão 38 → troquei o tiro de hoje por rodagem") |
+
+### Fase 3 — Corpo completo (a definir no brainstorm)
+Candidatos: progressão de força/cargas, hidratação, exames de sangue de corredor,
+HRV, mobilidade/prevenção, "Limiar Score" unificado. → ver brainstorm abaixo.
+
+---
 > Esforço: 🟢 pequeno (horas) · 🟡 médio (1-2 sessões) · 🔴 grande (várias sessões)
 > Valor: ⭐ nice-to-have · ⭐⭐ forte · ⭐⭐⭐ diferencial competitivo
 
