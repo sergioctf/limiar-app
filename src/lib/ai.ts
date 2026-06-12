@@ -291,6 +291,93 @@ Gere o plano semanal em JSON conforme o formato especificado.
 }
 
 /**
+ * Ajuste proativo: replaneja APENAS os dias restantes da semana quando o
+ * atleta desviou do plano (treinos perdidos) ou a carga está perigosa (TSB).
+ * Dias já passados são preservados exatamente como estão.
+ */
+export async function adjustWeeklyPlanProactive(
+  currentPlan: WeeklyPlanData,
+  adherenceSummary: string,   // human-readable per-day status so far
+  tsb: number | null,
+  todayKey: WeeklyPlanDay["day"],
+): Promise<{ plan: WeeklyPlanData; message: string } | null> {
+  const todayIdx = DAY_ORDER.indexOf(todayKey);
+  const pastDays = currentPlan.days.filter(d => DAY_ORDER.indexOf(d.day) < todayIdx);
+
+  const systemPrompt = `
+Você é um treinador de corrida especialista. O atleta desviou do plano semanal (treinos perdidos/parciais) ou está com carga de treino preocupante.
+Sua tarefa: REPLANEJAR SOMENTE os dias de hoje em diante (${todayKey} → Sun), redistribuindo o que for essencial e cortando o que não cabe mais — NUNCA tente compensar tudo, priorize segurança.
+RESPONDA SOMENTE com JSON válido, sem markdown:
+{
+  "days": [ ... apenas os dias de ${todayKey} a Sun, mesmo formato do plano ... ],
+  "message": string (2-3 frases em português explicando O QUE mudou e POR QUÊ, tom de treinador)
+}
+
+Formato de cada dia:
+{ "day": "...", "dayPt": "...", "type": "rest"|"easy"|"tempo"|"intervals"|"long_run"|"recovery"|"test"|"race"|"strength", "label": string, "distance_km": number|null, "duration_min": number|null, "pace": string|null, "description": string }
+
+REGRAS:
+1. Domingo (Sun) é SEMPRE "rest"
+2. Se TSB < -20 (fadiga alta), REDUZA volume/intensidade — não adicione
+3. Treino-chave perdido (tiro/tempo/longão) pode ser movido 1x se houver espaço com recuperação adequada; senão, corte
+4. Mantenha o padrão de musculação nos dias em que já estava prevista
+5. Máximo 3 corridas na semana TOTAL (contando as já feitas)
+`.trim();
+
+  const userPrompt = `
+PLANO ORIGINAL DA SEMANA (${currentPlan.week_start}):
+${currentPlan.days.map(d => `${d.day} (${d.dayPt}): ${d.label}${d.distance_km ? ` ${d.distance_km}km` : ""}${d.duration_min ? ` ${d.duration_min}min` : ""} [${d.type}]`).join("\n")}
+
+EXECUÇÃO ATÉ AGORA:
+${adherenceSummary}
+
+${tsb !== null ? `TSB (forma) atual: ${tsb} ${tsb < -20 ? "← FADIGA ALTA" : ""}` : ""}
+Hoje é ${todayKey}.
+
+Replaneje os dias de ${todayKey} a Sun em JSON.
+`.trim();
+
+  const raw = await callGroq(systemPrompt, userPrompt, 1000);
+  if (!raw) return null;
+
+  try {
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+    const parsed = JSON.parse(cleaned) as { days: WeeklyPlanDay[]; message?: string };
+    if (!Array.isArray(parsed.days) || parsed.days.length === 0) return null;
+
+    // Keep only genuinely remaining days from the AI, preserve the past untouched
+    const newRemaining = parsed.days.filter(d => DAY_ORDER.indexOf(d.day) >= todayIdx);
+    if (newRemaining.length === 0) return null;
+
+    const mergedDays = [...pastDays, ...newRemaining].sort(
+      (a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day)
+    );
+
+    // Safety net: Sunday is rest, always
+    const sunday = mergedDays.find(d => d.day === "Sun");
+    if (sunday && sunday.type !== "rest" && sunday.type !== "race") {
+      sunday.type = "rest";
+      sunday.label = "Descanso";
+      sunday.distance_km = undefined;
+      sunday.duration_min = undefined;
+    }
+
+    return {
+      plan: {
+        ...currentPlan,
+        days: mergedDays,
+        ai_message: parsed.message ?? currentPlan.ai_message,
+        generated_at: new Date().toISOString(),
+      },
+      message: parsed.message ?? "Plano ajustado para o restante da semana.",
+    };
+  } catch (err) {
+    console.error("[AI] Failed to parse plan adjustment:", err, "\nRaw:", raw);
+    return null;
+  }
+}
+
+/**
  * Processa feedback do atleta sobre o plano e retorna plano atualizado ou resposta de chat.
  */
 export async function processPlanFeedback(

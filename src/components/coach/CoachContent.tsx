@@ -19,6 +19,7 @@ import { VdotEvolutionChart }   from "@/components/coach/VdotEvolutionChart";
 import { AthleteProfileCard }   from "@/components/coach/AthleteProfileCard";
 import { PlanAdherenceCard }    from "@/components/coach/PlanAdherenceCard";
 import { AerobicEfficiencyCard } from "@/components/coach/AerobicEfficiencyCard";
+import { ProactiveAdjustBanner } from "@/components/coach/ProactiveAdjustBanner";
 import type { WeekAdherence }   from "@/lib/plan-adherence";
 import type { EfficiencyTrend } from "@/lib/aerobic-efficiency";
 
@@ -298,6 +299,11 @@ export function CoachContent({ reports, cycles, tests: initialTests, adherenceHi
                 )}
               </div>
             </>
+          )}
+
+          {/* Proactive coach: replan the rest of the week after deviations */}
+          {adherenceHistory.length > 0 && (
+            <ProactiveAdjustBanner currentWeek={adherenceHistory[0]} />
           )}
 
           {/* Plan adherence — planned vs done */}

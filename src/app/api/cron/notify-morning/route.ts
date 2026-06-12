@@ -7,7 +7,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
 import { getMondayStr, getWorkoutForDate, formatWorkoutNotification } from "@/lib/plan-notify";
-import type { WeeklyPlanDay } from "@/types";
+import { computeTrainingLoad } from "@/lib/training-load";
+import type { WeeklyPlanDay, Run } from "@/types";
 
 export const maxDuration = 60;
 
@@ -101,9 +102,32 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
+      // Readiness context from TSB — turns the briefing into actual coaching
+      let contextLine = "";
+      try {
+        const since = new Date(now);
+        since.setDate(since.getDate() - 90);
+        const { data: tsbRuns } = await admin
+          .from("runs")
+          .select("date, distance_km, duration_seconds, avg_pace_seconds_per_km, avg_hr")
+          .eq("user_id", userId)
+          .gte("date", since.toISOString().slice(0, 10))
+          .is("deleted_at", null);
+        const load = computeTrainingLoad((tsbRuns ?? []) as Run[], null, null, 90);
+        const tsb = load.length > 0 ? load[load.length - 1].tsb : null;
+        if (tsb !== null && tsb < -20) {
+          contextLine = ` ⚠️ Fadiga alta (forma ${tsb}) — se o corpo pedir, reduza a intensidade hoje.`;
+        } else if (tsb !== null && tsb > 10) {
+          contextLine = ` ✨ Você está descansado — bom dia para caprichar.`;
+        }
+      } catch {
+        // readiness is best-effort
+      }
+
       const notification = formatWorkoutNotification(workout, "Hoje");
       const { sent, removed } = await sendPushToUser(admin, userId, {
         ...notification,
+        body: (notification.body + contextLine).slice(0, 180),
         icon: "/api/icons/192",
       });
 
