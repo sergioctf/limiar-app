@@ -217,7 +217,13 @@ Formato JSON obrigatório:
       "distance_km": number | null,
       "duration_min": number | null,
       "pace": string | null (ex: "6:00–6:20/km"),
-      "description": string (1-2 frases descritivas e práticas)
+      "description": string (1-2 frases descritivas e práticas),
+      "structure": null | {
+        "blocks": [
+          { "kind": "warmup"|"run"|"recovery"|"cooldown", "distance_km": number|null, "duration_min": number|null, "pace": string|null, "note": string|null }
+          | { "repeat": number, "steps": [ ...mesmo formato de step... ] }
+        ]
+      }
     }
   ],
   "ai_message": string (1-2 frases proativas: observação sobre o histórico ou pergunta para engajar o atleta)
@@ -233,6 +239,10 @@ REGRAS OBRIGATÓRIAS — nunca viole estas regras:
 7. Se houver dados de pace, use-os nas prescrições de corrida
 8. Para musculação, duration_min deve ter valor (ex: 60), distance_km = null
 9. ai_message deve ser específica e baseada nos dados reais do atleta
+10. ESTRUTURA: para treinos de qualidade (tempo/intervals/test) e longão, preencha "structure" com os passos executáveis:
+    sempre warmup no início e cooldown no fim; intervalos como bloco repeat (ex: 6×(800m forte + 400m trote)).
+    Cada step tem distance_km OU duration_min (nunca os dois). Para easy/recovery/strength/rest, structure = null.
+    A soma das distâncias dos steps deve bater (±10%) com distance_km do dia.
 `.trim();
 
   const recent = recentRuns.slice(0, 10).sort((a,b) => b.date.localeCompare(a.date));
@@ -265,7 +275,7 @@ ${historyStr}
 Gere o plano semanal em JSON conforme o formato especificado.
 `.trim();
 
-  const raw = await callGroq(systemPrompt, userPrompt, 1200);
+  const raw = await callGroq(systemPrompt, userPrompt, 2400);
   if (!raw) return null;
 
   try {
@@ -277,6 +287,11 @@ Gere o plano semanal em JSON conforme o formato especificado.
     const days = (parsed.days ?? []).sort(
       (a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day)
     );
+
+    // Drop malformed structures (defensive — model occasionally returns junk)
+    for (const d of days) {
+      if (d.structure && !Array.isArray(d.structure.blocks)) d.structure = undefined;
+    }
 
     return {
       week_start: weekStart,

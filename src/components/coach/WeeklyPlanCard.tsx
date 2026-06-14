@@ -7,6 +7,7 @@ import {
   Moon, Wind, Timer, Repeat, Zap, Trophy, FlaskConical, Dumbbell,
 } from "lucide-react";
 import type { WeeklyPlanData, WeeklyPlanDay, PlanChatMessage } from "@/types";
+import { WorkoutStepsView } from "@/components/coach/WorkoutStepsView";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -350,6 +351,11 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
             </p>
           )}
           <p className="text-sm text-surface-300 leading-relaxed">{selectedDay.description}</p>
+
+          {/* Structured steps + watch export (quality sessions) */}
+          {selectedDay.structure && selectedDay.structure.blocks.length > 0 && (
+            <WorkoutStepsView structure={selectedDay.structure} label={selectedDay.label} />
+          )}
         </div>
       )}
 

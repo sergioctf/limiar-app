@@ -351,6 +351,33 @@ export type PlanDayType =
   | "rest" | "easy" | "tempo" | "intervals"
   | "long_run" | "recovery" | "test" | "race" | "strength";
 
+// ── Structured workout (steps a watch can execute) ────────
+
+export type WorkoutStepKind = "warmup" | "run" | "recovery" | "cooldown";
+
+export interface WorkoutStep {
+  kind:         WorkoutStepKind;
+  distance_km?: number;   // either distance…
+  duration_min?: number;  // …or duration
+  pace?:        string;   // target, e.g. "4:25–4:35/km"
+  note?:        string;   // e.g. "ritmo controlado, não acelerar"
+}
+
+export interface WorkoutRepeat {
+  repeat: number;         // e.g. 6 × (run + recovery)
+  steps:  WorkoutStep[];
+}
+
+export type WorkoutBlock = WorkoutStep | WorkoutRepeat;
+
+export interface StructuredWorkout {
+  blocks: WorkoutBlock[];
+}
+
+export function isRepeatBlock(b: WorkoutBlock): b is WorkoutRepeat {
+  return (b as WorkoutRepeat).repeat !== undefined;
+}
+
 export interface WeeklyPlanDay {
   day:         "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
   dayPt:       string;       // "Segunda", "Terça", …
@@ -360,6 +387,8 @@ export interface WeeklyPlanDay {
   duration_min?: number;
   pace?:       string;       // "6:30–6:45/km"
   description: string;
+  /** step-by-step structure for quality sessions (exportable to watch) */
+  structure?:  StructuredWorkout;
 }
 
 export interface WeeklyPlanData {
