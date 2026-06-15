@@ -101,6 +101,38 @@ export async function getStravaActivity(
   return res.json();
 }
 
+export interface StravaStreams {
+  time?:           number[];   // seconds since start
+  distance?:       number[];   // meters, cumulative
+  heartrate?:      number[];   // bpm
+  altitude?:       number[];   // meters
+  velocity_smooth?: number[];  // m/s
+  latlng?:         Array<[number, number]>;
+  cadence?:        number[];
+}
+
+/**
+ * Fetch activity streams. One request per activity — call on-demand and cache.
+ * Returns the requested stream keys as parallel arrays.
+ */
+export async function getStravaStreams(
+  accessToken: string,
+  activityId: number,
+): Promise<StravaStreams> {
+  const keys = "time,distance,heartrate,altitude,velocity_smooth,latlng,cadence";
+  const res = await stravaFetch(
+    `${STRAVA_API_BASE}/activities/${activityId}/streams?keys=${keys}&key_by_type=true`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  // key_by_type=true → { distance: { data: [...] }, heartrate: { data: [...] }, ... }
+  const raw = await res.json() as Record<string, { data: unknown[] }>;
+  const out: StravaStreams = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (v?.data) (out as Record<string, unknown[]>)[k] = v.data;
+  }
+  return out;
+}
+
 /** Convert a raw Strava activity JSON to our internal Run type */
 export function stravaActivityToRun(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

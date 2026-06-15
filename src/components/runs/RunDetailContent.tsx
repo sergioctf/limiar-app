@@ -18,6 +18,7 @@ import {
 import type { Run } from "@/types";
 import { cn } from "@/lib/utils";
 import { RouteReplay } from "@/components/runs/RouteReplay";
+import { RunSplits } from "@/components/runs/RunSplits";
 
 interface Props { run: Run }
 
@@ -219,6 +220,9 @@ export function RunDetailContent({ run }: Props) {
       {run.map_polyline && (
         <RouteReplay polyline={run.map_polyline} distanceKm={run.distance_km} />
       )}
+
+      {/* ── SPLITS + HR DRIFT (Strava streams, on-demand) ───────────────────── */}
+      <RunSplits runId={run.id} hasStrava={run.strava_activity_id != null} />
 
       {/* ── NOTES ───────────────────────────────────────────────────────────── */}
       <div className="card p-5">
