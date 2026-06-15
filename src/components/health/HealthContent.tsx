@@ -4,10 +4,12 @@ import { useState, useMemo } from "react";
 import { HeartPulse, Moon, Battery, Activity, Loader2, Check, Bed } from "lucide-react";
 import { SORENESS_AREAS, type HealthCheckin, type BodyMeasurement } from "@/types";
 import { BodyCompositionCard } from "@/components/health/BodyCompositionCard";
+import { NutritionCard, type NutritionSummary } from "@/components/health/NutritionCard";
 
 interface Props {
   initialCheckins: HealthCheckin[];
   initialBody?: BodyMeasurement[];
+  nutrition?: NutritionSummary;
 }
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -39,7 +41,7 @@ function Scale5({ value, onChange, lowLabel, highLabel, color = "bg-brand-500" }
   );
 }
 
-export function HealthContent({ initialCheckins, initialBody = [] }: Props) {
+export function HealthContent({ initialCheckins, initialBody = [], nutrition }: Props) {
   const [checkins, setCheckins] = useState<HealthCheckin[]>(initialCheckins);
   const today = todayStr();
   const existing = useMemo(() => checkins.find(c => c.date === today) ?? null, [checkins, today]);
@@ -186,6 +188,9 @@ export function HealthContent({ initialCheckins, initialBody = [] }: Props) {
 
       {/* Body composition */}
       <BodyCompositionCard initial={initialBody} />
+
+      {/* Nutrition (TMB/TDEE + AI tip + fueling) */}
+      {nutrition && <NutritionCard data={nutrition} />}
 
       {/* 7-day history */}
       <div className="card p-4">

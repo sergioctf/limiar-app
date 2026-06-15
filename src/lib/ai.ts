@@ -670,3 +670,32 @@ Treinador: ${assistantResponse}
     return [];
   }
 }
+
+/**
+ * Dica de nutrição contextual ao treino do dia e ao objetivo calórico.
+ * Curta (2-3 frases), prática, em português. Não substitui nutricionista.
+ */
+export async function generateDietTip(
+  todayWorkout: string,      // e.g. "Longão 18km" or "Descanso"
+  goal: "maintain" | "cut" | "gain",
+  targetKcal: number,
+  carbsG: number,
+): Promise<string | null> {
+  const goalPt = goal === "cut" ? "perder gordura mantendo performance"
+    : goal === "gain" ? "ganhar massa" : "manter o peso";
+
+  const systemPrompt = `
+Você é um nutricionista esportivo. Dê UMA dica prática e curta (2-3 frases, em português) para o atleta HOJE,
+considerando o treino do dia e o objetivo. Foque em TIMING e ESCOLHAS de comida (não em contar calorias).
+Seja específico e acionável. Não use markdown. Termine lembrando que não substitui acompanhamento profissional só se relevante.
+`.trim();
+
+  const userPrompt = `
+Treino de hoje: ${todayWorkout}
+Objetivo: ${goalPt}
+Meta calórica aproximada do dia: ${targetKcal} kcal (~${carbsG} g de carboidrato)
+Dê a dica do dia.
+`.trim();
+
+  return callGroq(systemPrompt, userPrompt, 250);
+}
