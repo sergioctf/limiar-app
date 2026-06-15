@@ -14,6 +14,7 @@ import {
   Target,
   Users,
   BarChart3,
+  HeartPulse,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ const primaryItems = [
 ];
 
 const moreItems = [
+  { href: "/health",    icon: HeartPulse,   label: "Saúde"      },
   { href: "/calendar",  icon: CalendarDays, label: "Calendário" },
   { href: "/friends",   icon: Users,        label: "Amigos"     },
   { href: "/goals",     icon: Target,       label: "Metas"      },

@@ -440,6 +440,39 @@ export interface MacroPlan {
 }
 
 // ─────────────────────────────────────────────────────────
+// Health & body (Phase 2)
+// ─────────────────────────────────────────────────────────
+
+/** Common runner soreness areas (key → label) for the body-area chips. */
+export const SORENESS_AREAS: Record<string, string> = {
+  panturrilha: "Panturrilha",
+  canela:      "Canela",
+  joelho:      "Joelho",
+  posterior:   "Posterior de coxa",
+  quadriceps:  "Quadríceps",
+  quadril:     "Quadril",
+  tornozelo:   "Tornozelo",
+  pe:          "Pé / planta",
+  lombar:      "Lombar",
+  aquiles:     "Tendão de Aquiles",
+};
+
+export interface HealthCheckin {
+  id?:            string;
+  user_id?:       string;
+  date:           string;             // YYYY-MM-DD
+  sleep_hours:    number | null;
+  sleep_quality:  number | null;      // 1-5
+  energy:         number | null;      // 1-5
+  soreness:       number | null;      // 1-5 (1 = nenhuma)
+  soreness_areas: string[] | null;    // keys of SORENESS_AREAS
+  rpe:            number | null;      // 1-10 (treino de ontem)
+  notes:          string | null;
+  created_at?:    string;
+  updated_at?:    string;
+}
+
+// ─────────────────────────────────────────────────────────
 // Coach Memory — athlete notes extracted from conversations
 // ─────────────────────────────────────────────────────────
 
