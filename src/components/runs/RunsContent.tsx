@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { Search, Plus, SlidersHorizontal, MapPin, Clock, TrendingUp, Heart } from "lucide-react";
+import { Search, Plus, SlidersHorizontal, MapPin, Clock, TrendingUp, Heart, Map as MapIcon } from "lucide-react";
 import { RunCard } from "./RunCard";
 import { EmptyState } from "@/components/shared/States";
 import {
@@ -84,10 +84,16 @@ export function RunsContent({ runs }: Props) {
             {filtered.length} corridas · {totalKm.toFixed(1)} km
           </p>
         </div>
-        <Link href="/runs/new" className="btn-primary">
-          <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">Nova</span>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/runs/map" className="btn-secondary">
+            <MapIcon className="w-4 h-4" />
+            <span className="hidden sm:inline">Mapa</span>
+          </Link>
+          <Link href="/runs/new" className="btn-primary">
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Nova</span>
+          </Link>
+        </div>
       </div>
 
       {/* Search + filters */}

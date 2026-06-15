@@ -17,7 +17,7 @@ import {
 } from "@/lib/utils";
 import type { Run } from "@/types";
 import { cn } from "@/lib/utils";
-import { RouteReplay } from "@/components/runs/RouteReplay";
+import { RouteMap } from "@/components/runs/RouteMap";
 import { RunSplits } from "@/components/runs/RunSplits";
 
 interface Props { run: Run }
@@ -240,9 +240,9 @@ export function RunDetailContent({ run }: Props) {
         )}
       </div>
 
-      {/* ── ROUTE REPLAY ────────────────────────────────────────────────────── */}
+      {/* ── ROUTE MAP (real tiles + replay) ─────────────────────────────────── */}
       {run.map_polyline && (
-        <RouteReplay polyline={run.map_polyline} distanceKm={run.distance_km} latlng={streams?.latlng} />
+        <RouteMap polyline={run.map_polyline} distanceKm={run.distance_km} latlng={streams?.latlng} />
       )}
 
       {/* ── SPLITS + HR DRIFT + BEST EFFORTS (Strava streams, on-demand) ────── */}
