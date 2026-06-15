@@ -14,12 +14,40 @@ export interface KmSplit {
   fastest: boolean;        // fastest full km
 }
 
+export interface BestEffort {
+  name: string;            // "400m", "1k", "1 mile", "5k", "10k"…
+  distanceM: number;
+  elapsedSec: number;
+  paceSecPerKm: number;
+  prRank: number | null;   // 1=PR, 2=2nd best… (Strava-computed, all-time)
+}
+
 export interface RunStreamAnalysis {
   splits: KmSplit[];
   hrDrift: number | null;        // % decoupling (pace:HR 2nd half vs 1st half)
   hrDriftVerdict: "excelente" | "bom" | "atencao" | null;
   latlng?: Array<[number, number]>;
   hasHr: boolean;
+  bestEfforts?: BestEffort[];
+}
+
+/** Parse Strava's detailed-activity best_efforts array into our shape. */
+export function parseBestEfforts(raw: unknown): BestEffort[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((e): BestEffort | null => {
+      const distanceM = Number(e?.distance);
+      const elapsedSec = Number(e?.elapsed_time ?? e?.moving_time);
+      if (!distanceM || !elapsedSec || distanceM <= 0 || elapsedSec <= 0) return null;
+      return {
+        name: String(e?.name ?? `${Math.round(distanceM)}m`),
+        distanceM,
+        elapsedSec,
+        paceSecPerKm: Math.round(elapsedSec / (distanceM / 1000)),
+        prRank: e?.pr_rank != null ? Number(e.pr_rank) : null,
+      };
+    })
+    .filter((e): e is BestEffort => e !== null);
 }
 
 /**

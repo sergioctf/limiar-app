@@ -2,21 +2,27 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Play, Pause, RotateCcw, MapPin, Map as MapIcon } from "lucide-react";
-import { decodePolyline, projectToSvg } from "@/lib/polyline";
+import { decodePolyline, projectToSvg, type LatLng } from "@/lib/polyline";
 
 interface Props {
   polyline: string | null | undefined;
   distanceKm: number;
+  /** high-fidelity GPS track from streams; preferred over the summary polyline */
+  latlng?: Array<[number, number]> | null;
 }
 
 const SIZE = 320;
 const DURATION_MS = 6000; // full replay length
 
-export function RouteReplay({ polyline, distanceKm }: Props) {
+export function RouteReplay({ polyline, distanceKm, latlng }: Props) {
   const projected = useMemo(() => {
-    const pts = decodePolyline(polyline ?? "");
+    // Prefer the real per-point GPS track when available (streams); the
+    // summary polyline is a simplified fallback.
+    const pts: LatLng[] = latlng && latlng.length > 1
+      ? (latlng as LatLng[])
+      : decodePolyline(polyline ?? "");
     return projectToSvg(pts, SIZE);
-  }, [polyline]);
+  }, [polyline, latlng]);
 
   const pathRef = useRef<SVGPathElement>(null);
   const rafRef = useRef<number | null>(null);

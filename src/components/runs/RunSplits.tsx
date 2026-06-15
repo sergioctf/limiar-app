@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { BarChart3, Loader2, Heart, Mountain, TrendingDown, Crown, ChevronDown } from "lucide-react";
-import { secondsToPaceString } from "@/lib/utils";
+import { BarChart3, Loader2, Heart, Mountain, TrendingDown, Crown, ChevronDown, Trophy } from "lucide-react";
+import { secondsToPaceString, secondsToReadable } from "@/lib/utils";
 import type { RunStreamAnalysis, KmSplit } from "@/lib/run-streams";
 
 interface Props {
-  runId: string;
   hasStrava: boolean;
+  analysis: RunStreamAnalysis | null;
+  loading: boolean;
+  loaded: boolean;
+  reason: string | null;
+  onLoad: () => void;
 }
 
 const DRIFT_UI = {
@@ -16,28 +19,7 @@ const DRIFT_UI = {
   atencao:   { label: "Atenção",   color: "text-yellow-400", desc: "FC subiu bastante no fim — fadiga, calor ou ritmo agressivo demais" },
 } as const;
 
-export function RunSplits({ runId, hasStrava }: Props) {
-  const [analysis, setAnalysis] = useState<RunStreamAnalysis | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-  const [reason, setReason] = useState<string | null>(null);
-
-  async function load() {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/runs/${runId}/streams`);
-      const data = await res.json();
-      setAnalysis(data.analysis ?? null);
-      setReason(data.reason ?? null);
-      setLoaded(true);
-    } catch {
-      setReason("fetch_failed");
-      setLoaded(true);
-    } finally {
-      setLoading(false);
-    }
-  }
-
+export function RunSplits({ hasStrava, analysis, loading, loaded, reason, onLoad }: Props) {
   if (!hasStrava) return null;
 
   // Slowest full km defines the bar scale
@@ -54,7 +36,7 @@ export function RunSplits({ runId, hasStrava }: Props) {
           <h2 className="section-title">Splits por km</h2>
         </div>
         {!loaded && (
-          <button onClick={load} disabled={loading} className="btn-ghost text-xs text-brand-400 hover:text-brand-300">
+          <button onClick={onLoad} disabled={loading} className="btn-ghost text-xs text-brand-400 hover:text-brand-300">
             {loading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Carregando…</> : <>Analisar <ChevronDown className="w-3.5 h-3.5" /></>}
           </button>
         )}
@@ -120,6 +102,33 @@ export function RunSplits({ runId, hasStrava }: Props) {
               );
             })}
           </div>
+
+          {/* Best efforts (Strava-computed fastest segments within this run) */}
+          {analysis?.bestEfforts && analysis.bestEfforts.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-surface-700/50">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Trophy className="w-3.5 h-3.5 text-yellow-400" />
+                <p className="text-xs font-semibold text-surface-300 uppercase tracking-wide">Melhores parciais</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {analysis.bestEfforts.map((e, i) => (
+                  <div
+                    key={`${e.name}-${i}`}
+                    className={`rounded-lg px-2.5 py-1.5 text-center ${
+                      e.prRank === 1 ? "bg-yellow-500/15 border border-yellow-500/30" : "bg-surface-700/40"
+                    }`}
+                    title={e.prRank === 1 ? "Recorde pessoal!" : e.prRank ? `${e.prRank}º melhor tempo` : undefined}
+                  >
+                    <p className="text-[10px] text-surface-500 flex items-center justify-center gap-1">
+                      {e.prRank === 1 && <Crown className="w-2.5 h-2.5 text-yellow-300" />}{e.name}
+                    </p>
+                    <p className="font-mono font-bold text-sm text-surface-100 tabular-nums">{secondsToReadable(e.elapsedSec)}</p>
+                    <p className="text-[9px] text-surface-500">{secondsToPaceString(e.paceSecPerKm)}/km</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

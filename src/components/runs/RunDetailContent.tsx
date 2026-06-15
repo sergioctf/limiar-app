@@ -28,6 +28,30 @@ export function RunDetailContent({ run }: Props) {
   const [analyzing, setAnalyzing]   = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
 
+  // Strava streams (splits + HR drift + best efforts + real GPS) — on-demand,
+  // shared between the route replay and the splits card.
+  const [streams, setStreams] = useState<import("@/lib/run-streams").RunStreamAnalysis | null>(null);
+  const [streamsLoading, setStreamsLoading] = useState(false);
+  const [streamsLoaded, setStreamsLoaded] = useState(false);
+  const [streamsReason, setStreamsReason] = useState<string | null>(null);
+
+  async function loadStreams() {
+    if (streamsLoading || streamsLoaded) return;
+    setStreamsLoading(true);
+    try {
+      const res = await fetch(`/api/runs/${run.id}/streams`);
+      const data = await res.json();
+      setStreams(data.analysis ?? null);
+      setStreamsReason(data.reason ?? null);
+      setStreamsLoaded(true);
+    } catch {
+      setStreamsReason("fetch_failed");
+      setStreamsLoaded(true);
+    } finally {
+      setStreamsLoading(false);
+    }
+  }
+
   // Notes state
   const [notes, setNotes]           = useState<string>(run.notes ?? "");
   const [editingNotes, setEditingNotes] = useState(false);
@@ -218,11 +242,18 @@ export function RunDetailContent({ run }: Props) {
 
       {/* ── ROUTE REPLAY ────────────────────────────────────────────────────── */}
       {run.map_polyline && (
-        <RouteReplay polyline={run.map_polyline} distanceKm={run.distance_km} />
+        <RouteReplay polyline={run.map_polyline} distanceKm={run.distance_km} latlng={streams?.latlng} />
       )}
 
-      {/* ── SPLITS + HR DRIFT (Strava streams, on-demand) ───────────────────── */}
-      <RunSplits runId={run.id} hasStrava={run.strava_activity_id != null} />
+      {/* ── SPLITS + HR DRIFT + BEST EFFORTS (Strava streams, on-demand) ────── */}
+      <RunSplits
+        hasStrava={run.strava_activity_id != null}
+        analysis={streams}
+        loading={streamsLoading}
+        loaded={streamsLoaded}
+        reason={streamsReason}
+        onLoad={loadStreams}
+      />
 
       {/* ── NOTES ───────────────────────────────────────────────────────────── */}
       <div className="card p-5">

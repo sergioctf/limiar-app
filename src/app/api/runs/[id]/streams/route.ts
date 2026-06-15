@@ -5,8 +5,8 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { refreshStravaToken, getStravaStreams, StravaApiError } from "@/lib/strava";
-import { analyzeStreams } from "@/lib/run-streams";
+import { refreshStravaToken, getStravaStreams, getStravaActivity, StravaApiError } from "@/lib/strava";
+import { analyzeStreams, parseBestEfforts } from "@/lib/run-streams";
 
 export const maxDuration = 30;
 
@@ -65,6 +65,16 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const streams = await getStravaStreams(accessToken, run.strava_activity_id);
     const analysis = analyzeStreams(streams);
+
+    // Detailed activity → Strava-computed best efforts (fastest 400m/1k/5k/10k…
+    // within this run). Best-effort: a failure here must not lose the splits.
+    try {
+      const detail = await getStravaActivity(accessToken, run.strava_activity_id) as { best_efforts?: unknown };
+      const bestEfforts = parseBestEfforts(detail?.best_efforts);
+      if (bestEfforts.length > 0) analysis.bestEfforts = bestEfforts;
+    } catch {
+      // ignore — splits/HR drift still returned
+    }
 
     // Cache (best-effort; don't fail the response if the write errors)
     await admin.from("run_streams").upsert({
