@@ -472,6 +472,23 @@ export interface HealthCheckin {
   updated_at?:    string;
 }
 
+export interface BodyMeasurement {
+  id?:             string;
+  user_id?:        string;
+  date:            string;            // YYYY-MM-DD
+  weight_kg:       number;            // required
+  body_fat_pct:    number | null;
+  muscle_mass_kg:  number | null;
+  water_pct:       number | null;
+  visceral_fat:    number | null;
+  bone_mass_kg:    number | null;
+  bmi:             number | null;
+  basal_kcal:      number | null;
+  notes:           string | null;
+  created_at?:     string;
+  updated_at?:     string;
+}
+
 // ─────────────────────────────────────────────────────────
 // Coach Memory — athlete notes extracted from conversations
 // ─────────────────────────────────────────────────────────
