@@ -6,6 +6,7 @@ import { SORENESS_AREAS, type HealthCheckin, type BodyMeasurement } from "@/type
 import { BodyCompositionCard } from "@/components/health/BodyCompositionCard";
 import { NutritionCard, type NutritionSummary } from "@/components/health/NutritionCard";
 import { ReadinessCard } from "@/components/health/ReadinessCard";
+import { NativeHealthSync } from "@/components/health/NativeHealthSync";
 import type { Readiness } from "@/lib/readiness";
 
 interface Props {
@@ -114,6 +115,9 @@ export function HealthContent({ initialCheckins, initialBody = [], nutrition, re
         <h1 className="page-header flex items-center gap-2"><HeartPulse className="w-6 h-6 text-brand-400" /> Saúde</h1>
         <p className="text-surface-500 text-sm">Check-in diário — leva 20 segundos e ajusta seu treino ao seu corpo.</p>
       </div>
+
+      {/* Native bridge — feeds wellness_data from the watch when in the app */}
+      <NativeHealthSync />
 
       {/* Limiar Score — readiness (top of the page) */}
       {readiness && <ReadinessCard readiness={readiness} />}
