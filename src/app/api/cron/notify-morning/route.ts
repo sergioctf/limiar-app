@@ -8,7 +8,8 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
 import { getMondayStr, getWorkoutForDate, formatWorkoutNotification } from "@/lib/plan-notify";
 import { computeTrainingLoad } from "@/lib/training-load";
-import type { WeeklyPlanDay, Run } from "@/types";
+import { computeReadiness } from "@/lib/readiness";
+import type { WeeklyPlanDay, Run, HealthCheckin } from "@/types";
 
 export const maxDuration = 60;
 
@@ -102,23 +103,27 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
-      // Readiness context from TSB — turns the briefing into actual coaching
+      // Readiness context (Limiar Score) — TSB + today's check-in if present
       let contextLine = "";
       try {
         const since = new Date(now);
         since.setDate(since.getDate() - 90);
-        const { data: tsbRuns } = await admin
-          .from("runs")
-          .select("date, distance_km, duration_seconds, avg_pace_seconds_per_km, avg_hr")
-          .eq("user_id", userId)
-          .gte("date", since.toISOString().slice(0, 10))
-          .is("deleted_at", null);
+        const todayStr = now.toISOString().slice(0, 10);
+        const [{ data: tsbRuns }, { data: ci }] = await Promise.all([
+          admin.from("runs")
+            .select("date, distance_km, duration_seconds, avg_pace_seconds_per_km, avg_hr")
+            .eq("user_id", userId).gte("date", since.toISOString().slice(0, 10)).is("deleted_at", null),
+          admin.from("health_checkins").select("*").eq("user_id", userId).eq("date", todayStr).maybeSingle(),
+        ]);
         const load = computeTrainingLoad((tsbRuns ?? []) as Run[], null, null, 90);
         const tsb = load.length > 0 ? load[load.length - 1].tsb : null;
-        if (tsb !== null && tsb < -20) {
-          contextLine = ` ⚠️ Fadiga alta (forma ${tsb}) — se o corpo pedir, reduza a intensidade hoje.`;
-        } else if (tsb !== null && tsb > 10) {
-          contextLine = ` ✨ Você está descansado — bom dia para caprichar.`;
+        const readiness = computeReadiness((ci ?? null) as HealthCheckin | null, tsb);
+        if (readiness.verdict === "baixa") {
+          contextLine = ` ⚠️ Prontidão ${readiness.score}/100 — priorize recuperação hoje.`;
+        } else if (readiness.verdict === "alta" && readiness.score >= 80) {
+          contextLine = ` ✨ Prontidão ${readiness.score}/100 — corpo pronto, pode caprichar.`;
+        } else if (readiness.verdict === "moderada") {
+          contextLine = ` Prontidão ${readiness.score}/100 — ajuste a intensidade ao que sentir.`;
         }
       } catch {
         // readiness is best-effort

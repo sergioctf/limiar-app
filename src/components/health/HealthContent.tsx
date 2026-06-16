@@ -5,11 +5,14 @@ import { HeartPulse, Moon, Battery, Activity, Loader2, Check, Bed } from "lucide
 import { SORENESS_AREAS, type HealthCheckin, type BodyMeasurement } from "@/types";
 import { BodyCompositionCard } from "@/components/health/BodyCompositionCard";
 import { NutritionCard, type NutritionSummary } from "@/components/health/NutritionCard";
+import { ReadinessCard } from "@/components/health/ReadinessCard";
+import type { Readiness } from "@/lib/readiness";
 
 interface Props {
   initialCheckins: HealthCheckin[];
   initialBody?: BodyMeasurement[];
   nutrition?: NutritionSummary;
+  readiness?: Readiness;
 }
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -41,7 +44,7 @@ function Scale5({ value, onChange, lowLabel, highLabel, color = "bg-brand-500" }
   );
 }
 
-export function HealthContent({ initialCheckins, initialBody = [], nutrition }: Props) {
+export function HealthContent({ initialCheckins, initialBody = [], nutrition, readiness }: Props) {
   const [checkins, setCheckins] = useState<HealthCheckin[]>(initialCheckins);
   const today = todayStr();
   const existing = useMemo(() => checkins.find(c => c.date === today) ?? null, [checkins, today]);
@@ -111,6 +114,9 @@ export function HealthContent({ initialCheckins, initialBody = [], nutrition }: 
         <h1 className="page-header flex items-center gap-2"><HeartPulse className="w-6 h-6 text-brand-400" /> Saúde</h1>
         <p className="text-surface-500 text-sm">Check-in diário — leva 20 segundos e ajusta seu treino ao seu corpo.</p>
       </div>
+
+      {/* Limiar Score — readiness (top of the page) */}
+      {readiness && <ReadinessCard readiness={readiness} />}
 
       {/* Check-in card */}
       <div className="card p-5 space-y-5">

@@ -3,7 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/AppShell";
 import { HealthContent } from "@/components/health/HealthContent";
 import { bmrMifflin, tdeeForDay, calorieTarget, macrosFor, ageFromBirth, type CalorieGoal, type Sex } from "@/lib/nutrition";
-import type { HealthCheckin, BodyMeasurement } from "@/types";
+import { computeTrainingLoad } from "@/lib/training-load";
+import { computeReadiness } from "@/lib/readiness";
+import type { HealthCheckin, BodyMeasurement, Run } from "@/types";
 import type { NutritionSummary } from "@/components/health/NutritionCard";
 
 export const metadata = { title: "Saúde — Limiar" };
@@ -19,7 +21,10 @@ export default async function HealthPage() {
   bodySince.setDate(bodySince.getDate() - 180);
   const today = new Date().toISOString().slice(0, 10);
 
-  const [{ data: checkins }, { data: measurements }, { data: profile }, { data: runs }, { data: acts }] = await Promise.all([
+  const loadSince = new Date();
+  loadSince.setDate(loadSince.getDate() - 90);
+
+  const [{ data: checkins }, { data: measurements }, { data: profile }, { data: runs }, { data: acts }, { data: loadRuns }] = await Promise.all([
     supabase.from("health_checkins").select("*").eq("user_id", user.id)
       .gte("date", since.toISOString().slice(0, 10)).order("date", { ascending: false }),
     supabase.from("body_measurements").select("*").eq("user_id", user.id)
@@ -27,7 +32,20 @@ export default async function HealthPage() {
     supabase.from("profiles").select("height_cm, sex, birth_date, calorie_goal").eq("id", user.id).maybeSingle(),
     supabase.from("runs").select("calories").eq("user_id", user.id).eq("date", today).is("deleted_at", null),
     supabase.from("activities").select("calories").eq("user_id", user.id).eq("date", today).is("deleted_at", null),
+    supabase.from("runs").select("date, distance_km, duration_seconds, avg_pace_seconds_per_km, avg_hr")
+      .eq("user_id", user.id).gte("date", loadSince.toISOString().slice(0, 10)).is("deleted_at", null),
   ]);
+
+  const allCheckins = (checkins ?? []) as HealthCheckin[];
+  const todayCheckin = allCheckins.find(c => c.date === today) ?? null;
+
+  // Readiness (Limiar Score) = TSB + today's check-in
+  let tsb: number | null = null;
+  try {
+    const load = computeTrainingLoad((loadRuns ?? []) as Run[], null, null, 90);
+    tsb = load.length > 0 ? load[load.length - 1].tsb : null;
+  } catch { tsb = null; }
+  const readiness = computeReadiness(todayCheckin, tsb);
 
   const body = (measurements ?? []) as BodyMeasurement[];
   const weightKg = body[0]?.weight_kg ?? null;
@@ -59,9 +77,10 @@ export default async function HealthPage() {
   return (
     <AppShell>
       <HealthContent
-        initialCheckins={(checkins ?? []) as HealthCheckin[]}
+        initialCheckins={allCheckins}
         initialBody={body}
         nutrition={nutrition}
+        readiness={readiness}
       />
     </AppShell>
   );
