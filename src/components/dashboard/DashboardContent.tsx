@@ -30,7 +30,7 @@ import { detectAchievements } from "@/lib/achievements";
 import { analyzeHistoricalComparison } from "@/lib/historical-comparison";
 import { pickTargetComparison } from "@/lib/target-comparison";
 import { detectOvertraining } from "@/lib/overtraining";
-import type { Run, Goal, CoachReport, SyncLog, Activity, Race, PerformanceTest } from "@/types";
+import type { Run, Goal, CoachReport, SyncLog, Activity, Race, PerformanceTest, WellnessData } from "@/types";
 
 interface Props {
   userName?: string | null;
@@ -43,6 +43,7 @@ interface Props {
   activitiesHistory: Array<{ date: string; sport_type: string }>;
   nextRace?: Race | null;
   latestTest?: PerformanceTest | null;
+  wellness?: WellnessData[];
 }
 
 function SportIcon({ type }: { type: string }) {
@@ -84,6 +85,7 @@ export function DashboardContent({
   activitiesHistory,
   nextRace,
   latestTest,
+  wellness = [],
 }: Props) {
   const firstName  = userName?.trim().split(" ")[0] || null;
   const totalDist  = totalDistanceKm(runs);
@@ -203,8 +205,8 @@ export function DashboardContent({
 
   // Overtraining risk assessment (TSB + ACWR + streak + volume jump)
   const overtraining = useMemo(
-    () => detectOvertraining(runs, lthr, thresholdPace),
-    [runs, lthr, thresholdPace]
+    () => detectOvertraining(runs, lthr, thresholdPace, wellness),
+    [runs, lthr, thresholdPace, wellness]
   );
 
   // New user with no data at all yet — show a guided welcome instead of zeroed-out cards

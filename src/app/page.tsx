@@ -129,6 +129,16 @@ export default async function DashboardPage() {
     // Table may not exist yet — graceful fallback
   }
 
+  // Recent wellness (sleep/HRV/RHR) for overtraining detection
+  const wellnessSince = new Date();
+  wellnessSince.setDate(wellnessSince.getDate() - 30);
+  const { data: wellness } = await supabase
+    .from("wellness_data")
+    .select("*")
+    .eq("user_id", user.id)
+    .gte("date", wellnessSince.toISOString().slice(0, 10))
+    .order("date", { ascending: false });
+
   const runsWithTags = (runs ?? []).map((r) => ({
     ...r,
     tags: (r.run_tags ?? []).map((t: { tag: string }) => t.tag),
@@ -148,6 +158,7 @@ export default async function DashboardPage() {
         activitiesHistory={(activitiesHistory ?? []) as Array<{ date: string; sport_type: string }>}
         nextRace={nextRace}
         latestTest={latestTest}
+        wellness={(wellness ?? []) as import("@/types").WellnessData[]}
       />
       </DashboardWithRefresh>
     </AppShell>
