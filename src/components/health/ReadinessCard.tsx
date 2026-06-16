@@ -1,6 +1,6 @@
 "use client";
 
-import { Gauge } from "lucide-react";
+import { Gauge, Watch, PencilLine } from "lucide-react";
 import type { Readiness, ReadinessVerdict } from "@/lib/readiness";
 
 const VERDICT_UI: Record<ReadinessVerdict, { label: string; ring: string; text: string; glow: string }> = {
@@ -16,9 +16,21 @@ export function ReadinessCard({ readiness }: { readiness: Readiness }) {
 
   return (
     <div className={`card p-5 shadow-lg ${ui.glow}`}>
-      <div className="flex items-center gap-2 mb-4">
-        <Gauge className="w-4 h-4 text-brand-400" />
-        <h2 className="section-title">Limiar Score · prontidão de hoje</h2>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Gauge className="w-4 h-4 text-brand-400" />
+          <h2 className="section-title">Limiar Score · prontidão de hoje</h2>
+        </div>
+        {(readiness.source === "wearable" || readiness.source === "mixed") && (
+          <span className="flex items-center gap-1 text-[10px] text-green-400 bg-green-500/10 border border-green-500/20 rounded-full px-2 py-0.5">
+            <Watch className="w-3 h-3" /> dados do relógio
+          </span>
+        )}
+        {readiness.source === "manual" && (
+          <span className="flex items-center gap-1 text-[10px] text-surface-500 bg-surface-700/40 rounded-full px-2 py-0.5">
+            <PencilLine className="w-3 h-3" /> check-in manual
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-5">
@@ -41,8 +53,11 @@ export function ReadinessCard({ readiness }: { readiness: Readiness }) {
         <div className="flex-1 min-w-0">
           <p className={`text-sm font-bold ${ui.text}`}>{ui.label}</p>
           <p className="text-xs text-surface-400 leading-relaxed mt-1">{readiness.recommendation}</p>
-          {!readiness.hasCheckin && (
-            <p className="text-[11px] text-surface-600 mt-2">Faça o check-in de hoje para um score mais preciso.</p>
+          {readiness.source === "manual" && (
+            <p className="text-[11px] text-surface-600 mt-2">Conecte um relógio (app nativo) para a prontidão automática via sono/HRV.</p>
+          )}
+          {readiness.source === "none" && (
+            <p className="text-[11px] text-surface-600 mt-2">Faça o check-in de hoje ou conecte um relógio para calcular sua prontidão.</p>
           )}
         </div>
       </div>

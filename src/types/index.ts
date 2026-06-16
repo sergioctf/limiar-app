@@ -472,6 +472,22 @@ export interface HealthCheckin {
   updated_at?:    string;
 }
 
+export interface WellnessData {
+  id?:            string;
+  user_id?:       string;
+  date:           string;             // YYYY-MM-DD
+  sleep_seconds:  number | null;
+  sleep_score:    number | null;      // 0-100
+  hrv_ms:         number | null;
+  hrv_status:     string | null;      // balanced | unbalanced | low | poor
+  resting_hr:     number | null;
+  stress_avg:     number | null;      // 0-100
+  body_battery:   number | null;      // 0-100
+  source:         string;             // healthconnect | healthkit | garmin | manual_import
+  created_at?:    string;
+  updated_at?:    string;
+}
+
 export interface BodyMeasurement {
   id?:             string;
   user_id?:        string;

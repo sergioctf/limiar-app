@@ -4,8 +4,8 @@ import { AppShell } from "@/components/layout/AppShell";
 import { HealthContent } from "@/components/health/HealthContent";
 import { bmrMifflin, tdeeForDay, calorieTarget, macrosFor, ageFromBirth, type CalorieGoal, type Sex } from "@/lib/nutrition";
 import { computeTrainingLoad } from "@/lib/training-load";
-import { computeReadiness } from "@/lib/readiness";
-import type { HealthCheckin, BodyMeasurement, Run } from "@/types";
+import { computeReadiness, restingHrBaseline } from "@/lib/readiness";
+import type { HealthCheckin, BodyMeasurement, Run, WellnessData } from "@/types";
 import type { NutritionSummary } from "@/components/health/NutritionCard";
 
 export const metadata = { title: "Saúde — Limiar" };
@@ -36,6 +36,11 @@ export default async function HealthPage() {
       .eq("user_id", user.id).gte("date", loadSince.toISOString().slice(0, 10)).is("deleted_at", null),
   ]);
 
+  const { data: wellness } = await supabase.from("wellness_data").select("*")
+    .eq("user_id", user.id).gte("date", since.toISOString().slice(0, 10)).order("date", { ascending: false });
+  const wellnessRows = (wellness ?? []) as WellnessData[];
+  const todayWellness = wellnessRows.find(wd => wd.date === today) ?? null;
+
   const allCheckins = (checkins ?? []) as HealthCheckin[];
   const todayCheckin = allCheckins.find(c => c.date === today) ?? null;
 
@@ -45,7 +50,12 @@ export default async function HealthPage() {
     const load = computeTrainingLoad((loadRuns ?? []) as Run[], null, null, 90);
     tsb = load.length > 0 ? load[load.length - 1].tsb : null;
   } catch { tsb = null; }
-  const readiness = computeReadiness(todayCheckin, tsb);
+  const readiness = computeReadiness({
+    wellness: todayWellness,
+    checkin: todayCheckin,
+    tsb,
+    rhrBaseline: restingHrBaseline(wellnessRows),
+  });
 
   const body = (measurements ?? []) as BodyMeasurement[];
   const weightKg = body[0]?.weight_kg ?? null;

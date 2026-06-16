@@ -8,8 +8,8 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
 import { getMondayStr, getWorkoutForDate, formatWorkoutNotification } from "@/lib/plan-notify";
 import { computeTrainingLoad } from "@/lib/training-load";
-import { computeReadiness } from "@/lib/readiness";
-import type { WeeklyPlanDay, Run, HealthCheckin } from "@/types";
+import { computeReadiness, restingHrBaseline } from "@/lib/readiness";
+import type { WeeklyPlanDay, Run, HealthCheckin, WellnessData } from "@/types";
 
 export const maxDuration = 60;
 
@@ -109,15 +109,23 @@ export async function GET(request: NextRequest) {
         const since = new Date(now);
         since.setDate(since.getDate() - 90);
         const todayStr = now.toISOString().slice(0, 10);
-        const [{ data: tsbRuns }, { data: ci }] = await Promise.all([
+        const [{ data: tsbRuns }, { data: ci }, { data: wd }, { data: wHist }] = await Promise.all([
           admin.from("runs")
             .select("date, distance_km, duration_seconds, avg_pace_seconds_per_km, avg_hr")
             .eq("user_id", userId).gte("date", since.toISOString().slice(0, 10)).is("deleted_at", null),
           admin.from("health_checkins").select("*").eq("user_id", userId).eq("date", todayStr).maybeSingle(),
+          admin.from("wellness_data").select("*").eq("user_id", userId).eq("date", todayStr).maybeSingle(),
+          admin.from("wellness_data").select("resting_hr").eq("user_id", userId)
+            .gte("date", since.toISOString().slice(0, 10)),
         ]);
         const load = computeTrainingLoad((tsbRuns ?? []) as Run[], null, null, 90);
         const tsb = load.length > 0 ? load[load.length - 1].tsb : null;
-        const readiness = computeReadiness((ci ?? null) as HealthCheckin | null, tsb);
+        const readiness = computeReadiness({
+          wellness: (wd ?? null) as WellnessData | null,
+          checkin: (ci ?? null) as HealthCheckin | null,
+          tsb,
+          rhrBaseline: restingHrBaseline((wHist ?? []) as WellnessData[]),
+        });
         if (readiness.verdict === "baixa") {
           contextLine = ` ⚠️ Prontidão ${readiness.score}/100 — priorize recuperação hoje.`;
         } else if (readiness.verdict === "alta" && readiness.score >= 80) {
