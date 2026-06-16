@@ -9,6 +9,7 @@ import { sendPushToUser } from "@/lib/push";
 import { getMondayStr, getWorkoutForDate, formatWorkoutNotification } from "@/lib/plan-notify";
 import { computeTrainingLoad } from "@/lib/training-load";
 import { computeReadiness, restingHrBaseline } from "@/lib/readiness";
+import { shouldSuggestEasing, buildReadinessSuggestion } from "@/lib/plan-suggestion";
 import type { WeeklyPlanDay, Run, HealthCheckin, WellnessData } from "@/types";
 
 export const maxDuration = 60;
@@ -128,6 +129,17 @@ export async function GET(request: NextRequest) {
         });
         if (readiness.verdict === "baixa") {
           contextLine = ` ⚠️ Prontidão ${readiness.score}/100 — priorize recuperação hoje.`;
+          // Low readiness on a hard/long day → create an opt-in suggestion the
+          // app will show as a pop-up (never changes the plan automatically).
+          if (shouldSuggestEasing(workout, readiness.score)) {
+            const s = buildReadinessSuggestion(workout, readiness.score);
+            await admin.from("plan_suggestions").upsert({
+              user_id: userId, date: todayStr, kind: "readiness_adjust",
+              reason: s.reason, message: s.message,
+              original_day: workout, suggested_day: s.suggestedDay, status: "pending",
+            }, { onConflict: "user_id,date,kind" }).then(() => {}, () => {});
+            contextLine += " Abra o app para ajustar o treino.";
+          }
         } else if (readiness.verdict === "alta" && readiness.score >= 80) {
           contextLine = ` ✨ Prontidão ${readiness.score}/100 — corpo pronto, pode caprichar.`;
         } else if (readiness.verdict === "moderada") {
