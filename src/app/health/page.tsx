@@ -5,7 +5,7 @@ import { HealthContent } from "@/components/health/HealthContent";
 import { bmrMifflin, tdeeForDay, calorieTarget, macrosFor, ageFromBirth, type CalorieGoal, type Sex } from "@/lib/nutrition";
 import { computeTrainingLoad } from "@/lib/training-load";
 import { computeReadiness, restingHrBaseline } from "@/lib/readiness";
-import type { HealthCheckin, BodyMeasurement, Run, WellnessData } from "@/types";
+import type { BodyMeasurement, Run, WellnessData, Supplement } from "@/types";
 import type { NutritionSummary } from "@/components/health/NutritionCard";
 
 export const metadata = { title: "Saúde — Limiar" };
@@ -24,16 +24,15 @@ export default async function HealthPage() {
   const loadSince = new Date();
   loadSince.setDate(loadSince.getDate() - 90);
 
-  const [{ data: checkins }, { data: measurements }, { data: profile }, { data: runs }, { data: acts }, { data: loadRuns }] = await Promise.all([
-    supabase.from("health_checkins").select("*").eq("user_id", user.id)
-      .gte("date", since.toISOString().slice(0, 10)).order("date", { ascending: false }),
+  const [{ data: measurements }, { data: profile }, { data: runs }, { data: acts }, { data: loadRuns }, { data: supplements }] = await Promise.all([
     supabase.from("body_measurements").select("*").eq("user_id", user.id)
       .gte("date", bodySince.toISOString().slice(0, 10)).order("date", { ascending: false }),
-    supabase.from("profiles").select("height_cm, sex, birth_date, calorie_goal").eq("id", user.id).maybeSingle(),
+    supabase.from("profiles").select("height_cm, sex, birth_date, calorie_goal, health_connected").eq("id", user.id).maybeSingle(),
     supabase.from("runs").select("calories").eq("user_id", user.id).eq("date", today).is("deleted_at", null),
     supabase.from("activities").select("calories").eq("user_id", user.id).eq("date", today).is("deleted_at", null),
     supabase.from("runs").select("date, distance_km, duration_seconds, avg_pace_seconds_per_km, avg_hr")
       .eq("user_id", user.id).gte("date", loadSince.toISOString().slice(0, 10)).is("deleted_at", null),
+    supabase.from("supplements").select("*").eq("user_id", user.id).eq("active", true).order("created_at"),
   ]);
 
   const { data: wellness } = await supabase.from("wellness_data").select("*")
@@ -41,10 +40,9 @@ export default async function HealthPage() {
   const wellnessRows = (wellness ?? []) as WellnessData[];
   const todayWellness = wellnessRows.find(wd => wd.date === today) ?? null;
 
-  const allCheckins = (checkins ?? []) as HealthCheckin[];
-  const todayCheckin = allCheckins.find(c => c.date === today) ?? null;
+  const healthConnected = profile?.health_connected === true;
 
-  // Readiness (Limiar Score) = TSB + today's check-in
+  // Readiness (Limiar Score) = wellness (from the watch) + training-load TSB
   let tsb: number | null = null;
   try {
     const load = computeTrainingLoad((loadRuns ?? []) as Run[], null, null, 90);
@@ -52,7 +50,7 @@ export default async function HealthPage() {
   } catch { tsb = null; }
   const readiness = computeReadiness({
     wellness: todayWellness,
-    checkin: todayCheckin,
+    checkin: null,
     tsb,
     rhrBaseline: restingHrBaseline(wellnessRows),
   });
@@ -87,10 +85,11 @@ export default async function HealthPage() {
   return (
     <AppShell>
       <HealthContent
-        initialCheckins={allCheckins}
         initialBody={body}
+        initialSupplements={(supplements ?? []) as Supplement[]}
         nutrition={nutrition}
         readiness={readiness}
+        healthConnected={healthConnected}
       />
     </AppShell>
   );

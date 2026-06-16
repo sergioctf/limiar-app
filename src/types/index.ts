@@ -472,6 +472,17 @@ export interface HealthCheckin {
   updated_at?:    string;
 }
 
+export interface Supplement {
+  id?:        string;
+  user_id?:   string;
+  name:       string;
+  dosage:     string | null;
+  timing:     string | null;
+  notes:      string | null;
+  active:     boolean;
+  created_at?: string;
+}
+
 export interface WellnessData {
   id?:            string;
   user_id?:       string;
