@@ -17,6 +17,9 @@ function dayLabel(d: WeeklyPlanDay): string {
   return d.distance_km != null ? `${d.label} · ${d.distance_km} km` : d.label;
 }
 
+// Check at most once per page-load session (AppShell remounts on navigation).
+let checkedThisSession = false;
+
 /**
  * Readiness-driven plan suggestion pop-up. Appears once per day when readiness
  * is low on a hard/long session. The athlete approves or keeps the plan —
@@ -28,6 +31,8 @@ export function SuggestionModal() {
   const [acting, setActing] = useState<"accept" | "dismiss" | null>(null);
 
   useEffect(() => {
+    if (checkedThisSession) return;   // avoid the heavy GET on every navigation
+    checkedThisSession = true;
     let cancelled = false;
     fetch("/api/coach/suggestion")
       .then(r => r.ok ? r.json() : null)
