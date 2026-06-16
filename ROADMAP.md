@@ -1,44 +1,60 @@
 # Limiar — Mapa de Próximos Passos
 
-> Atualizado em 2026-06-12. Documento vivo: priorize, risque, adicione.
+> Atualizado em 2026-06-16. Documento vivo: priorize, risque, adicione.
 
 ---
 
-## 🚀 PLANO DE EXECUÇÃO ACORDADO (12/06/2026)
+## ✅ ENTREGUE — Fases 1 e 2 completas (jun/2026)
 
-**Visão**: transformar o Limiar em um app de **performance completa do corpo** —
-treino, recuperação, composição corporal e nutrição conversando entre si.
+**Visão**: app de **performance completa do corpo** — treino, recuperação,
+composição corporal e nutrição conversando entre si. Status: **no ar e verificado**.
 
-### Fase 1 — Treinador Nível 2 (treinos estruturados + relógio)
-| # | Entrega | Detalhe |
-|---|---------|---------|
-| 1.1 | **Modelo de treino estruturado** | Steps tipados: aquecimento / intervalo / recuperação / desaquecimento, com repetições (ex: 10' Z2 + 6×(800m @4:30 + 400m trote) + 10' leve). Salvo no plano semanal |
-| 1.2 | **IA gera estruturado** | O plano semanal passa a prescrever steps completos, não só "tiro 400m" |
-| 1.3 | **Builder visual** | Editar/criar treino estruturado na mão (drag de blocos) |
-| 1.4 | **Export para relógio** | `.FIT` (Garmin/Coros/Wahoo/Zepp) + `.ZWO` (Zwift). Apple Watch: sem API pública p/ PWA — caminho é app companion (WorkOutDoors importa) ou futura versão nativa via WorkoutKit. Documentar limitação honestamente |
-| 1.5 | **Tela "treino de hoje"** | Passos do treino na tela, com paces-alvo das zonas do atleta |
+### Fase 1 — Treinador Nível 2 (treinos estruturados + relógio) ✅
+- ✅ Modelo de treino estruturado (aquecimento / blocos repetidos / desaquecimento, com pace-alvo)
+- ✅ IA gera a estrutura nos treinos de qualidade/longão (não só "tiro 400m")
+- ✅ Export `.FIT` (Garmin/Coros/Wahoo/Zepp) — arquivo validado por round-trip
+- ✅ Visualização dos passos na aba Treinador
+- ⏳ Builder visual de treino (arrastar blocos) — não feito (baixa prioridade)
+- ℹ️ Apple Watch: sem caminho público p/ PWA; futura versão nativa via WorkoutKit
 
-### Fase 2 — Saúde & Corpo (check-in → prontidão)
-| # | Entrega | Detalhe |
-|---|---------|---------|
-| 2.1 | **Check-in diário (20s)** | Sono (horas + qualidade 1-5), dor (mapa corporal + intensidade), humor/energia, RPE do treino de ontem |
-| 2.2 | **Peso & bioimpedância** | Entrada rápida + série temporal: peso, % gordura, massa muscular, água, gordura visceral. **Xiaomi**: não há API pública oficial; caminhos reais → (a) Web Bluetooth lendo a balança direto no Chrome Android (protocolo Mi Scale é conhecido/openScale), (b) Health Connect/Apple Health como ponte (exige app nativo/Capacitor), (c) entrada manual caprichada como fallback garantido. Investigar (a) primeiro |
-| 2.3 | **Nutrição base** | TMB (Mifflin-St Jeor c/ peso atual) + TDEE somando gasto real das corridas/treinos → meta calórica do dia; dicas de dieta IA contextuais (dia de longão = mais carbo; descanso = menos); fueling pré/durante/pós treinos longos |
-| 2.4 | **Índice de prontidão 0-100** | TSB + sono + dor + RPE (+HRV futuro) → score com cor no dashboard; alimenta briefing das 5:30 e o ajuste proativo da semana ("prontidão 38 → troquei o tiro de hoje por rodagem") |
+### Fase 2 — Saúde & Corpo ✅ (página `/health`)
+- ✅ 2.1 Check-in diário — **depois substituído**: sono/HRV/FC vêm do Garmin; check-in manual removido
+- ✅ 2.2 Peso & bioimpedância (manual, tendência média móvel 7d). S400 via Web Bluetooth descartado (protocolo proprietário/cifrado)
+- ✅ 2.3 Nutrição (TMB Mifflin-St Jeor + TDEE c/ gasto real + macros + dica IA + fueling)
+- ✅ 2.4 **Limiar Score** (prontidão 0-100) — só na página Saúde, gauge animado
+- ✅ **Gate de conexão**: sem Garmin/Apple Saúde → só balança + suplementação; com conexão → tudo
+- ✅ **Suplementação** (tracker de suplementos)
 
-### Fase 3 — Corpo completo (decisões do brainstorm 12/06)
-**Decidido com o Sérgio:**
-- ❌ Progressão de força/cargas — fora (não registra cargas, não absorver)
-- ❌ Painel de exames de sangue — fora ("demais")
-- ✅ Balança: **Xiaomi S400** — investigar Web Bluetooth (protocolo BLE pode ser
-  cifrado no S400; fallback garantido = entrada manual caprichada; ponte
-  Health Connect só se virar app nativo)
-- ✅ **Limiar Score**: fica SÓ na página de Saúde (não vai pro dashboard)
-- ✅ Mantidos p/ Fase 3: hidratação/taxa de suor (peso pré/pós-longão),
-  periodização nutricional, correlação dor×volume, recuperação ativa sugerida
+### Integração Garmin / wellness ✅
+- ✅ Pipeline de wellness: tabela `wellness_data` + ingestão (sono/HRV/FC repouso/stress/body battery)
+- ✅ **Readiness wearable-driven**: prioriza dados do relógio; renormaliza pesos
+- ✅ **iOS Shortcut**: token pessoal + endpoint público `/api/ingest/wellness` (Apple Saúde → Limiar, grátis, sem Mac/loja). Guia no card "Sincronizar com Apple Saúde". **Fluxo testado ponta a ponta.**
+- ℹ️ Garmin Health API oficial: bloqueada (só PJ + programa suspenso). Capacitor nativo: scaffold + `BUILD_NATIVE.md` prontos (precisa Mac/Android Studio p/ compilar)
 
-→ Nova página `/health` concentra: check-in, peso/bioimpedância, nutrição,
-prontidão detalhada e Limiar Score.
+### Inteligência (nível elite) ✅
+- ✅ **Alerta de overtraining/lesão**: HRV em queda + FC repouso elevada + sono ruim + carga (TSB/ACWR)
+- ✅ **Sugestão de ajuste do plano**: prontidão baixa em dia de qualidade → pop-up + notificação propondo treino mais leve, com **aprovação** (nunca automático)
+- ✅ Macro-plano periodizado adaptativo, adesão ao plano, eficiência aeróbica, briefing matinal com prontidão
+
+### Strava streams ✅
+- ✅ Splits reais por km + FC + elevação · deriva cardíaca (HR drift) · best efforts · mapa real (Leaflet) + replay · mapa-múndi de corridas
+
+### ⚠️ Pendência operacional (do usuário)
+- **Notificações push**: infra 100% ok (crons + endpoints testados), mas **0 subscrições**. No iPhone, push exige instalar o PWA na tela inicial → Configurações → ativar. Sem isso o iOS bloqueia.
+
+---
+> Esforço: 🟢 pequeno (horas) · 🟡 médio (1-2 sessões) · 🔴 grande (várias sessões)
+> Valor: ⭐ nice-to-have · ⭐⭐ forte · ⭐⭐⭐ diferencial competitivo
+
+## 🔭 PRÓXIMAS IDEIAS (não feitas)
+
+| Ideia | Descrição | Esforço | Valor |
+|---|---|---|---|
+| **Tendência de HRV + baseline** | Gráfico de HRV com linha de base pessoal, débito de sono acumulado, correlação sono→performance | 🟡 | ⭐⭐⭐ |
+| **Relatório semanal corpo+treino** | Relatório IA semanal inclui recuperação (sono médio, tendência HRV, qualidade) junto com o treino | 🟡 | ⭐⭐ |
+| **Correlação dor × volume** | "Essa canelite aparece sempre que passa de 50km/sem" | 🟡 | ⭐⭐ |
+| **Taxa de suor / hidratação** | Peso pré/pós-longão → plano de hidratação por prova | 🟢 | ⭐⭐ |
+| **App nativo (Capacitar)** | Compilar p/ ler Health Connect/Apple Health automático + push nativo | 🔴 | ⭐⭐ |
 
 ---
 > Esforço: 🟢 pequeno (horas) · 🟡 médio (1-2 sessões) · 🔴 grande (várias sessões)
@@ -49,11 +65,14 @@ prontidão detalhada e Limiar Score.
 ## ✅ O que o app JÁ TEM (junho/2026)
 
 **Core**: dashboard completo, corridas (Strava sync c/ retry + manual), calendário, provas, gráficos, PDF mensal
-**Treinador IA**: plano semanal + chat c/ memória, testes 3km → VDOT/zonas/paces, adesão ao plano, eficiência aeróbica, ajuste proativo da semana, briefing matinal contextual, **macro-plano periodizado adaptativo até a prova**
-**Performance**: CTL/ATL/TSB, overtraining, recordes por distância, comparação com prova-alvo, metas inteligentes
+**Mapas**: trajeto real (Leaflet/OSM) c/ replay animado, mapa-múndi de todas as corridas
+**Strava streams**: splits reais por km + FC + elevação, deriva cardíaca, best efforts
+**Treinador IA**: plano semanal estruturado (exportável .FIT), chat c/ memória, testes 3km → VDOT/zonas/paces, adesão ao plano, eficiência aeróbica, ajuste proativo, briefing matinal c/ prontidão, **macro-plano periodizado adaptativo**, **sugestão de ajuste por prontidão (pop-up + aprovação)**
+**Performance**: CTL/ATL/TSB, **overtraining c/ HRV/FC repouso/sono**, recordes por distância, comparação com prova-alvo, metas inteligentes
+**Saúde & Corpo** (`/health`): Limiar Score (prontidão), composição corporal, nutrição (TMB/TDEE/macros/fueling), suplementação, gate de conexão, ingestão de wellness via iOS Shortcut
 **Social**: amigos por username, ranking 5 métricas, feed c/ kudos 🔥, desafio semanal
 **Engajamento**: 21 conquistas c/ confete, onboarding animado, push 5:30/22:00/domingo/lembretes de prova
-**Plataforma**: PWA instalável, offline completo, segurança admin, RLS
+**Plataforma**: PWA instalável, offline completo, scaffold de app nativo (Capacitor), segurança admin, RLS
 
 ---
 
