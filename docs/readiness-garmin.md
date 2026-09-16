@@ -79,7 +79,7 @@ Decisão do Sérgio: *"sim para A + B [...] mas vamos considerar A como padrão,
 
 Na Saúde, abaixo do score, para quem tem relógio: *"Seu Garmin mostra outra disposição? Informe o número (opcional)"*. O número (1–100) é gravado em `wellness_data.garmin_readiness` do dia e entra no espaço de recuperação do fabricante (peso 0,25) como **mais um sinal** — não substitui o cálculo. Pode editar ou remover.
 
-**Pendente:** a migration `031_garmin_readiness.sql` não foi aplicada — a sessão do Supabase no navegador expirou e o login é do Sérgio. Até ela rodar, o campo fica **escondido** (a página só mostra quando a coluna existe) e nada quebra. Depois de aplicada, o campo aparece sozinho, sem novo deploy.
+**Migration 031 aplicada em 16/09** (depois que Sérgio entrou de novo no Supabase). Verificado em produção: a coluna existe, o campo aparece na Saúde e a rota recusa 0, 101 e texto com 400, sem gravar nada. Nenhum número foi informado em nome do atleta.
 
 ### Testes
 

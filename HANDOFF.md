@@ -2290,7 +2290,7 @@ npx vercel deploy --prod --yes
 
 ## 18.4 Banco e migrations
 
-- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **030** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028, 029 e 030). **A 031 (`garmin_readiness`) está pendente** — a sessão do Supabase expirou; o código esconde o campo até a coluna existir.
+- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **031** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028, 029, 030 e 031).
 - **O código tolera tabela ausente** (`try/catch` e sondas como `notification_log` em `morning-dispatch.ts`), então uma migration não aplicada **não quebra**: desliga a feature em silêncio.
 - **Fora do repositório:**
 
