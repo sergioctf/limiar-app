@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
   if (error) {
     if (error.message.includes("does not exist") || error.code === "42P01") {
       return NextResponse.json(
-        { error: "Tabela races não encontrada. Execute o SQL em /api/admin/create-races-table.", migration_needed: true },
+        { error: "Tabela races não encontrada. Rode a migração em supabase/migrations.", migration_needed: true },
         { status: 503 }
       );
     }

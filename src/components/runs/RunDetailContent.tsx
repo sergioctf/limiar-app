@@ -19,6 +19,9 @@ import type { Run } from "@/types";
 import { cn } from "@/lib/utils";
 import { RouteMap } from "@/components/runs/RouteMap";
 import { RunSplits } from "@/components/runs/RunSplits";
+import { ExecutionCard } from "@/components/runs/ExecutionCard";
+import { RunShoePicker } from "@/components/runs/RunShoePicker";
+import { RunFeedbackCard } from "@/components/runs/RunFeedbackCard";
 
 interface Props { run: Run }
 
@@ -255,6 +258,18 @@ export function RunDetailContent({ run }: Props) {
         onLoad={loadStreams}
       />
 
+      {/* ── The athlete's own reading of the session ─────────────────────── */}
+      <RunFeedbackCard runId={run.id} />
+
+      {/* ── PRESCRIBED vs EXECUTED — reads the splits the request above cached */}
+      <ExecutionCard
+        runId={run.id}
+        hasStrava={run.strava_activity_id != null}
+        splitsLoaded={streamsLoaded && (streams?.splits.length ?? 0) > 0}
+      />
+
+      <RunShoePicker runId={run.id} initialShoeId={run.shoe_id ?? null} />
+
       {/* ── NOTES ───────────────────────────────────────────────────────────── */}
       <div className="card p-5">
         <div className="flex items-center justify-between mb-3">
@@ -265,7 +280,7 @@ export function RunDetailContent({ run }: Props) {
           {!editingNotes && (
             <button
               onClick={openEditor}
-              className="flex items-center gap-1.5 text-xs text-surface-400 hover:text-surface-200 transition-colors py-1 px-2 rounded-lg hover:bg-surface-700"
+              className="flex items-center gap-1.5 text-xs text-surface-400 hover:text-surface-200 transition-colors min-h-[44px] py-1 px-2 rounded-lg hover:bg-surface-700"
             >
               <PenLine className="w-3.5 h-3.5" />
               {notes ? "Editar" : "Adicionar nota"}
@@ -287,7 +302,7 @@ export function RunDetailContent({ run }: Props) {
               placeholder="Como foi o treino? Como você estava se sentindo? Condições, estratégia, o que aprendeu…"
               className={cn(
                 "w-full bg-surface-700 border border-surface-600 rounded-xl px-4 py-3",
-                "text-sm text-surface-100 placeholder:text-surface-600",
+                "text-sm text-surface-100 placeholder:text-surface-500",
                 "resize-none overflow-hidden min-h-[100px]",
                 "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
                 "transition-colors"
@@ -298,18 +313,18 @@ export function RunDetailContent({ run }: Props) {
               }}
             />
             <div className="flex items-center justify-between">
-              <p className="text-xs text-surface-600">Ctrl+Enter para salvar · Esc para cancelar</p>
+              <p className="text-xs text-surface-500">Ctrl+Enter para salvar · Esc para cancelar</p>
               <div className="flex gap-2">
                 <button
                   onClick={cancelEdit}
-                  className="flex items-center gap-1.5 text-xs text-surface-400 hover:text-surface-200 py-1.5 px-3 rounded-lg hover:bg-surface-700 transition-colors"
+                  className="flex items-center gap-1.5 text-xs text-surface-400 hover:text-surface-200 min-h-[44px] py-1.5 px-3 rounded-lg hover:bg-surface-700 transition-colors"
                 >
                   <X className="w-3.5 h-3.5" /> Cancelar
                 </button>
                 <button
                   onClick={saveNotes}
                   disabled={savingNotes}
-                  className="flex items-center gap-1.5 text-xs bg-brand-500 hover:bg-brand-400 text-white py-1.5 px-3 rounded-lg transition-colors disabled:opacity-60"
+                  className="flex items-center gap-1.5 text-xs bg-brand-500 hover:bg-brand-400 text-white min-h-[44px] py-1.5 px-3 rounded-lg transition-colors disabled:opacity-60"
                 >
                   {savingNotes ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -330,7 +345,7 @@ export function RunDetailContent({ run }: Props) {
           /* Empty state */
           <button
             onClick={openEditor}
-            className="w-full border border-dashed border-surface-700 rounded-xl py-6 flex flex-col items-center gap-2 text-surface-600 hover:text-surface-400 hover:border-surface-600 transition-colors"
+            className="w-full border border-dashed border-surface-700 rounded-xl py-6 flex flex-col items-center gap-2 text-surface-500 hover:text-surface-400 hover:border-surface-600 transition-colors"
           >
             <PenLine className="w-5 h-5" />
             <span className="text-sm">Clique para adicionar uma anotação sobre esta corrida</span>
@@ -360,7 +375,7 @@ export function RunDetailContent({ run }: Props) {
               onClick={handleAnalyze}
               disabled={analyzing}
               title="Re-analisar com anotações atualizadas"
-              className="flex items-center gap-1.5 text-xs text-surface-400 hover:text-surface-200 py-1 px-2 rounded-lg hover:bg-surface-700 transition-colors disabled:opacity-40"
+              className="flex items-center gap-1.5 text-xs text-surface-400 hover:text-surface-200 min-h-[44px] py-1 px-2 rounded-lg hover:bg-surface-700 transition-colors disabled:opacity-40"
             >
               {analyzing ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -400,7 +415,7 @@ export function RunDetailContent({ run }: Props) {
             <button
               onClick={handleAnalyze}
               disabled={analyzing}
-              className="btn-primary text-xs py-1.5 px-3 shrink-0"
+              className="btn-primary text-xs min-h-[44px] py-1.5 px-3 shrink-0"
             >
               {analyzing ? (
                 <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Analisando…</>

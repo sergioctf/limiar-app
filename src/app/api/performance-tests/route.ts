@@ -56,10 +56,13 @@ export async function POST(request: NextRequest) {
   if (!time_seconds || time_seconds <= 0) {
     return NextResponse.json({ error: "time_seconds must be > 0" }, { status: 400 });
   }
+  if (!distance_km || distance_km <= 0) {
+    return NextResponse.json({ error: "distance_km must be > 0" }, { status: 400 });
+  }
 
   // Compute VDOT & VO2max
   const distanceM = distance_km * 1000;
-  const metrics = computeMetrics(distanceM, time_seconds, avg_hr ?? undefined);
+  const metrics = computeMetrics(distanceM, time_seconds, avg_hr ?? undefined, max_hr ?? undefined);
 
   const admin = createAdminClient();
 

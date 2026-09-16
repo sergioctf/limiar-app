@@ -236,17 +236,35 @@ export function runTypeLabel(type: string): string {
 }
 
 /** Returns YYYY-MM-DD of the Monday of the week containing `d` */
+/**
+ * A date as the athlete's calendar sees it.
+ *
+ * toISOString() converts to UTC, so in Brazil every evening after 21:00 it
+ * reports tomorrow — the same defect that once produced "Semana inválida" and a
+ * 90-day chart with 89 points.
+ */
+function localStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
 function getMondayOf(d: Date): string {
   const day = new Date(d);
   const dow = (day.getDay() + 6) % 7; // 0=Mon
   day.setDate(day.getDate() - dow);
-  return day.toISOString().slice(0, 10);
+  // Local fields in, local fields out. Serialising here with toISOString() made
+  // this return *Tuesday* at 21:34 on a Tuesday: subtracting lands on Monday
+  // but keeps the time, and 21:34 BRT is already tomorrow in UTC. The week then
+  // ran Tuesday to Tuesday and every athlete lost their Monday.
+  return localStr(day);
 }
 
 function addDaysStr(dateStr: string, days: number): string {
   const d = new Date(dateStr + "T12:00:00");
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return localStr(d);
 }
 
 export interface TrainingDaysStats {
@@ -264,7 +282,7 @@ function isGymType(t: string): boolean {
   return lower.includes("weight") || lower.includes("workout") ||
          lower.includes("crossfit") || lower.includes("gym") ||
          lower.includes("strength") || lower.includes("pilates") ||
-         lower.includes("yoga");
+         lower.includes("yoga") || lower.includes("hiit") || lower.includes("hitt");
 }
 
 function isRunType(t: string): boolean {
@@ -308,6 +326,27 @@ function daysInRange(
   return dates.size;
 }
 
+/**
+ * Distinct days trained in the last `days` days, across every sport.
+ *
+ * Replaces the streak on the dashboard. A streak punishes rest, which is the
+ * one thing the rest of the app spends its time telling the athlete to take —
+ * miss a single deliberate rest day and the number resets to zero. Days trained
+ * in a rolling month measures the thing that actually matters: consistency.
+ */
+export function trainingDaysInWindow(
+  runs: Run[],
+  activities: ActivityDay[] = [],
+  days = 30,
+  filter: TrainingDayFilter = "all",
+): { count: number; days: number } {
+  const to = new Date();
+  const from = new Date(to);
+  from.setDate(from.getDate() - (days - 1));
+
+  return { count: daysInRange(runs, activities, localStr(from), localStr(to), filter), days };
+}
+
 export function computeTrainingDays(
   runs:       Run[],
   activities: ActivityDay[] = [],
@@ -315,7 +354,7 @@ export function computeTrainingDays(
 ): TrainingDaysStats {
   const now        = new Date();
   const thisMonday = getMondayOf(now);
-  const todayStr   = now.toISOString().slice(0, 10);
+  const todayStr   = localStr(now);
 
   const thisWeek = daysInRange(runs, activities, thisMonday, todayStr, filter);
 

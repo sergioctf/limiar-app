@@ -1,15 +1,48 @@
 /**
- * POST /api/coach/weekly-plan
- * Body: { paces?, force? }
+ * GET  /api/coach/weekly-plan?week=YYYY-MM-DD  → stored plan for that week (no AI cost)
+ * POST /api/coach/weekly-plan { paces?, force?, week? }
  *
- * - Se já existe plano para esta semana E force !== true → retorna plano salvo (sem gastar tokens)
- * - Se force === true OU não há plano → gera novo plano com AI
- * - Upsert: atualiza o report existente da semana (ou cria se não existir)
+ * - Plan already exists for the week and force !== true → returns it (no tokens spent)
+ * - force === true OR no plan → generates with AI and upserts the week's report
+ *
+ * `week` must be a Monday; it defaults to the current week and may not be more
+ * than one week ahead (the coach shows this week + next).
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { generateStructuredWeeklyPlan } from "@/lib/ai";
-import type { WeeklyPlanData } from "@/types";
+import {
+  ensureWeeklyPlan, loadWeeklyPlan, mondayOf, nextMondayOf, previousMondayOf,
+} from "@/lib/weekly-plan";
+
+/**
+ * Weeks the coach is allowed to touch: the previous, current and next one.
+ *
+ * The previous week is accepted on purpose — the client computes its week in
+ * the browser's timezone, and around midnight the two can legitimately differ
+ * by a week. Rejecting that made the app fail with "Semana inválida" late at
+ * night, when nothing was actually wrong.
+ */
+function resolveWeek(requested: unknown): string | null {
+  const now = new Date();
+  const current = mondayOf(now);
+  if (requested == null) return current;
+  if (typeof requested !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(requested)) return null;
+
+  const allowed = [previousMondayOf(now), current, nextMondayOf(now)];
+  return allowed.includes(requested) ? requested : null;
+}
+
+export async function GET(request: NextRequest) {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const week = resolveWeek(request.nextUrl.searchParams.get("week") ?? undefined);
+  if (!week) return NextResponse.json({ error: "Semana inválida" }, { status: 400 });
+
+  const { plan, reportId } = await loadWeeklyPlan(createAdminClient(), user.id, week);
+  return NextResponse.json({ plan, reportId, week, cached: true });
+}
 
 export async function POST(request: NextRequest) {
   const supabase = createClient();
@@ -17,160 +50,25 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json().catch(() => ({}));
-  const paces      = body?.paces ?? null;
-  const forceRegen = body?.force === true;
+  const week = resolveWeek(body?.week);
+  if (!week) return NextResponse.json({ error: "Semana inválida" }, { status: 400 });
 
-  const admin = createAdminClient();
+  const result = await ensureWeeklyPlan(createAdminClient(), user.id, week, {
+    force: body?.force === true,
+    paces: body?.paces ?? null,
+  });
 
-  // Current week bounds (Monday–Sunday)
-  const now = new Date();
-  const dayOfWeek = now.getDay(); // 0 = Sunday
-  const daysSinceMonday = (dayOfWeek + 6) % 7;
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - daysSinceMonday);
-  weekStart.setHours(0, 0, 0, 0);
-  const weekStartStr = weekStart.toISOString().slice(0, 10);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  const weekEndStr = weekEnd.toISOString().slice(0, 10);
-
-  // ── Check for existing plan this week ──────────────────────────────────────
-  if (!forceRegen) {
-    const { data: existing } = await admin
-      .from("coach_reports")
-      .select("id, full_report")
-      .eq("user_id", user.id)
-      .eq("period_type", "week")
-      .eq("period_start", weekStartStr)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
-
-    if (existing?.full_report) {
-      try {
-        const cachedPlan = JSON.parse(existing.full_report) as WeeklyPlanData;
-        // Validate it has days array (it's a structured plan, not old text format)
-        if (Array.isArray(cachedPlan.days) && cachedPlan.days.length > 0) {
-          return NextResponse.json({ plan: cachedPlan, saved: true, cached: true, reportId: existing.id });
-        }
-      } catch { /* invalid JSON — fall through to regenerate */ }
-    }
+  if (!result.plan) {
+    return NextResponse.json({ error: result.error ?? "AI generation failed" }, { status: 422 });
   }
 
-  // ── Generate new plan with AI ──────────────────────────────────────────────
-
-  // Recent runs (last 30 for AI context)
-  const { data: recentRuns } = await admin
-    .from("runs")
-    .select("*")
-    .eq("user_id", user.id)
-    .is("deleted_at", null)
-    .order("date", { ascending: false })
-    .limit(30);
-
-  // Next upcoming race (graceful fallback)
-  let nextRace = null;
-  try {
-    const todayStr = now.toISOString().slice(0, 10);
-    const { data: raceData } = await admin
-      .from("races")
-      .select("name, race_date, distance_km")
-      .eq("user_id", user.id)
-      .gt("race_date", todayStr)
-      .is("time_seconds", null)
-      .order("race_date", { ascending: true })
-      .limit(1);
-    if (raceData?.[0]) {
-      nextRace = {
-        name:        raceData[0].name as string,
-        date:        raceData[0].race_date as string,
-        distance_km: raceData[0].distance_km as number,
-      };
-    }
-  } catch { /* races table may not exist yet */ }
-
-  // Latest VDOT (graceful fallback)
-  let vdot: number | null = null;
-  try {
-    const { data: testData } = await admin
-      .from("performance_tests")
-      .select("vdot")
-      .eq("user_id", user.id)
-      .order("test_date", { ascending: false })
-      .limit(1);
-    vdot = (testData?.[0]?.vdot as number | null) ?? null;
-  } catch { /* table may not exist yet */ }
-
-  // Athlete profile from memory (graceful fallback)
-  let athleteProfile: string | null = null;
-  try {
-    const { data: notes } = await admin
-      .from("athlete_notes")
-      .select("category, content")
-      .eq("user_id", user.id)
-      .eq("active", true)
-      .order("created_at", { ascending: false })
-      .limit(30);
-
-    if (notes && notes.length > 0) {
-      athleteProfile = notes
-        .map((n: { category: string; content: string }) => `[${n.category}] ${n.content}`)
-        .join("\n");
-    }
-  } catch { /* table may not exist yet */ }
-
-  const plan = await generateStructuredWeeklyPlan(
-    weekStartStr,
-    recentRuns ?? [],
-    paces,
-    nextRace,
-    vdot,
-    athleteProfile,
-  );
-
-  if (!plan) {
-    return NextResponse.json({ error: "AI generation failed" }, { status: 422 });
-  }
-
-  // ── Upsert: update existing report or insert new one ──────────────────────
-  const trainingDays = plan.days.filter(d => d.type !== "rest").length;
-  const reportPayload = {
-    user_id:      user.id,
-    title:        `Plano da semana — ${weekStartStr}`,
-    report_date:  new Date().toISOString().slice(0, 10),
-    period_type:  "week",
-    period_start: weekStartStr,
-    period_end:   weekEndStr,
-    summary:      plan.ai_message ?? `${trainingDays} treinos planejados`,
-    full_report:  JSON.stringify(plan),
-    updated_at:   new Date().toISOString(),
-  };
-
-  // Try to find and update existing report for this week first
-  const { data: existingForUpdate } = await admin
-    .from("coach_reports")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("period_type", "week")
-    .eq("period_start", weekStartStr)
-    .limit(1)
-    .single();
-
-  let reportId: string | null = null;
-  if (existingForUpdate?.id) {
-    await admin
-      .from("coach_reports")
-      .update(reportPayload)
-      .eq("id", existingForUpdate.id);
-    reportId = existingForUpdate.id;
-  } else {
-    const { data: newReport } = await admin
-      .from("coach_reports")
-      .insert(reportPayload)
-      .select("id")
-      .single();
-    reportId = newReport?.id ?? null;
-  }
-
-  return NextResponse.json({ plan, saved: true, cached: false, reportId });
+  return NextResponse.json({
+    plan: result.plan, saved: !result.frozen, cached: result.cached,
+    reportId: result.reportId, week,
+    // A refusal to rewrite a week in progress is not an error — the athlete gets
+    // the plan they already had, plus the reason and where the fix will land.
+    frozen: result.frozen ?? false,
+    notice: result.frozen ? result.error : undefined,
+    suggestWeek: result.suggestWeek,
+  });
 }

@@ -107,6 +107,12 @@ export interface StravaStreams {
   heartrate?:      number[];   // bpm
   altitude?:       number[];   // meters
   velocity_smooth?: number[];  // m/s
+  /**
+   * Strava's per-sample "was the athlete moving?" flag. It is what separates a
+   * red light from a slow kilometre, and without it every split is timed on the
+   * wall clock. Costs nothing extra — same request, one more key.
+   */
+  moving?:         boolean[];
   latlng?:         Array<[number, number]>;
   cadence?:        number[];
 }
@@ -119,7 +125,7 @@ export async function getStravaStreams(
   accessToken: string,
   activityId: number,
 ): Promise<StravaStreams> {
-  const keys = "time,distance,heartrate,altitude,velocity_smooth,latlng,cadence";
+  const keys = "time,distance,heartrate,altitude,velocity_smooth,latlng,cadence,moving";
   const res = await stravaFetch(
     `${STRAVA_API_BASE}/activities/${activityId}/streams?keys=${keys}&key_by_type=true`,
     { headers: { Authorization: `Bearer ${accessToken}` } },
@@ -195,4 +201,36 @@ function detectRunType(
   if (name.includes("leve") || name.includes("easy")) return "easy";
   if (dist >= 14) return "long_run";
   return "easy";
+}
+
+/**
+ * Fill in calories the activity list does not carry.
+ *
+ * Strava's list endpoint omits `calories`; only the per-activity detail has it.
+ * Watches do record the value and do send it, so falling back to a MET estimate
+ * when a measured number exists one request away is simply losing data.
+ *
+ * Bounded and fault-tolerant on purpose: a detail call that fails leaves the
+ * activity as it was, because a missing calorie count is a far smaller problem
+ * than an import that aborts halfway.
+ */
+export async function enrichActivitiesWithCalories<T extends { id: number; calories?: number | null }>(
+  accessToken: string,
+  activities: T[],
+  max?: number,
+): Promise<T[]> {
+  const { activitiesNeedingDetail, mergeDetail } = await import("@/lib/strava-enrich");
+  const wanted = new Set(activitiesNeedingDetail(activities, max).map(a => a.id));
+  if (wanted.size === 0) return activities;
+
+  const details = new Map<number, { calories?: number | null }>();
+  for (const id of Array.from(wanted)) {
+    try {
+      details.set(id, (await getStravaActivity(accessToken, id)) as { calories?: number | null });
+    } catch {
+      // Rate limit or a deleted activity — keep going with what we have.
+    }
+  }
+
+  return activities.map(a => (wanted.has(a.id) ? mergeDetail(a, details.get(a.id)) : a));
 }

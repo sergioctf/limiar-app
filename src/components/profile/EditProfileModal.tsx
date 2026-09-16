@@ -72,7 +72,7 @@ export function EditProfileModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm overlay-safe">
       <div className="card w-full max-w-sm p-5 space-y-4 animate-scale-in">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -114,7 +114,7 @@ export function EditProfileModal({
               disabled={loading}
             />
           </div>
-          <p className="text-xs text-surface-600">
+          <p className="text-xs text-surface-500">
             Username público para compartilhamento (apenas letras, números, underscores)
           </p>
         </div>

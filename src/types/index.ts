@@ -2,6 +2,8 @@
 // Database types — mirror Supabase schema
 // ─────────────────────────────────────────────────────────
 
+import type { SportKey } from "@/lib/sports";
+
 export type RunSource = "strava" | "manual" | "imported_ai" | "strava+ai";
 
 export type RunType =
@@ -28,11 +30,70 @@ export type CoachReportPeriodType =
   | "cycle"
   | "general";
 
+export type DayKey = "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
+
+/**
+ * How this athlete wants their week laid out. Everyone trains differently —
+ * some run twice a week, some six times, some on consecutive days — so the plan
+ * generator follows these choices instead of a fixed template.
+ */
+export interface TrainingPrefs {
+  /** Days the athlete wants to run. */
+  runDays:      DayKey[];
+  /** Days for strength work. */
+  strengthDays: DayKey[];
+  /** Which run is the long one; defaults to the last run day of the week. */
+  longRunDay?:  DayKey | null;
+  /** Quality (interval/tempo) sessions per week. */
+  qualityPerWeek?: number;
+  /**
+   * Shortest long run the athlete is willing to accept, in km.
+   *
+   * An experienced runner knows what a long run means to them, and a plan that
+   * answers "7 km" to someone who has run a half is not being cautious — it is
+   * ignoring them. The engine still owns the ramp; this is the floor it ramps
+   * above, applied only when the athlete's own history supports it.
+   */
+  minLongRunKm?: number | null;
+  /**
+   * Shortest run of any kind, in km. Defaults to 5.
+   *
+   * Below this a session stops being training and becomes a commute. The engine
+   * would rather drop a day than prescribe one.
+   */
+  minRunKm?: number | null;
+  /**
+   * True once the athlete has actually chosen their running days.
+   *
+   * `training_prefs` being present is not the same thing: configuring strength
+   * days writes the whole object, defaults included, and the setup checklist
+   * then marked "monte sua semana" as done for someone who had never picked a
+   * single running day. Only an edit to the running days themselves — in the
+   * preferences card or the setup wizard — sets this.
+   */
+  runDaysConfirmed?: boolean;
+  /**
+   * Tier-2 sports the athlete does on fixed days — pilates on Tuesday, vôlei on
+   * Thursday, bike indoor on Friday.
+   *
+   * These are scheduled, not periodised. The engine places them on days it left
+   * free and mentions them on days it did not; it never sizes them, prescribes a
+   * pace for them, or drops a run to make room. That distinction is the whole
+   * point: the athlete's Thursday volleyball is a fact about their week, and a
+   * plan that pretends it isn't happening is planning someone else's week.
+   */
+  otherDays?: Partial<Record<import("@/lib/sports").SecondarySport, DayKey[]>>;
+}
+
 export interface Profile {
   id: string;
   email: string;
   name: string | null;
   username: string | null;
+  /** Sports the athlete practices — drives the weekly plan. */
+  sports: SportKey[] | null;
+  /** Weekly layout preferences — see TrainingPrefs. */
+  training_prefs: TrainingPrefs | null;
   created_at: string;
 }
 
@@ -70,6 +131,10 @@ export interface FriendStats {
   lastWeekKm: number;
   monthKm: number;
   streak: number;
+  /** Distinct days with any training (runs + gym/bike/swim) this week. */
+  trainingDaysWeek: number;
+  /** Same, for the current calendar month. */
+  trainingDaysMonth: number;
   best5kSeconds: number | null;
   best10kSeconds: number | null;
 }
@@ -120,6 +185,8 @@ export interface Run {
   coach_feedback: string | null;
   strava_raw_json: Record<string, unknown> | null;
   workout_score: number | null;
+  /** Which pair this was run in. Null for every run recorded before shoes existed. */
+  shoe_id: string | null;
   synced_at: string | null;
   deleted_at: string | null;
   created_at: string;
@@ -349,18 +416,40 @@ export interface PerformanceTest {
 
 export type PlanDayType =
   | "rest" | "easy" | "tempo" | "intervals"
-  | "long_run" | "recovery" | "test" | "race" | "strength";
+  | "long_run" | "recovery" | "test" | "race" | "strength" | "hiit";
 
 // ── Structured workout (steps a watch can execute) ────────
 
 export type WorkoutStepKind = "warmup" | "run" | "recovery" | "cooldown";
+
+/** Target heart-rate window for a step, derived from the athlete's LTHR. */
+export interface HrTarget {
+  min:   number;    // bpm
+  max:   number;    // bpm
+  zone:  string;    // "Z2", "Z4" …
+  label: string;    // "Aeróbico", "Limiar" …
+}
 
 export interface WorkoutStep {
   kind:         WorkoutStepKind;
   distance_km?: number;   // either distance…
   duration_min?: number;  // …or duration
   pace?:        string;   // target, e.g. "4:25–4:35/km"
+  /** Ideal HR window for this step. */
+  hr?:          HrTarget;
+  /** Daniels intensity this step belongs to: E, M, T, I or R. */
+  intensity?:   "E" | "M" | "T" | "I" | "R";
   note?:        string;   // e.g. "ritmo controlado, não acelerar"
+}
+
+/** One kilometre of a session, expanded for the km-by-km view. */
+export interface KmSplit {
+  km:        number;
+  paceLabel: string;
+  hr?:       HrTarget;
+  kind:      WorkoutStepKind;
+  intensity?: "E" | "M" | "T" | "I" | "R";
+  note?:     string;
 }
 
 export interface WorkoutRepeat {
@@ -382,6 +471,8 @@ export interface WeeklyPlanDay {
   day:         "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
   dayPt:       string;       // "Segunda", "Terça", …
   type:        PlanDayType;
+  /** Which sport this session belongs to (undefined for rest days). */
+  sport?:      SportKey;
   label:       string;       // "Rodagem", "Tiro", "Longão", "Descanso" …
   distance_km?: number;
   duration_min?: number;
@@ -389,6 +480,12 @@ export interface WeeklyPlanDay {
   description: string;
   /** step-by-step structure for quality sessions (exportable to watch) */
   structure?:  StructuredWorkout;
+  /** Prescribed lifting session, for strength days. */
+  strength?:   import("@/lib/strength-builder").StrengthSession;
+  /** Set when the athlete swapped today's session — holds what to restore on undo. */
+  swap?:       import("@/lib/session-swap").SwapRecord;
+  /** Set on a session that was moved here from an earlier day ("Segunda"). */
+  movedFrom?:  string;
 }
 
 export interface WeeklyPlanData {
@@ -396,6 +493,15 @@ export interface WeeklyPlanData {
   days:         WeeklyPlanDay[];
   ai_message?:  string;      // Proactive question / observation
   generated_at: string;      // ISO timestamp
+  /**
+   * Hashes of the configuration this plan was generated from.
+   *
+   * Absent on every plan made before the check existed, which is exactly what
+   * marks them for rebuilding. See `@/lib/plan-freshness`.
+   */
+  fingerprint?: import("@/lib/plan-freshness").PlanFingerprint;
+  /** How the week before this one was read: held, eased off, or asked about. */
+  week_reading?: import("@/lib/week-reading").WeekReading;
 }
 
 export interface PlanChatMessage {
@@ -493,8 +599,16 @@ export interface WellnessData {
   hrv_status:     string | null;      // balanced | unbalanced | low | poor
   resting_hr:     number | null;
   stress_avg:     number | null;      // 0-100
-  body_battery:   number | null;      // 0-100
-  source:         string;             // healthconnect | healthkit | garmin | manual_import
+  body_battery:   number | null;      // 0-100 — Garmin's estimate
+  /** Whoop's 0-100 recovery percentage. Same kind of signal as body_battery. */
+  recovery_score?: number | null;
+  /** The day's energy above basal, as the watch measured it (kcal). */
+  active_kcal?:   number | null;
+  /** The watch's basal estimate for the day (kcal). */
+  resting_kcal?:  number | null;
+  /** Readings kept but not scored — SpO₂, steps, weight, VO₂max… keyed by the source's own names. */
+  raw?:           Record<string, unknown> | null;
+  source:         string;             // healthconnect | healthkit | garmin | whoop | intervals | ios_shortcut | manual_import
   created_at?:    string;
   updated_at?:    string;
 }

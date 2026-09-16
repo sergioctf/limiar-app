@@ -3,6 +3,8 @@
  * 'week') against what the athlete actually did (runs + gym activities).
  * Fully deterministic: no AI calls.
  */
+import { localDateStr } from "@/lib/week";
+import { movingSeconds } from "@/lib/run-time";
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 
 export type DayStatus = "done" | "partial" | "missed" | "rest_ok" | "extra" | "upcoming";
@@ -29,19 +31,32 @@ export interface WeekAdherence {
 
 const DAY_ORDER: WeeklyPlanDay["day"][] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-const GYM_TYPES = ["weight", "workout", "crossfit", "gym"];
+const GYM_TYPES = ["weight", "workout", "crossfit", "gym", "strength", "hiit", "hitt"];
 
-interface RunLite { date: string; distance_km: number; duration_seconds: number }
+/*
+ * Moving time, not elapsed. The athlete who pauses at a red light, or between
+ * reps of a track session, ran the workout that was prescribed — the stopped
+ * seconds are not a training decision and must not read as one. Before this,
+ * a session executed exactly as planned could come back "partial" purely
+ * because of traffic.
+ */
+interface RunLite {
+  date: string;
+  distance_km: number;
+  duration_seconds: number;
+  moving_time_seconds?: number | null;
+  elapsed_time_seconds?: number | null;
+}
 interface ActivityLite { date: string; sport_type: string }
 
 function addDays(dateStr: string, n: number): string {
   const d = new Date(`${dateStr}T12:00:00`);
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return localDateStr(d);
 }
 
 function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDateStr();
 }
 
 /**
@@ -66,7 +81,7 @@ export function computeWeekAdherence(
     const date = addDays(weekStart, i);
     const dayRuns = runs.filter(r => r.date === date);
     const actualKm  = dayRuns.reduce((s, r) => s + r.distance_km, 0);
-    const actualMin = dayRuns.reduce((s, r) => s + r.duration_seconds / 60, 0);
+    const actualMin = dayRuns.reduce((s, r) => s + movingSeconds(r) / 60, 0);
     const hasGym = activities.some(a =>
       a.date === date && GYM_TYPES.some(t => a.sport_type?.toLowerCase().includes(t))
     );

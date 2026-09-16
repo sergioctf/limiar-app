@@ -8,11 +8,11 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { generateMacroPlan } from "@/lib/ai";
-import { computeMetrics } from "@/lib/performance";
 import {
   loadActiveMacroPlan, buildWeekStarts, adaptMacroPlanForUser,
 } from "@/lib/macro-plan";
+import { buildMacroWeeks, macroRationale, phasesSummary, assessMacroPlan } from "@/lib/macro-builder";
+import { provenCapacity, planWeeklyVolume } from "@/lib/workout-builder";
 import type { MacroRaceType } from "@/types";
 
 export const maxDuration = 90;
@@ -21,6 +21,30 @@ const RACE_LABELS: Record<MacroRaceType, string> = {
   "5k": "5K", "10k": "10K", "half": "Meia-maratona", "marathon": "Maratona",
   "ultra": "Ultramaratona", "triathlon": "Triathlon", "other": "Prova-alvo",
 };
+
+const RACE_KM: Record<MacroRaceType, number> = {
+  "5k": 5, "10k": 10, "half": 21.0975, "marathon": 42.195,
+  "ultra": 50, "triathlon": 21.0975, "other": 10,
+};
+
+/**
+ * Race day for the target month: the athlete's registered race when there is
+ * one, otherwise the middle of the month as a neutral anchor.
+ */
+async function resolveRaceDate(
+  admin: ReturnType<typeof createAdminClient>, userId: string, targetMonth: string,
+): Promise<string> {
+  try {
+    const { data } = await admin
+      .from("races").select("race_date")
+      .eq("user_id", userId)
+      .gte("race_date", `${targetMonth}-01`)
+      .lte("race_date", `${targetMonth}-31`)
+      .order("race_date", { ascending: true }).limit(1);
+    if (data?.[0]?.race_date) return data[0].race_date as string;
+  } catch { /* races table optional */ }
+  return `${targetMonth}-15`;
+}
 
 async function getUser() {
   const supabase = createClient();
@@ -58,42 +82,58 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminClient();
 
-  // Current weekly volume (avg of last 4 weeks) + VDOT + history summary
-  const since = new Date();
-  since.setDate(since.getDate() - 28);
-  const [{ data: runs }, { data: tests }] = await Promise.all([
-    admin.from("runs")
-      .select("date, distance_km, avg_pace_seconds_per_km, type")
-      .eq("user_id", user.id)
-      .gte("date", since.toISOString().slice(0, 10))
-      .is("deleted_at", null),
-    admin.from("performance_tests")
-      .select("distance_km, time_seconds, avg_hr")
-      .eq("user_id", user.id)
-      .order("test_date", { ascending: false })
-      .limit(1),
-  ]);
+  // Starting volume, computed exactly the way the weekly plan computes it.
+  //
+  // These were two different estimates of the same thing — the macro plan
+  // averaged the last 28 days while the week used its own figure — so the
+  // long-term plan and the weekly plan disagreed from day one. Same inputs,
+  // same function, one answer.
+  const yearAgo = new Date(Date.now() - 365 * 86400_000).toISOString().slice(0, 10);
+  const { data: runs } = await admin
+    .from("runs")
+    .select("date, distance_km")
+    .eq("user_id", user.id)
+    .gte("date", yearAgo)
+    .is("deleted_at", null);
 
-  const totalKm = (runs ?? []).reduce((s: number, r: { distance_km: number }) => s + r.distance_km, 0);
-  const currentWeeklyKm = totalKm / 4;
+  const history = (runs ?? []) as Array<{ date: string; distance_km: number }>;
+  const proven = provenCapacity(history);
 
-  let vdot: number | null = null;
-  const test = tests?.[0];
-  if (test) {
-    try { vdot = computeMetrics(test.distance_km * 1000, test.time_seconds, test.avg_hr ?? undefined).vdot; }
-    catch { vdot = null; }
-  }
+  const fourWeeksAgo = new Date(Date.now() - 28 * 86400_000).toISOString().slice(0, 10);
+  const recentTotal = history
+    .filter(r => r.date >= fourWeeksAgo)
+    .reduce((s, r) => s + r.distance_km, 0);
+  const recentAvg = recentTotal / 4;
 
-  const recentSummary = (runs ?? []).length > 0
-    ? `${(runs ?? []).length} corridas nos últimos 28 dias, ${totalKm.toFixed(0)}km no total.`
-    : "Sem corridas recentes registradas.";
-
-  const planData = await generateMacroPlan(
-    raceType, raceLabel, targetMonth, weekStarts, currentWeeklyKm, vdot, recentSummary,
+  const currentWeeklyKm = planWeeklyVolume(
+    [recentAvg, recentAvg, recentAvg, recentAvg],
+    { provenWeeklyKm: proven.weeklyKm },
   );
-  if (!planData) {
-    return NextResponse.json({ error: "IA indisponível — tente novamente em instantes" }, { status: 502 });
-  }
+
+  const raceDate = await resolveRaceDate(admin, user.id, targetMonth);
+  const raceKm = RACE_KM[raceType];
+
+  // Deterministic periodization — see TRAINING_SCIENCE.md for the rules.
+  const input = {
+    weekStarts, raceDate, raceKm, currentWeeklyKm,
+    // Already computed above for the volume floor; the long run needs it too,
+    // or the macro advertises a shorter long run than the week it describes.
+    provenLongRunKm: proven.longestRunKm,
+  };
+  const weeks = buildMacroWeeks(input);
+
+  // Whether the race is actually reachable from here. Saying so matters more
+  // than producing a tidy plan: a half marathon built from 10 km/week in 13
+  // weeks cannot work, and hiding that just guarantees a bad race day.
+  const assessment = assessMacroPlan(input);
+
+  const planData = {
+    weeks,
+    phases_summary: phasesSummary(weeks),
+    rationale: macroRationale(weeks, raceLabel, raceType),
+    adaptation_note: assessment.verdict === "suficiente" ? undefined : assessment.message,
+    assessment,
+  };
 
   // Replace any previous active plan
   await admin.from("training_macro_plans")

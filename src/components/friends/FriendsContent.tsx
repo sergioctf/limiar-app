@@ -4,11 +4,13 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   Users, UserPlus, Check, X, Loader2, Trophy, Flame, MapPin,
-  Calendar, Zap, Clock, Crown, AlertCircle, RefreshCw,
+  Calendar, CalendarCheck, Zap, Clock, Crown, AlertCircle, RefreshCw, ChevronRight, Bell,
 } from "lucide-react";
 import { secondsToReadable } from "@/lib/utils";
 import { FriendsFeed } from "@/components/friends/FriendsFeed";
-import { WeeklyChallengeCard } from "@/components/friends/WeeklyChallengeCard";
+import { SuggestionsCard } from "@/components/friends/SuggestionsCard";
+import { PageHeader, HeaderAction } from "@/components/ui/PageHeader";
+import { ChallengesCard } from "@/components/friends/ChallengesCard";
 import type { FriendSummary, FriendStats } from "@/types";
 
 interface Props {
@@ -16,11 +18,15 @@ interface Props {
   myName: string | null;
 }
 
-type Metric = "weekKm" | "monthKm" | "streak" | "best5kSeconds" | "best10kSeconds";
+type Metric =
+  | "trainingDaysWeek" | "trainingDaysMonth"
+  | "weekKm" | "monthKm" | "streak" | "best5kSeconds" | "best10kSeconds";
 
 const METRICS: Array<{ key: Metric; label: string; icon: React.ReactNode; lowerIsBetter?: boolean }> = [
-  { key: "weekKm",        label: "Semana",  icon: <MapPin className="w-3.5 h-3.5" /> },
-  { key: "monthKm",       label: "Mês",     icon: <Calendar className="w-3.5 h-3.5" /> },
+  { key: "trainingDaysWeek",  label: "Dias (semana)", icon: <CalendarCheck className="w-3.5 h-3.5" /> },
+  { key: "trainingDaysMonth", label: "Dias (mês)",    icon: <Calendar className="w-3.5 h-3.5" /> },
+  { key: "weekKm",        label: "Km semana", icon: <MapPin className="w-3.5 h-3.5" /> },
+  { key: "monthKm",       label: "Km mês",    icon: <MapPin className="w-3.5 h-3.5" /> },
   { key: "streak",        label: "Sequência", icon: <Flame className="w-3.5 h-3.5" /> },
   { key: "best5kSeconds", label: "PR 5K",   icon: <Zap className="w-3.5 h-3.5" />, lowerIsBetter: true },
   { key: "best10kSeconds",label: "PR 10K",  icon: <Clock className="w-3.5 h-3.5" />, lowerIsBetter: true },
@@ -38,7 +44,9 @@ function metricValue(s: FriendStats, m: Metric): number | null {
 function formatMetric(value: number | null, m: Metric): string {
   if (value === null) return "—";
   if (m === "weekKm" || m === "monthKm") return `${value} km`;
-  if (m === "streak") return `${value} ${value === 1 ? "dia" : "dias"}`;
+  if (m === "streak" || m === "trainingDaysWeek" || m === "trainingDaysMonth") {
+    return `${value} ${value === 1 ? "dia" : "dias"}`;
+  }
   return secondsToReadable(value); // PR times
 }
 
@@ -49,11 +57,15 @@ export function FriendsContent({ myUsername, myName }: Props) {
   const [stats, setStats] = useState<FriendStats[]>([]);
   const [loading, setLoading] = useState(true);
 
+  /* Panels opened from the header. Not accordions: they belong to a button
+     the athlete just pressed, and they close the same way. */
+  const [showAdd, setShowAdd] = useState(false);
+  const [showRequests, setShowRequests] = useState(false);
   const [addValue, setAddValue] = useState("");
   const [adding, setAdding] = useState(false);
   const [addMsg, setAddMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
-  const [metric, setMetric] = useState<Metric>("weekKm");
+  const [metric, setMetric] = useState<Metric>("trainingDaysWeek");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -128,21 +140,67 @@ export function FriendsContent({ myUsername, myName }: Props) {
 
   return (
     <div className="space-y-5 max-w-3xl mx-auto animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="page-header">Amigos</h1>
-          <p className="text-surface-500 text-sm">
-            {friends.length} amigo{friends.length !== 1 ? "s" : ""}
-            {myUsername && <> · você é <span className="text-brand-400">@{myUsername}</span></>}
-          </p>
-        </div>
-        <button onClick={load} disabled={loading} title="Atualizar"
-          className="text-surface-600 hover:text-surface-400 p-2 rounded-lg hover:bg-surface-700/50 transition-colors">
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-        </button>
-      </div>
+      {/*
+        Actions live at the top, where Instagram puts them and where a thumb
+        looks first. A previous pass buried "add a friend" in a drawer at the
+        bottom of the page — it read as tidy and behaved as hidden. Adding
+        people is the primary action of this screen, not reference material.
 
+        The badge on the requests button is the whole point: an unread state
+        has to be legible without opening anything.
+      */}
+      <PageHeader
+        title="Amigos"
+        subtitle={`${friends.length} amigo${friends.length !== 1 ? "s" : ""}${myUsername ? ` · você é @${myUsername}` : ""}`}
+        actions={
+          <>
+            <HeaderAction
+              label="Pedidos de amizade"
+              badge={incoming.length}
+              onClick={() => setShowRequests(v => !v)}
+            >
+              <Bell className="w-[18px] h-[18px]" />
+            </HeaderAction>
+            <HeaderAction label="Atualizar" onClick={load}>
+              <RefreshCw className={`w-[18px] h-[18px] ${loading ? "animate-spin" : ""}`} />
+            </HeaderAction>
+            <HeaderAction label="Adicionar amigo" primary onClick={() => setShowAdd(v => !v)}>
+              <UserPlus className="w-[18px] h-[18px]" />
+            </HeaderAction>
+          </>
+        }
+      />
+
+      {/* The add panel drops in under the button that opened it, so the
+          connection between the tap and what appeared is never in doubt. */}
+      {showAdd && (
+        <div className="animate-slide-in-down">
+          <div className="space-y-3">
+        <form onSubmit={addFriend} className="card p-4">
+            <label className="stat-label mb-2 block">Adicionar amigo por username</label>
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-500">@</span>
+                <input
+                  type="text"
+                  value={addValue}
+                  onChange={e => setAddValue(e.target.value.replace(/\s/g, ""))}
+                  placeholder="username"
+                  className="w-full bg-surface-700 border border-surface-600 rounded-xl pl-7 pr-3 py-2.5 text-sm text-surface-200 placeholder:text-surface-500 focus:outline-none focus:border-brand-500"
+                />
+              </div>
+              <button type="submit" disabled={adding || !addValue.trim()} className="btn-primary shrink-0">
+                {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <><UserPlus className="w-4 h-4" /><span className="hidden sm:inline">Adicionar</span></>}
+              </button>
+            </div>
+            {addMsg && (
+              <p className={`text-xs mt-2 ${addMsg.type === "ok" ? "text-green-400" : "text-red-400"}`}>{addMsg.text}</p>
+            )}
+          </form>
+            <SuggestionsCard onAdded={load} />
+          </div>
+        </div>
+      )}
       {/* Username required notice */}
       {needsUsername && (
         <div className="card p-4 border-yellow-500/20 bg-yellow-500/5">
@@ -159,31 +217,8 @@ export function FriendsContent({ myUsername, myName }: Props) {
         </div>
       )}
 
-      {/* Add friend */}
-      <form onSubmit={addFriend} className="card p-4">
-        <label className="stat-label mb-2 block">Adicionar amigo por username</label>
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-500">@</span>
-            <input
-              type="text"
-              value={addValue}
-              onChange={e => setAddValue(e.target.value.replace(/\s/g, ""))}
-              placeholder="username"
-              className="w-full bg-surface-700 border border-surface-600 rounded-xl pl-7 pr-3 py-2.5 text-sm text-surface-200 placeholder:text-surface-500 focus:outline-none focus:border-brand-500"
-            />
-          </div>
-          <button type="submit" disabled={adding || !addValue.trim()} className="btn-primary shrink-0">
-            {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <><UserPlus className="w-4 h-4" /><span className="hidden sm:inline">Adicionar</span></>}
-          </button>
-        </div>
-        {addMsg && (
-          <p className={`text-xs mt-2 ${addMsg.type === "ok" ? "text-green-400" : "text-red-400"}`}>{addMsg.text}</p>
-        )}
-      </form>
-
-      {/* Incoming requests */}
-      {incoming.length > 0 && (
+      {/* Incoming requests — revealed by the header's badge button. */}
+      {incoming.length > 0 && showRequests && (
         <div className="card p-4 space-y-2">
           <p className="stat-label mb-1">Pedidos recebidos</p>
           {incoming.map(r => (
@@ -206,8 +241,8 @@ export function FriendsContent({ myUsername, myName }: Props) {
         </div>
       )}
 
-      {/* Weekly challenge (needs at least one friend) */}
-      {!loading && <WeeklyChallengeCard stats={stats} />}
+      {/* Challenges (needs at least one friend) */}
+      {!loading && <ChallengesCard stats={stats} />}
 
       {/* Leaderboard */}
       <div className="card p-4">
@@ -220,7 +255,7 @@ export function FriendsContent({ myUsername, myName }: Props) {
         <div className="flex gap-1.5 flex-wrap mb-3">
           {METRICS.map(m => (
             <button key={m.key} onClick={() => setMetric(m.key)}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+              className={`flex items-center gap-1 px-2.5 min-h-[44px] py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
                 metric === m.key ? "bg-brand-500 text-white" : "bg-surface-700 text-surface-400 hover:text-surface-200"
               }`}>
               {m.icon}{m.label}
@@ -240,9 +275,11 @@ export function FriendsContent({ myUsername, myName }: Props) {
             {ranked.map((s, i) => {
               const val = metricValue(s, metric);
               return (
-                <div key={s.userId}
-                  className={`flex items-center gap-3 rounded-xl p-2.5 ${
-                    s.isMe ? "bg-brand-500/10 border border-brand-500/20" : "bg-surface-700/30"
+                <Link key={s.userId} href={`/friends/${s.userId}`}
+                  className={`flex items-center gap-3 rounded-xl p-2.5 transition-colors ${
+                    s.isMe
+                      ? "bg-brand-500/10 border border-brand-500/20 hover:bg-brand-500/15"
+                      : "bg-surface-700/30 hover:bg-surface-700/60"
                   }`}>
                   <div className="w-6 text-center shrink-0">
                     {i === 0 && val !== null
@@ -258,10 +295,11 @@ export function FriendsContent({ myUsername, myName }: Props) {
                     </p>
                     {s.username && <p className="text-xs text-surface-500">@{s.username}</p>}
                   </div>
-                  <span className={`font-mono font-bold text-sm shrink-0 ${val !== null ? "text-surface-100" : "text-surface-600"}`}>
+                  <span className={`font-mono font-bold text-sm shrink-0 ${val !== null ? "text-surface-100" : "text-surface-500"}`}>
                     {formatMetric(val, metric)}
                   </span>
-                </div>
+                  <ChevronRight className="w-4 h-4 text-surface-500 shrink-0" />
+                </Link>
               );
             })}
           </div>
@@ -271,26 +309,14 @@ export function FriendsContent({ myUsername, myName }: Props) {
       {/* Activity feed with kudos */}
       <FriendsFeed />
 
-      {/* Outgoing pending */}
-      {outgoing.length > 0 && (
-        <div className="card p-4 space-y-2">
-          <p className="stat-label mb-1">Pedidos enviados</p>
-          {outgoing.map(r => (
-            <div key={r.friendshipId} className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-surface-700 flex items-center justify-center text-surface-400 text-sm font-bold shrink-0">
-                {displayName(r).charAt(0).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-surface-300 truncate">{displayName(r)}</p>
-                <p className="text-xs text-surface-500">aguardando aceite</p>
-              </div>
-              <button onClick={() => remove(r.friendshipId)} className="text-xs text-surface-500 hover:text-red-400 px-2 py-1">
-                Cancelar
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+      {/*
+        Adding people and chasing pending invitations is administration, not
+        the reason anybody opens this screen. The ranking and the feed are;
+        these sat above both, so the social content started below the fold.
+
+        Incoming requests stay visible on purpose — somebody is waiting on an
+        answer, and that is time-sensitive in a way a search box is not.
+      */}
     </div>
   );
 }

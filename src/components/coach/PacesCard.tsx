@@ -35,8 +35,9 @@ export function PacesCard({ paces }: Props) {
         ))}
       </div>
 
-      <p className="text-xs text-surface-600 pt-1">
-        * Ritmos derivados do vVO2max via Jack Daniels.
+      <p className="text-xs text-surface-500 pt-1">
+        * Rodagem e regenerativo por %VO2max; maratona, limiar, intervalo e repetição
+        pelo ritmo de prova que o seu VDOT prevê (Jack Daniels).
       </p>
     </div>
   );

@@ -52,7 +52,7 @@ export async function POST() {
   const [{ data: runs }, { data: activities }] = await Promise.all([
     admin
       .from("runs")
-      .select("date, distance_km, duration_seconds, avg_pace_seconds_per_km, avg_hr, type")
+      .select("date, distance_km, duration_seconds, moving_time_seconds, elapsed_time_seconds, avg_pace_seconds_per_km, avg_hr, type")
       .eq("user_id", user.id)
       .gte("date", since.toISOString().slice(0, 10))
       .is("deleted_at", null),

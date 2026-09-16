@@ -3,12 +3,13 @@
 import { useState, useMemo } from "react";
 import { Scale, Loader2, Check, ChevronDown, ChevronUp, TrendingDown, TrendingUp, Minus } from "lucide-react";
 import type { BodyMeasurement } from "@/types";
+import { localDateStr } from "@/lib/week";
 
 interface Props {
   initial: BodyMeasurement[];
 }
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+const todayStr = () => localDateStr();
 
 /** 7-day trailing moving average over date-sorted weights. */
 function movingAverage(points: { date: string; w: number }[]): number[] {
@@ -126,7 +127,7 @@ export function BodyCompositionCard({ initial }: Props) {
             {chart.dots.map((d, i) => <circle key={i} cx={d.cx} cy={d.cy} r="1.5" className="fill-surface-500" />)}
             <path d={chart.maPath} fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="stroke-brand-400" />
           </svg>
-          <div className="flex justify-between text-[9px] text-surface-600">
+          <div className="flex justify-between text-[10px] text-surface-500">
             <span>{chart.min.toFixed(1)} kg</span><span>{chart.max.toFixed(1)} kg</span>
           </div>
         </div>

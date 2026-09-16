@@ -1,0 +1,68 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Watch, PencilLine } from "lucide-react";
+import type { Readiness } from "@/lib/readiness";
+
+const WHY: Record<string, string> = {
+  body_battery: "a estimativa de energia do próprio relógio",
+  sleep:        "quanto e quão bem você dormiu",
+  hrv:          "variabilidade cardíaca contra a sua média",
+  rhr:          "batimento em repouso contra a sua média",
+  tsb:          "fadiga acumulada dos treinos recentes",
+  soreness:     "dor muscular que você informou",
+  rpe:          "o esforço que o treino de ontem custou",
+};
+
+/**
+ * What the score is made of, and how much each part weighs.
+ *
+ * A score the athlete cannot take apart is a score they cannot argue with or
+ * learn from. Showing the weights also answers the question every athlete asks
+ * the first bad morning: "but I feel fine — why is it low?"
+ */
+export function ContributorsCard({ readiness }: { readiness: Readiness }) {
+  const [grown, setGrown] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setGrown(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  const total = readiness.components.reduce((s, c) => s + c.weight, 0) || 1;
+  const parts = [...readiness.components].sort((a, b) => b.weight - a.weight);
+
+  if (parts.length === 0) {
+    return (
+      <p className="rounded-2xl border border-surface-700 bg-surface-800 p-4 text-sm text-surface-500">
+        Nada para compor o score ainda — nem treinos recentes, nem leituras do relógio.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3.5 rounded-2xl border border-surface-700 bg-surface-800 p-4">
+      {parts.map((c, i) => {
+        const bar = c.score >= 70 ? "bg-emerald-500" : c.score >= 45 ? "bg-amber-500" : "bg-red-500";
+        return (
+          <div key={c.key}>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-surface-200">
+                {c.auto ? <Watch className="w-3.5 h-3.5 shrink-0 text-surface-500" /> : <PencilLine className="w-3.5 h-3.5 shrink-0 text-surface-500" />}
+                <span className="truncate">{c.label}</span>
+                <span className="shrink-0 text-[11px] font-normal text-surface-500">peso {Math.round((c.weight / total) * 100)}%</span>
+              </span>
+              <span className="shrink-0 text-sm font-bold tabular-nums text-surface-100">{c.score}</span>
+            </div>
+            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface-700">
+              <div
+                className={`h-full rounded-full ${bar} transition-[width] duration-700 ease-smooth`}
+                style={{ width: grown ? `${c.score}%` : "0%", transitionDelay: `${i * 70}ms` }}
+              />
+            </div>
+            <p className="mt-1 text-[11px] text-surface-500">{WHY[c.key]}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

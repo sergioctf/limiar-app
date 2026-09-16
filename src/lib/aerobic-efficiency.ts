@@ -1,3 +1,4 @@
+import { localDateStr } from "@/lib/week";
 /**
  * Aerobic efficiency trend — Efficiency Factor (EF) = speed (m/min) ÷ HR,
  * averaged per week over easy-effort runs. A rising EF means the athlete
@@ -35,7 +36,7 @@ function mondayOf(dateStr: string): string {
   const d = new Date(`${dateStr}T12:00:00`);
   const dow = (d.getDay() + 6) % 7;
   d.setDate(d.getDate() - dow);
-  return d.toISOString().slice(0, 10);
+  return localDateStr(d);
 }
 
 export function computeAerobicEfficiency(runs: RunForEF[], maxWeeks = 12): EfficiencyTrend {

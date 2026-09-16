@@ -19,6 +19,7 @@ import { refreshStravaToken, getStravaActivity, stravaActivityToRun } from "@/li
 import { analyzeRun } from "@/lib/ai";
 import { isProbableDuplicate, formatDistanceKm } from "@/lib/utils";
 import { sendPushToUser } from "@/lib/push";
+import { notifyFriendsOfWorkout } from "@/lib/friend-notify";
 
 // Permite até 60s (necessário para IA + Strava fetch)
 export const maxDuration = 60;
@@ -112,9 +113,56 @@ export async function POST(request: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const activity = await getStravaActivity(accessToken, body.object_id) as any;
 
-    // Só importa corridas
+    // Everything that is not a run belongs in `activities`.
+    //
+    // This used to return early and drop the event on the floor, which is why
+    // gym sessions, rides, walks and pilates only ever appeared after the
+    // athlete opened settings and pressed sync by hand — the exact chore the
+    // webhook exists to remove. Runs go to `runs`; the rest go here, with the
+    // calories the watch measured, straight from the detail payload.
     if (activity.type !== "Run" && activity.sport_type !== "Run") {
-      return NextResponse.json({ ok: true });
+      const sportType: string = activity.sport_type ?? activity.type ?? "Workout";
+      const date: string = activity.start_date_local
+        ? String(activity.start_date_local).split("T")[0]
+        : new Date().toISOString().slice(0, 10);
+
+      const row = {
+        user_id:            userId,
+        strava_activity_id: activity.id,
+        name:               activity.name ?? sportType,
+        sport_type:         sportType,
+        date,
+        duration_seconds:   activity.moving_time ?? activity.elapsed_time ?? null,
+        distance_m:         activity.distance ?? null,
+        calories:           activity.calories ? Math.round(activity.calories) : null,
+        avg_hr:             activity.average_heartrate ? Math.round(activity.average_heartrate) : null,
+        elevation_gain_m:   activity.total_elevation_gain ?? null,
+        source:             "strava",
+        strava_raw_json:    activity,
+      };
+
+      const { data: known } = await admin
+        .from("activities").select("id")
+        .eq("user_id", userId).eq("strava_activity_id", activity.id)
+        .maybeSingle();
+
+      // An edit on Strava — a renamed session, a corrected duration — should
+      // land here too, not create a second row.
+      if (known?.id) {
+        await admin.from("activities").update(row).eq("id", known.id);
+      } else {
+        await admin.from("activities").insert(row);
+        // Only a genuinely new session is worth announcing. An edit on Strava
+        // is not a workout, and the throttle inside would swallow it anyway.
+        await notifyFriendsOfWorkout(admin, userId, {
+          label: row.name ?? "Treino",
+          distanceKm: row.distance_m != null ? row.distance_m / 1000 : null,
+          durationMin: row.duration_seconds != null ? row.duration_seconds / 60 : null,
+          date: row.date,
+        }, (id, payload) => sendPushToUser(admin, id, payload));
+      }
+
+      return NextResponse.json({ ok: true, sport: sportType, stored: "activities" });
     }
 
     const run = stravaActivityToRun(activity, userId);

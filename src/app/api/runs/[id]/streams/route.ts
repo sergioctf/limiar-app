@@ -6,7 +6,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { refreshStravaToken, getStravaStreams, getStravaActivity, StravaApiError } from "@/lib/strava";
-import { analyzeStreams, parseBestEfforts } from "@/lib/run-streams";
+import { analyzeStreams, parseBestEfforts, ANALYSIS_VERSION } from "@/lib/run-streams";
+import { effortsInActivity } from "@/lib/best-efforts";
 
 export const maxDuration = 30;
 
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   // The run must belong to the user and have a Strava activity id
   const { data: run } = await admin
     .from("runs")
-    .select("id, user_id, strava_activity_id")
+    .select("id, user_id, strava_activity_id, date, distance_km")
     .eq("id", runId)
     .maybeSingle();
 
@@ -38,7 +39,14 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     .select("analysis")
     .eq("run_id", runId)
     .maybeSingle();
-  if (cached?.analysis) {
+  /*
+   * A stale-version hit is a miss. The cache holds the computed analysis, so
+   * without this check a correction to the splits maths would never reach a run
+   * the athlete had already opened once — and those are exactly the runs they
+   * care about. Refetching costs one Strava call, lazily, per run.
+   */
+  const cachedVersion = (cached?.analysis as { version?: number } | null)?.version ?? 0;
+  if (cached?.analysis && cachedVersion >= ANALYSIS_VERSION) {
     return NextResponse.json({ analysis: cached.analysis, cached: true });
   }
 
@@ -74,6 +82,35 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       if (bestEfforts.length > 0) analysis.bestEfforts = bestEfforts;
     } catch {
       // ignore — splits/HR drift still returned
+    }
+
+    /*
+     * Best efforts, recorded while we have the streams in hand.
+     *
+     * Computed here rather than on read because the streams are the expensive
+     * part — they cost a Strava call and we are rate limited. Storing the
+     * window per (run, distance) and ranking at read time means a later fix to
+     * the search can be replayed without re-fetching anything.
+     */
+    try {
+      const efforts = effortsInActivity(streams, run.distance_km).map(e => ({
+        run_id:      runId,
+        user_id:     user.id,
+        distance_m:  e.distanceM,
+        seconds:     e.seconds,
+        pace_sec_km: e.paceSecPerKm,
+        start_m:     e.startM,
+        end_m:       e.endM,
+        paused_sec:  e.pausedSec,
+        run_date:    run.date,
+      }));
+      if (efforts.length > 0) {
+        await admin.from("run_best_efforts").upsert(efforts, { onConflict: "run_id,distance_m" });
+      }
+    } catch (err) {
+      // A missing table (migration not applied yet) must not cost the athlete
+      // their splits.
+      console.error("[runs/streams] best efforts:", err);
     }
 
     // Cache (best-effort; don't fail the response if the write errors)

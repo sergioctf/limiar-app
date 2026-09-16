@@ -57,7 +57,7 @@ export function TargetRaceCard({ comparison: c }: Props) {
             <p className={`text-xl font-black tabular-nums leading-none ${
               c.daysUntil <= 7 ? "text-red-400" : c.daysUntil <= 30 ? "text-yellow-400" : "text-brand-300"
             }`}>{c.daysUntil}</p>
-            <p className="text-[10px] text-surface-600">{c.daysUntil === 1 ? "dia" : "dias"}</p>
+            <p className="text-[10px] text-surface-500">{c.daysUntil === 1 ? "dia" : "dias"}</p>
           </div>
         )}
       </div>
@@ -96,7 +96,7 @@ export function TargetRaceCard({ comparison: c }: Props) {
         </div>
       </div>
 
-      <div className="flex items-center gap-1 mt-3 text-[11px] text-surface-600">
+      <div className="flex items-center gap-1 mt-3 text-[11px] text-surface-500">
         <Flag className="w-3 h-3" />
         {c.distanceKm} km
         <ChevronRight className="w-3 h-3 ml-auto" />

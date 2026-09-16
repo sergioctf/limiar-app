@@ -66,7 +66,7 @@ function AddNoteForm({ onAdd }: { onAdd: (note: AthleteNote) => void }) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 text-xs text-surface-500 hover:text-brand-400 transition-colors py-1 px-2 rounded-lg hover:bg-surface-700/50"
+        className="flex items-center gap-1.5 text-xs text-surface-500 hover:text-brand-400 transition-colors min-h-[44px] py-1 px-2 rounded-lg hover:bg-surface-700/50"
       >
         <Plus className="w-3.5 h-3.5" />
         Adicionar nota
@@ -108,14 +108,14 @@ function AddNoteForm({ onAdd }: { onAdd: (note: AthleteNote) => void }) {
         <button
           type="button"
           onClick={() => { setOpen(false); setError(null); }}
-          className="text-xs text-surface-500 hover:text-surface-300 px-3 py-1.5 rounded-lg"
+          className="text-xs text-surface-500 hover:text-surface-300 px-3 min-h-[44px] py-1.5 rounded-lg"
         >
           Cancelar
         </button>
         <button
           type="submit"
           disabled={!content.trim() || saving}
-          className="btn-primary text-xs py-1.5 px-3"
+          className="btn-primary text-xs min-h-[44px] py-1.5 px-3"
         >
           {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Salvar"}
         </button>
@@ -193,7 +193,7 @@ export function AthleteProfileCard() {
           onClick={fetchNotes}
           disabled={loading}
           title="Atualizar"
-          className="text-surface-600 hover:text-surface-400 p-1.5 rounded-lg hover:bg-surface-700/50 transition-colors"
+          className="text-surface-500 hover:text-surface-400 p-1.5 rounded-lg hover:bg-surface-700/50 transition-colors"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
         </button>
@@ -225,9 +225,9 @@ export function AthleteProfileCard() {
 
       {!loading && !error && !hasAnyNotes && (
         <div className="card p-6 text-center space-y-2">
-          <User className="w-7 h-7 mx-auto text-surface-600 opacity-50" />
+          <User className="w-7 h-7 mx-auto text-surface-500 opacity-50" />
           <p className="text-sm text-surface-500">Nenhuma nota ainda</p>
-          <p className="text-xs text-surface-600 max-w-xs mx-auto">
+          <p className="text-xs text-surface-500 max-w-xs mx-auto">
             As notas são criadas automaticamente ao conversar com o treinador, ou você pode adicionar manualmente.
           </p>
         </div>
@@ -263,19 +263,19 @@ export function AthleteProfileCard() {
                       <p className="text-sm text-surface-300 leading-relaxed">{note.content}</p>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         {isAuto && (
-                          <span className="text-[10px] text-surface-600 flex items-center gap-0.5">
+                          <span className="text-[10px] text-surface-500 flex items-center gap-0.5">
                             <Brain className="w-2.5 h-2.5" /> Auto-detectado
                           </span>
                         )}
                         {isNew && (
-                          <span className="text-[9px] font-bold text-red-400 uppercase tracking-wide">Novo</span>
+                          <span className="text-[10px] font-bold text-red-400 uppercase tracking-wide">Novo</span>
                         )}
                       </div>
                     </div>
                     <button
                       onClick={() => handleDelete(note.id)}
                       title="Remover nota"
-                      className="shrink-0 text-surface-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all p-0.5 rounded mt-0.5"
+                      className="shrink-0 text-surface-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all p-0.5 rounded mt-0.5"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>

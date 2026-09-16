@@ -1,9 +1,13 @@
 /**
- * POST /api/goals    → create a new goal (e.g. from a smart-goal suggestion)
- * DELETE /api/goals?id=xxx → remove a goal
+ * POST   /api/goals             → create a new goal (e.g. from a smart-goal suggestion)
+ * PATCH  /api/goals { id, … }   → update a goal's status ("concluir", reabrir, cancelar)
+ * DELETE /api/goals?id=xxx      → remove a goal
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import type { GoalStatus } from "@/types";
+
+const VALID_STATUS: GoalStatus[] = ["upcoming", "active", "completed", "cancelled"];
 
 export async function POST(request: NextRequest) {
   const supabase = createClient();
@@ -47,6 +51,39 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ goal: data });
+}
+
+export async function PATCH(request: NextRequest) {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await request.json().catch(() => null);
+  const id = typeof body?.id === "string" ? body.id : null;
+  if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (typeof body?.status === "string" && VALID_STATUS.includes(body.status as GoalStatus)) {
+    patch.status = body.status;
+  }
+  if (typeof body?.notes === "string") patch.notes = body.notes;
+
+  if (Object.keys(patch).length === 1) {
+    return NextResponse.json({ error: "Nada para atualizar" }, { status: 400 });
+  }
+
+  const { error } = await supabase
+    .from("goals")
+    .update(patch)
+    .eq("id", id)
+    .eq("user_id", user.id);
+
+  if (error) {
+    console.error("[goals] patch error:", error);
+    return NextResponse.json({ error: "Failed to update goal" }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
 }
 
 export async function DELETE(request: NextRequest) {

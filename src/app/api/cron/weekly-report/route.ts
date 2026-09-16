@@ -6,7 +6,7 @@
  *   1. Gera resumo da SEMANA PASSADA com IA e salva em coach_reports
  *   2. Gera PLANO DA SEMANA ATUAL com IA (se ainda não existe) e salva em coach_reports
  *
- * Protegido por CRON_SECRET (Vercel injeta automaticamente) ou ?secret=limiar_admin_2026
+ * Protegido por CRON_SECRET (Vercel injeta o header automaticamente) ou ?secret=$CRON_SECRET
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -19,6 +19,7 @@ import { detectPatterns } from "@/lib/patterns";
 import { sendPushToUser } from "@/lib/push";
 import { adaptMacroPlanForUser } from "@/lib/macro-plan";
 import type { Run, Activity } from "@/types";
+import { authorizeCron } from "@/lib/cron-auth";
 
 // 5 minutes — enough for multiple users + AI calls
 export const maxDuration = 300;
@@ -342,15 +343,7 @@ async function processUser(
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
-  // Auth: accept Vercel CRON_SECRET or manual admin secret
-  const authHeader = request.headers.get("authorization");
-  const querySecret = request.nextUrl.searchParams.get("secret");
-  const cronSecret = process.env.CRON_SECRET;
-
-  const isVercelCron = cronSecret && authHeader === `Bearer ${cronSecret}`;
-  const isManual     = querySecret === "limiar_admin_2026";
-
-  if (!isVercelCron && !isManual) {
+  if (!authorizeCron(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

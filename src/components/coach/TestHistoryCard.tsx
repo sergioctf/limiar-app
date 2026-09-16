@@ -39,7 +39,7 @@ export function TestHistoryCard({ tests, onAddTest, onDelete }: Props) {
             </p>
           )}
         </div>
-        <button onClick={onAddTest} className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5">
+        <button onClick={onAddTest} className="btn-primary text-xs min-h-[44px] py-1.5 px-3 flex items-center gap-1.5">
           <Plus className="w-3.5 h-3.5" />
           Novo teste
         </button>
@@ -51,7 +51,7 @@ export function TestHistoryCard({ tests, onAddTest, onDelete }: Props) {
             <TrendingUp className="w-6 h-6 text-brand-400 opacity-50" />
           </div>
           <p className="text-sm text-surface-500">Nenhum teste registrado ainda</p>
-          <p className="text-xs text-surface-600 mt-1">
+          <p className="text-xs text-surface-500 mt-1">
             Registre seu primeiro teste de 3km para ver sua evolução
           </p>
         </div>
@@ -129,7 +129,7 @@ export function TestHistoryCard({ tests, onAddTest, onDelete }: Props) {
                   </div>
                   <button
                     onClick={() => onDelete(test.id)}
-                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/20 text-surface-600 hover:text-red-400 transition-colors shrink-0"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/20 text-surface-500 hover:text-red-400 transition-colors shrink-0"
                     aria-label="Excluir teste"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

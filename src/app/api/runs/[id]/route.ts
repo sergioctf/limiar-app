@@ -16,7 +16,11 @@ export async function PATCH(
   const body = await request.json();
 
   // Only allow patching safe fields
-  const allowed = ["notes", "perceived_effort", "conditions", "hydration", "gel_usage", "name", "type"];
+  // `shoe_id` is here so mileage can accrue: without a way to say which pair a
+  // run was done in, every shoe stays at whatever it was registered with and
+  // the replacement warning never fires. Null is a legitimate value — it means
+  // "I don't remember" — so the `in body` test below has to keep accepting it.
+  const allowed = ["notes", "perceived_effort", "conditions", "hydration", "gel_usage", "name", "type", "shoe_id"];
   const patch: Record<string, unknown> = {};
   for (const key of allowed) {
     if (key in body) patch[key] = body[key];

@@ -1,6 +1,12 @@
 "use client";
 
-import { BarChart3, Loader2, Heart, Mountain, TrendingDown, Crown, ChevronDown, Trophy } from "lucide-react";
+import { BarChart3, Loader2, Heart, Mountain, TrendingDown, Crown, ChevronDown, Trophy, PauseCircle } from "lucide-react";
+
+/** "8min12s" / "45s" — short enough to sit under a heading. */
+function formatPaused(sec: number): string {
+  const s = Math.round(sec);
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}min${String(s % 60).padStart(2, "0")}s`;
+}
 import { secondsToPaceString, secondsToReadable } from "@/lib/utils";
 import type { RunStreamAnalysis, KmSplit } from "@/lib/run-streams";
 
@@ -26,6 +32,14 @@ export function RunSplits({ hasStrava, analysis, loading, loaded, reason, onLoad
   const splits = analysis?.splits ?? [];
   const maxPace = splits.length > 0 ? Math.max(...splits.map(s => s.paceSecPerKm)) : 1;
   const minPace = splits.length > 0 ? Math.min(...splits.map(s => s.paceSecPerKm)) : 1;
+
+  /*
+   * Every pace on this card is computed over moving time, which is the honest
+   * answer to "how fast were you running". But an athlete who paused for eight
+   * minutes deserves to know the wall clock disagrees — otherwise the card
+   * quietly contradicts the total duration shown elsewhere on the page.
+   */
+  const totalPaused = splits.reduce((acc, s) => acc + (s.pausedSec ?? 0), 0);
   const range = Math.max(maxPace - minPace, 1);
 
   return (
@@ -33,7 +47,14 @@ export function RunSplits({ hasStrava, analysis, loading, loaded, reason, onLoad
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <BarChart3 className="w-4 h-4 text-brand-400" />
-          <h2 className="section-title">Splits por km</h2>
+          <div>
+            <h2 className="section-title">Splits por km</h2>
+            {totalPaused >= 30 && (
+              <p className="text-[11px] text-surface-500">
+                ritmo por tempo em movimento · {formatPaused(totalPaused)} parado
+              </p>
+            )}
+          </div>
         </div>
         {!loaded && (
           <button onClick={onLoad} disabled={loading} className="btn-ghost text-xs text-brand-400 hover:text-brand-300">
@@ -94,7 +115,15 @@ export function RunSplits({ hasStrava, analysis, loading, loaded, reason, onLoad
                       <span className="flex items-center gap-2 text-surface-300">
                         {s.avgHr != null && <span className="flex items-center gap-0.5"><Heart className="w-3 h-3 text-red-400" />{s.avgHr}</span>}
                         {s.elevGainM != null && s.elevGainM > 2 && <span className="flex items-center gap-0.5 text-surface-500"><Mountain className="w-3 h-3" />{s.elevGainM}m</span>}
-                        {s.distanceKm < 0.95 && <span className="text-surface-600">{s.distanceKm.toFixed(2)}km</span>}
+                        {s.pausedSec >= 15 && (
+                          /* The pace beside it is moving-time pace, so without
+                             this the athlete has no way to tell a genuinely
+                             slow kilometre from one they stopped inside. */
+                          <span className="flex items-center gap-0.5 text-surface-500" title="tempo parado neste km">
+                            <PauseCircle className="w-3 h-3" />{Math.round(s.pausedSec)}s
+                          </span>
+                        )}
+                        {s.distanceKm < 0.95 && <span className="text-surface-500">{s.distanceKm.toFixed(2)}km</span>}
                       </span>
                     </div>
                   </div>
@@ -123,7 +152,7 @@ export function RunSplits({ hasStrava, analysis, loading, loaded, reason, onLoad
                       {e.prRank === 1 && <Crown className="w-2.5 h-2.5 text-yellow-300" />}{e.name}
                     </p>
                     <p className="font-mono font-bold text-sm text-surface-100 tabular-nums">{secondsToReadable(e.elapsedSec)}</p>
-                    <p className="text-[9px] text-surface-500">{secondsToPaceString(e.paceSecPerKm)}/km</p>
+                    <p className="text-[10px] text-surface-500">{secondsToPaceString(e.paceSecPerKm)}/km</p>
                   </div>
                 ))}
               </div>

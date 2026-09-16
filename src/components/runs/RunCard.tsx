@@ -44,7 +44,7 @@ export function RunCard({ run }: Props) {
           {formatDistanceKm(run.distance_km)}
         </span>
         <span className="flex items-center gap-1.5 text-sm text-surface-400 tabular-nums">
-          <Clock className="w-3.5 h-3.5 text-surface-600" />
+          <Clock className="w-3.5 h-3.5 text-surface-500" />
           {secondsToReadable(run.duration_seconds)}
         </span>
         {run.avg_pace_seconds_per_km && (

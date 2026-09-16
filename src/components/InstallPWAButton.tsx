@@ -96,7 +96,7 @@ export function InstallPWAButton() {
         </button>
 
         {showIOSGuide && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm overlay-safe">
             <div className="card w-full max-w-sm p-5 space-y-4 relative">
               <button
                 onClick={() => setShowIOSGuide(false)}
@@ -141,7 +141,7 @@ export function InstallPWAButton() {
                 </li>
               </ol>
 
-              <p className="text-xs text-surface-600 text-center pt-1">
+              <p className="text-xs text-surface-500 text-center pt-1">
                 Funciona apenas no Safari — não no Chrome do iPhone
               </p>
 

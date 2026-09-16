@@ -1,13 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Flame, Wind, Snowflake, Repeat2, Watch, Loader2, Check, Footprints } from "lucide-react";
+import { Flame, Wind, Snowflake, Repeat2, Watch, Loader2, Check, Footprints, Heart, AlertCircle } from "lucide-react";
 import { isRepeatBlock } from "@/types";
+import { expandToKmSplits } from "@/lib/workout-builder";
+import type { SportKey } from "@/lib/sports";
 import type { StructuredWorkout, WorkoutStep, WorkoutStepKind } from "@/types";
 
 interface Props {
   structure: StructuredWorkout;
   label: string;       // workout name, e.g. "Tiro 800m"
+  /** Drives the sport recorded in the .FIT file and which target type it uses. */
+  sport?: SportKey;
 }
 
 const KIND_UI: Record<WorkoutStepKind, { icon: React.ReactNode; label: string; color: string; bar: string }> = {
@@ -26,21 +30,169 @@ function stepAmount(s: WorkoutStep): string {
 function StepRow({ step, indent = false }: { step: WorkoutStep; indent?: boolean }) {
   const ui = KIND_UI[step.kind] ?? KIND_UI.run;
   return (
-    <div className={`flex items-center gap-2.5 py-1.5 ${indent ? "pl-6" : ""}`}>
+    <div className={`flex items-start gap-2.5 py-1.5 ${indent ? "pl-6" : ""}`}>
       <span className={`w-1 self-stretch rounded-full ${ui.bar} shrink-0`} />
-      <span className={`${ui.color} shrink-0`}>{ui.icon}</span>
-      <span className="font-mono font-bold text-xs text-surface-200 tabular-nums w-14 shrink-0">{stepAmount(step)}</span>
-      <span className="text-xs text-surface-400 flex-1 min-w-0 truncate">
-        {ui.label}{step.pace ? ` · ${step.pace}` : ""}{step.note ? ` — ${step.note}` : ""}
+      <span className={`${ui.color} shrink-0 mt-0.5`}>{ui.icon}</span>
+      <span className="font-mono font-bold text-xs text-surface-200 tabular-nums w-14 shrink-0 mt-0.5">
+        {stepAmount(step)}
       </span>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-surface-300">
+          {segmentLabel(step.kind, step.intensity)}
+          {step.pace && <span className="font-mono text-surface-200"> · {step.pace}</span>}
+          {step.hr && (
+            <span className="text-surface-400">
+              {" · "}<Heart className="w-3 h-3 inline -mt-0.5 text-red-400" />{" "}
+              <span className="font-mono">{step.hr.min}–{step.hr.max}</span>
+              <span className="text-[10px] text-surface-500"> {step.hr.zone}</span>
+            </span>
+          )}
+        </p>
+        {step.note && <p className="text-[10px] text-surface-500 leading-snug mt-0.5">{step.note}</p>}
+      </div>
     </div>
   );
 }
 
-export function WorkoutStepsView({ structure, label }: Props) {
+/** What each Daniels intensity means, in plain words. */
+const INTENSITY_INFO: Record<string, { name: string; feel: string }> = {
+  E: { name: "Fácil",     feel: "dá pra conversar frases inteiras" },
+  M: { name: "Maratona",  feel: "confortável mas exigente" },
+  T: { name: "Limiar",    feel: "forte e controlado, ~1h de prova" },
+  I: { name: "VO₂max",    feel: "muito forte, ~10-12 min de prova" },
+  R: { name: "Velocidade", feel: "quase máximo, tiros curtos" },
+};
+
+/**
+ * Label for a segment. Warm-up/recovery/cool-down speak for themselves; a plain
+ * "run" takes its name from the intensity — calling an easy jog "Forte" because
+ * the step kind is `run` is just wrong.
+ */
+function segmentLabel(kind: WorkoutStepKind, intensity?: string): string {
+  if (kind === "warmup")   return "Aquecimento";
+  if (kind === "cooldown") return "Desaquecimento";
+  if (kind === "recovery") return "Trote de recuperação";
+  switch (intensity) {
+    case "E": return "Rodagem";
+    case "M": return "Ritmo de prova";
+    case "T": return "Limiar";
+    case "I": return "Tiro forte";
+    case "R": return "Velocidade";
+    default:  return "Corrida";
+  }
+}
+
+/**
+ * Kilometre-by-kilometre table. Each row says what that km is for (warm-up,
+ * hard, recovery, cool-down), the target pace range and the ideal heart-rate
+ * window — the numbers you actually look at mid-workout.
+ */
+function KmTable({ structure }: { structure: StructuredWorkout }) {
+  const splits = expandToKmSplits(structure);
+  if (splits.length === 0) {
+    return <p className="text-xs text-surface-500 py-2">Sem distância definida para detalhar por km.</p>;
+  }
+
+  const hasPace = splits.some(s => s.paceLabel && s.paceLabel !== "—");
+  const hasHr   = splits.some(s => s.hr);
+  const usedIntensities = Array.from(
+    new Set(splits.map(s => s.intensity).filter(Boolean) as string[]),
+  );
+
+  return (
+    <div className="space-y-2">
+      {/* Paces and heart-rate ranges come from the 3 km test only — never
+          estimated, so the athlete can always trust the numbers on screen. */}
+      {(!hasPace || !hasHr) && (
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-2.5 flex items-start gap-2">
+          <AlertCircle className="w-3.5 h-3.5 text-yellow-400 shrink-0 mt-0.5" />
+          <div className="text-[11px] text-surface-300 leading-relaxed">
+            {!hasPace ? (
+              <>
+                <strong>Ritmos e FC liberados após o teste de 3 km.</strong>{" "}
+                Preferimos não estimar: um número chutado parece tão confiável quanto um
+                medido, e você não teria como saber a diferença. Faça o teste em
+                <span className="text-surface-200"> Treinador → Testes 3km</span> e regenere o plano.
+              </>
+            ) : (
+              <>
+                <strong>Faltam as faixas de FC.</strong>{" "}
+                Seu teste de 3 km não tem frequência cardíaca média registrada —
+                adicione-a no teste e regenere o plano para desbloquear as zonas.
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-1 max-h-80 overflow-y-auto">
+        {splits.map(s => {
+          const ui = KIND_UI[s.kind] ?? KIND_UI.run;
+          const info = s.intensity ? INTENSITY_INFO[s.intensity] : undefined;
+          return (
+            <div key={s.km} className="flex gap-2.5 py-1.5 border-b border-surface-700/40 last:border-0">
+              <span className={`w-1 self-stretch rounded-full ${ui.bar} shrink-0`} />
+              <span className="font-mono font-bold text-xs text-surface-300 tabular-nums w-11 shrink-0 pt-0.5">
+                km {s.km}
+              </span>
+
+              <div className="flex-1 min-w-0">
+                {/* What this km is for */}
+                <p className={`text-[11px] font-semibold ${ui.color}`}>
+                  {segmentLabel(s.kind, s.intensity)}
+                  {info && <span className="text-surface-500 font-normal"> · {info.name}</span>}
+                </p>
+
+                {/* The numbers */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
+                  <span className="font-mono text-xs text-surface-100">
+                    {s.paceLabel && s.paceLabel !== "—" ? s.paceLabel : "ritmo —"}
+                  </span>
+                  {s.hr ? (
+                    <span className="font-mono text-[11px] text-surface-300 flex items-center gap-1">
+                      <Heart className="w-3 h-3 text-red-400" />
+                      {s.hr.min}–{s.hr.max} bpm
+                      <span className="text-[10px] text-surface-500">{s.hr.zone}</span>
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-surface-500">FC —</span>
+                  )}
+                </div>
+
+                {(s.note || info) && (
+                  <p className="text-[10px] text-surface-500 leading-snug mt-0.5">
+                    {s.note ?? info?.feel}
+                  </p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend — so E / I / T aren't cryptic */}
+      {usedIntensities.length > 0 && (
+        <div className="pt-2 border-t border-surface-700/50">
+          <p className="text-[10px] uppercase tracking-wide text-surface-500 mb-1">Intensidades neste treino</p>
+          <div className="space-y-0.5">
+            {usedIntensities.map(i => (
+              <p key={i} className="text-[10px] text-surface-500">
+                <span className="font-bold text-surface-400">{i}</span> = {INTENSITY_INFO[i]?.name}
+                {INTENSITY_INFO[i] && <span className="text-surface-500"> — {INTENSITY_INFO[i].feel}</span>}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function WorkoutStepsView({ structure, label, sport = "corrida" }: Props) {
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<"steps" | "km">("steps");
 
   if (!structure?.blocks?.length) return null;
 
@@ -50,7 +202,7 @@ export function WorkoutStepsView({ structure, label }: Props) {
       const res = await fetch("/api/workouts/export", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label, structure }),
+        body: JSON.stringify({ label, structure, sport }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -74,23 +226,40 @@ export function WorkoutStepsView({ structure, label }: Props) {
 
   return (
     <div className="bg-surface-800/60 border border-surface-700 rounded-xl p-3 mt-1">
-      <p className="text-[10px] text-surface-500 uppercase tracking-wide mb-1.5">Estrutura do treino</p>
-
-      <div className="space-y-0.5">
-        {structure.blocks.map((block, i) =>
-          isRepeatBlock(block) ? (
-            <div key={i} className="rounded-lg bg-surface-700/30 py-1 my-1">
-              <div className="flex items-center gap-1.5 pl-2 py-0.5">
-                <Repeat2 className="w-3.5 h-3.5 text-yellow-400" />
-                <span className="text-xs font-bold text-yellow-300">{block.repeat}×</span>
-              </div>
-              {block.steps.map((s, j) => <StepRow key={j} step={s} indent />)}
-            </div>
-          ) : (
-            <StepRow key={i} step={block} />
-          )
-        )}
+      {/* View switcher */}
+      <div className="flex gap-1 bg-surface-700/50 rounded-lg p-0.5 mb-2">
+        {([["steps", "Estrutura"], ["km", "Km a km"]] as const).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setView(key)}
+            className={`flex-1 min-h-[44px] py-1 rounded-md text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+              view === key ? "bg-surface-600 text-surface-100" : "text-surface-500 hover:text-surface-300"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
+
+      {view === "steps" ? (
+        <div className="space-y-0.5">
+          {structure.blocks.map((block, i) =>
+            isRepeatBlock(block) ? (
+              <div key={i} className="rounded-lg bg-surface-700/30 py-1 my-1">
+                <div className="flex items-center gap-1.5 pl-2 py-0.5">
+                  <Repeat2 className="w-3.5 h-3.5 text-yellow-400" />
+                  <span className="text-xs font-bold text-yellow-300">{block.repeat}×</span>
+                </div>
+                {block.steps.map((s, j) => <StepRow key={j} step={s} indent />)}
+              </div>
+            ) : (
+              <StepRow key={i} step={block} />
+            )
+          )}
+        </div>
+      ) : (
+        <KmTable structure={structure} />
+      )}
 
       <button
         onClick={exportFit}
@@ -102,7 +271,7 @@ export function WorkoutStepsView({ structure, label }: Props) {
           : <><Watch className="w-3.5 h-3.5" /> Enviar pro relógio (.FIT)</>}
       </button>
       {error && <p className="text-[10px] text-red-400 mt-1">{error}</p>}
-      <p className="text-[9px] text-surface-600 mt-1.5 leading-relaxed">
+      <p className="text-[10px] text-surface-500 mt-1.5 leading-relaxed">
         Garmin: importe em Connect → Treinos. Coros/Zepp: importe no app. O relógio te guia passo a passo com alertas de ritmo.
       </p>
     </div>

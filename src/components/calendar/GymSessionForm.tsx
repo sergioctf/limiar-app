@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { X, Plus, Trash2, Dumbbell, Loader2 } from "lucide-react";
 import { GymExercise } from "@/types";
+import { toSportKey } from "@/lib/sports";
+import { primarySportMetric } from "@/lib/sport-metrics";
+import { localDateStr } from "@/lib/week";
 
 const SPORT_OPTIONS = [
   { value: "WeightTraining", label: "Musculação" },
@@ -36,8 +39,9 @@ export function GymSessionForm({ defaultDate, onClose, onSaved }: Props) {
 
   const [name,       setName]       = useState("Treino");
   const [sportType,  setSportType]  = useState("WeightTraining");
-  const [date,       setDate]       = useState(defaultDate ?? new Date().toISOString().slice(0, 10));
+  const [date,       setDate]       = useState(defaultDate ?? localDateStr());
   const [duration,   setDuration]   = useState("");      // minutes
+  const [distance,   setDistance]   = useState("");      // km (bike) or m (swim)
   const [calories,   setCalories]   = useState("");
   const [hr,         setHr]         = useState("");
   const [notes,      setNotes]      = useState("");
@@ -76,6 +80,7 @@ export function GymSessionForm({ defaultDate, onClose, onSaved }: Props) {
           sport_type:       sportType,
           date,
           duration_seconds: duration ? parseInt(duration) * 60 : null,
+          distance_m:       distanceMeters,
           calories:         calories ? parseInt(calories) : null,
           avg_hr:           hr ? parseInt(hr) : null,
           notes:            notes || null,
@@ -98,9 +103,27 @@ export function GymSessionForm({ defaultDate, onClose, onSaved }: Props) {
   }
 
   const isGym = sportType === "WeightTraining" || sportType === "Workout" || sportType === "Crossfit";
+  const sportKey = toSportKey(sportType);
+  // Bike/swim are measured by distance — without it there's no speed or pace.
+  const isDistanceSport = sportKey === "ciclismo" || sportKey === "natacao";
+  const distanceUnit = sportKey === "natacao" ? "m" : "km";
+
+  const distanceMeters = distance
+    ? sportKey === "natacao"
+      ? Math.round(Number(distance.replace(",", ".")))
+      : Math.round(Number(distance.replace(",", ".")) * 1000)
+    : null;
+
+  const previewMetric = isDistanceSport && distanceMeters && duration
+    ? primarySportMetric({
+        sport_type: sportType,
+        distance_m: distanceMeters,
+        duration_seconds: parseInt(duration) * 60,
+      })
+    : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center overlay-safe bg-black/60 backdrop-blur-sm">
       <form
         onSubmit={handleSubmit}
         className="bg-surface-800 border border-surface-700 rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col"
@@ -178,6 +201,29 @@ export function GymSessionForm({ defaultDate, onClose, onSaved }: Props) {
             </div>
           </div>
 
+          {/* Distance — only for sports measured by it (bike/swim) */}
+          {isDistanceSport && (
+            <div>
+              <label className="block text-xs text-surface-400 mb-1.5">
+                Distância ({distanceUnit})
+              </label>
+              <input
+                type="number"
+                step={sportKey === "natacao" ? "25" : "0.1"}
+                min="0"
+                value={distance}
+                onChange={e => setDistance(e.target.value)}
+                placeholder={sportKey === "natacao" ? "1500" : "40"}
+                className="w-full bg-surface-750 border border-surface-600 rounded-lg px-3 py-2 text-sm text-surface-100 placeholder-surface-600 focus:outline-none focus:border-brand-500"
+              />
+              {previewMetric && (
+                <p className="text-[11px] text-brand-400 mt-1.5">
+                  {previewMetric.label}: <span className="font-semibold">{previewMetric.value}</span>
+                </p>
+              )}
+            </div>
+          )}
+
           {/* HR + Notes */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -224,7 +270,7 @@ export function GymSessionForm({ defaultDate, onClose, onSaved }: Props) {
                       key={ex}
                       type="button"
                       onClick={() => addExercise(ex)}
-                      className="text-[11px] bg-surface-700 hover:bg-surface-600 text-surface-300 px-2 py-1 rounded-md transition-colors"
+                      className="text-[11px] bg-surface-700 hover:bg-surface-600 text-surface-300 px-2 min-h-[44px] py-1 rounded-md transition-colors"
                     >
                       {ex}
                     </button>
@@ -249,7 +295,7 @@ export function GymSessionForm({ defaultDate, onClose, onSaved }: Props) {
                       min="1"
                       className="w-14 bg-transparent text-sm text-surface-300 placeholder-surface-600 text-center focus:outline-none"
                     />
-                    <span className="text-surface-600 text-xs">×</span>
+                    <span className="text-surface-500 text-xs">×</span>
                     <input
                       type="number"
                       value={ex.reps ?? ""}
@@ -258,7 +304,7 @@ export function GymSessionForm({ defaultDate, onClose, onSaved }: Props) {
                       min="1"
                       className="w-12 bg-transparent text-sm text-surface-300 placeholder-surface-600 text-center focus:outline-none"
                     />
-                    <span className="text-surface-600 text-xs">@</span>
+                    <span className="text-surface-500 text-xs">@</span>
                     <input
                       type="number"
                       value={ex.weight_kg ?? ""}
@@ -271,7 +317,7 @@ export function GymSessionForm({ defaultDate, onClose, onSaved }: Props) {
                     <button
                       type="button"
                       onClick={() => removeExercise(i)}
-                      className="p-1 text-surface-600 hover:text-red-400 transition-colors"
+                      className="p-1 text-surface-500 hover:text-red-400 transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>

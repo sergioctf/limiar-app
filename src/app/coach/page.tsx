@@ -1,3 +1,4 @@
+import { localDateStr } from "@/lib/week";
 import { redirect } from "next/navigation";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { AppShell }     from "@/components/layout/AppShell";
@@ -37,7 +38,7 @@ export default async function CoachPage() {
   // Last 13 weeks of runs/activities — adherence uses ~5, efficiency uses 12
   const windowStart = new Date();
   windowStart.setDate(windowStart.getDate() - 91);
-  const sinceStr = windowStart.toISOString().slice(0, 10);
+  const sinceStr = localDateStr(windowStart);
 
   const [{ data: reports }, { data: cycles }, tests, { data: recentRuns }, { data: recentActivities }] = await Promise.all([
     admin
@@ -53,7 +54,7 @@ export default async function CoachPage() {
     fetchTests(),
     admin
       .from("runs")
-      .select("date, distance_km, duration_seconds, avg_pace_seconds_per_km, avg_hr, type")
+      .select("date, distance_km, duration_seconds, moving_time_seconds, elapsed_time_seconds, avg_pace_seconds_per_km, avg_hr, type")
       .eq("user_id", user.id)
       .gte("date", sinceStr)
       .is("deleted_at", null),
@@ -88,7 +89,7 @@ export default async function CoachPage() {
   for (const r of runRows) {
     const d = new Date(`${r.date}T12:00:00`);
     d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-    const mon = d.toISOString().slice(0, 10);
+    const mon = localDateStr(d);
     weeklyActualKm[mon] = (weeklyActualKm[mon] ?? 0) + r.distance_km;
   }
 

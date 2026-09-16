@@ -12,6 +12,8 @@
  */
 
 import type { Run } from "@/types";
+import { localDateStr } from "@/lib/week";
+import { movingSeconds } from "@/lib/run-time";
 
 // Intensity Factor by run type (fraction of threshold effort)
 const TYPE_IF: Record<string, number> = {
@@ -32,7 +34,14 @@ export function estimateTSS(
   lthr?: number | null,
   thresholdPaceSecKm?: number | null,
 ): number {
-  const durationHours = run.duration_seconds / 3600;
+  /*
+   * Moving time. The intensity factors below are derived from avg_hr and
+   * avg_pace, both of which Strava computes over moving time — multiplying
+   * them by elapsed hours mixed two clocks and inflated TSS by whatever the
+   * athlete spent standing still. That error compounds: TSS feeds CTL, ATL
+   * and TSB, so a week of red lights read as a week of training.
+   */
+  const durationHours = movingSeconds(run) / 3600;
   if (durationHours <= 0) return 0;
 
   // HR-based (most accurate when we have LTHR)
@@ -84,24 +93,28 @@ export function computeTrainingLoad(
     tssMap[run.date] = (tssMap[run.date] ?? 0) + tss;
   }
 
-  // Window we want to return
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const windowStart = new Date(today);
-  windowStart.setDate(today.getDate() - daysBack + 1);
+  // Everything below walks calendar dates in UTC.
+  //
+  // Mixing local-midnight dates with `new Date("2026-07-01")` — which parses as
+  // UTC midnight — put the cursor three hours off in Brazil, and the window
+  // came back one day short: asking for 90 days returned 89.
+  const todayUtc = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+  const windowStart = new Date(todayUtc);
+  windowStart.setUTCDate(windowStart.getUTCDate() - daysBack + 1);
 
-  // Pre-warm start: earliest run or 6 months before window, whichever is earlier
-  const allDates  = Object.keys(tssMap).sort();
-  const earliest  = allDates[0] ? new Date(allDates[0]) : windowStart;
+  // Pre-warm start: earliest run or the window start, whichever is earlier,
+  // then 42 more days so CTL is warm by the time the window opens.
+  const allDates = Object.keys(tssMap).sort();
+  const earliest = allDates[0] ? new Date(`${allDates[0]}T00:00:00Z`) : windowStart;
   const prewarmStart = new Date(Math.min(earliest.getTime(), windowStart.getTime()));
-  prewarmStart.setDate(prewarmStart.getDate() - 42); // extra 42 days to warm CTL
+  prewarmStart.setUTCDate(prewarmStart.getUTCDate() - 42);
 
   let ctl = 0;
   let atl = 0;
   const result: DailyLoad[] = [];
 
   const current = new Date(prewarmStart);
-  while (current <= today) {
+  while (current <= todayUtc) {
     const dateStr = current.toISOString().slice(0, 10);
     const tss = tssMap[dateStr] ?? 0;
 
@@ -110,16 +123,20 @@ export function computeTrainingLoad(
     atl = atl + K_ATL * (tss - atl);
 
     if (current >= windowStart) {
+      // TSB is derived from the rounded values so the three numbers on screen
+      // actually subtract: a chart showing 47.4 − 83.9 = −36.6 reads as broken.
+      const ctlR = Math.round(ctl * 10) / 10;
+      const atlR = Math.round(atl * 10) / 10;
       result.push({
         date: dateStr,
         tss:  Math.round(tss * 10) / 10,
-        ctl:  Math.round(ctl * 10) / 10,
-        atl:  Math.round(atl * 10) / 10,
-        tsb:  Math.round((ctl - atl) * 10) / 10,
+        ctl:  ctlR,
+        atl:  atlR,
+        tsb:  Math.round((ctlR - atlR) * 10) / 10,
       });
     }
 
-    current.setDate(current.getDate() + 1);
+    current.setUTCDate(current.getUTCDate() + 1);
   }
 
   return result;
@@ -148,13 +165,13 @@ export function computeRunStreak(runs: Run[]): number {
   const current = new Date(today);
 
   // If no run today, check if there was one yesterday (don't break streak for in-progress days)
-  const todayStr = today.toISOString().slice(0, 10);
+  const todayStr = localDateStr(today);
   if (!runDates.has(todayStr)) {
     current.setDate(current.getDate() - 1);
   }
 
   while (true) {
-    const dateStr = current.toISOString().slice(0, 10);
+    const dateStr = localDateStr(current);
     if (!runDates.has(dateStr)) break;
     streak++;
     current.setDate(current.getDate() - 1);
@@ -179,8 +196,12 @@ export function weeklyVolumeProgress(
 
   const lastMonday = new Date(thisMonday);
   lastMonday.setDate(thisMonday.getDate() - 7);
-  const thisMondayStr = thisMonday.toISOString().slice(0, 10);
-  const lastMondayStr = lastMonday.toISOString().slice(0, 10);
+  // Local fields in, local fields out. These happened to be correct in Brazil —
+  // local midnight is 03:00 UTC the same day — and would silently shift by a day
+  // anywhere east of Greenwich. Same class of defect as getMondayOf, which did
+  // break, so it goes the same way rather than waiting its turn.
+  const thisMondayStr = localDateStr(thisMonday);
+  const lastMondayStr = localDateStr(lastMonday);
 
   const thisWeek = runs
     .filter(r => r.date >= thisMondayStr)

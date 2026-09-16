@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { ChevronRight, ChevronLeft, X, Link2, Rocket } from "lucide-react";
 import { LimiarMark } from "@/components/LimiarMark";
 
-const STORAGE_KEY = "limiar_onboarded";
+/** Exported so the settings button clears the same key the tour writes. */
+export const TOUR_STORAGE_KEY = "limiar_onboarded";
+const STORAGE_KEY = TOUR_STORAGE_KEY;
 
 interface TourStep {
   icon: string;
@@ -18,37 +20,43 @@ const STEPS: TourStep[] = [
   {
     icon: "👋",
     title: "Bem-vindo ao Limiar",
-    description: "Seu treinador de corrida com inteligência artificial. Em 30 segundos te mostramos o essencial.",
+    description: "Seu treinador de corrida, musculação, natação e ciclismo. Em 30 segundos te mostramos o essencial.",
     glow: "shadow-brand-500/40",
   },
   {
-    icon: "🔗",
-    title: "Conecte seu Strava",
-    description: "Suas corridas importam sozinhas — pace, frequência cardíaca, GPS e elevação. Sem Strava? Registre treinos manualmente.",
-    glow: "shadow-orange-500/40",
-  },
-  {
-    icon: "🧠",
-    title: "Treinador IA",
-    description: "Plano semanal personalizado, análise automática de cada treino e relatórios que mostram sua evolução.",
+    icon: "📋",
+    title: "Um plano que é seu",
+    description: "Você escolhe em quais dias treina — 2, 3 ou 6 vezes na semana. O plano se molda à sua rotina, não o contrário.",
     glow: "shadow-purple-500/40",
   },
   {
     icon: "🎯",
-    title: "Metas e provas",
-    description: "Cadastre sua próxima prova e veja exatamente quanto falta entre sua forma atual e o objetivo.",
+    title: "Treino detalhado km a km",
+    description: "Cada treino traz ritmo-alvo e faixa de frequência cardíaca por quilômetro, calculados a partir do seu condicionamento. Dá para mandar direto pro relógio.",
+    glow: "shadow-orange-500/40",
+  },
+  {
+    icon: "🧪",
+    title: "Teste de 3 km",
+    description: "É ele que define seus ritmos e zonas com precisão. Sem teste, o app estima pelas suas corridas — funciona, mas o teste afina tudo.",
+    glow: "shadow-pink-500/40",
+  },
+  {
+    icon: "🏁",
+    title: "Provas e estratégia",
+    description: "Cadastre sua prova e receba um plano até lá, mais a estratégia de ritmo, hidratação e géis — atualizada sozinha na reta final.",
     glow: "shadow-green-500/40",
   },
   {
     icon: "🏆",
-    title: "Conquistas e amigos",
-    description: "Desbloqueie 21 badges, dispute o desafio semanal de km e mande 🔥 nas corridas dos seus amigos.",
+    title: "Amigos e desafios",
+    description: "Dispute quem treina mais dias no mês — vale corrida, musculação, bike e natação — e mande 🔥 nos treinos da galera.",
     glow: "shadow-yellow-500/40",
   },
   {
     icon: "🔔",
     title: "Treino na hora certa",
-    description: "Receba o treino do dia às 5:30 e a prévia de amanhã às 22:00, direto no celular. Ative em Configurações.",
+    description: "Receba o treino do dia às 5:30 e a prévia de amanhã às 22:00, além de alertas de overtraining. Ative em Configurações.",
     glow: "shadow-blue-500/40",
   },
 ];
@@ -86,7 +94,7 @@ export function OnboardingTour({ enabled = false }: Props) {
 
   return (
     <div
-      className={`fixed inset-0 z-[90] flex items-center justify-center p-5 transition-opacity duration-300 ${
+      className={`fixed inset-0 z-[90] flex items-center justify-center overlay-safe transition-opacity duration-300 ${
         leaving ? "opacity-0" : "opacity-100"
       }`}
     >
@@ -98,7 +106,7 @@ export function OnboardingTour({ enabled = false }: Props) {
         {/* Skip */}
         <button
           onClick={() => finish()}
-          className="absolute -top-2 right-0 z-10 flex items-center gap-1 text-xs text-surface-500 hover:text-surface-300 px-2 py-1 transition-colors"
+          className="absolute -top-2 right-0 z-10 flex items-center gap-1 text-xs text-surface-500 hover:text-surface-300 px-2 min-h-[44px] py-1 transition-colors"
         >
           Pular <X className="w-3.5 h-3.5" />
         </button>
@@ -176,7 +184,7 @@ export function OnboardingTour({ enabled = false }: Props) {
           )}
         </div>
 
-        <p className="text-center text-[10px] text-surface-600 mt-3 tracking-widest uppercase">
+        <p className="text-center text-[10px] text-surface-500 mt-3 tracking-widest uppercase">
           {step + 1} de {STEPS.length}
         </p>
       </div>

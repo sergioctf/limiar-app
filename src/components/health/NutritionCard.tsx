@@ -18,6 +18,12 @@ export interface NutritionSummary {
   tdee?: number;
   target?: number;
   macros?: Macros;
+  /** Where the basal number came from — the watch's reading or the formula. */
+  bmrSource?: "watch" | "formula";
+  activeKcal?: number;
+  activeSource?: "watch" | "estimate";
+  /** What the watch believes the athlete weighs — shown to confirm, never used unconfirmed. */
+  watchWeightKg?: number | null;
 }
 
 const GOAL_LABEL: Record<CalorieGoal, string> = { maintain: "Manter", cut: "Perder gordura", gain: "Ganhar massa" };
@@ -119,10 +125,25 @@ export function NutritionCard({ data }: { data: NutritionSummary }) {
         <>
           {/* Calorie summary */}
           <div className="grid grid-cols-3 gap-2">
-            <Stat label="Metab. basal" value={`${data.bmr}`} unit="kcal" />
-            <Stat label="Gasto treino" value={`${Math.round(data.trainingKcal)}`} unit="kcal" accent />
+            <Stat label="Metab. basal" value={`${data.bmr}`} unit={data.bmrSource === "watch" ? "kcal · relógio" : "kcal"} />
+            {data.activeSource === "watch" ? (
+              <Stat label="Gasto ativo" value={`${data.activeKcal}`} unit="kcal · relógio" accent />
+            ) : (
+              <Stat label="Gasto treino" value={`${Math.round(data.trainingKcal)}`} unit="kcal" accent />
+            )}
             <Stat label="Meta do dia" value={`${data.target}`} unit="kcal" big />
           </div>
+          {/*
+            Say which numbers are measured. A target that quietly changes source
+            reads as the app changing its mind; one that names its source reads
+            as it learning.
+          */}
+          {(data.bmrSource === "watch" || data.activeSource === "watch") && (
+            <p className="text-[11px] text-surface-500 -mt-1">
+              Medido pelo seu relógio via Apple Saúde
+              {data.activeSource !== "watch" && " — o gasto ativo entra quando passar da estimativa do dia"}.
+            </p>
+          )}
 
           {/* Macros */}
           {data.macros && (
@@ -139,7 +160,7 @@ export function NutritionCard({ data }: { data: NutritionSummary }) {
             <div className="flex gap-1.5">
               {(["maintain", "cut", "gain"] as CalorieGoal[]).map(g => (
                 <button key={g} onClick={() => changeGoal(g)}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${goal === g ? "bg-brand-500 text-white" : "bg-surface-700 text-surface-400 hover:text-surface-200"}`}>
+                  className={`flex-1 min-h-[44px] py-1.5 rounded-lg text-xs font-semibold transition-all ${goal === g ? "bg-brand-500 text-white" : "bg-surface-700 text-surface-400 hover:text-surface-200"}`}>
                   {GOAL_LABEL[g]}
                 </button>
               ))}
@@ -151,7 +172,7 @@ export function NutritionCard({ data }: { data: NutritionSummary }) {
             {tip ? (
               <p className="text-sm text-surface-300 leading-relaxed">{tip}</p>
             ) : (
-              <button onClick={loadTip} disabled={tipLoading} className="w-full flex items-center justify-center gap-2 text-sm text-brand-400 hover:text-brand-300 py-1">
+              <button onClick={loadTip} disabled={tipLoading} className="w-full flex items-center justify-center gap-2 text-sm text-brand-400 hover:text-brand-300 min-h-[44px] py-1">
                 {tipLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Pensando…</> : <><Sparkles className="w-4 h-4" /> Dica de nutrição para hoje</>}
               </button>
             )}
@@ -177,7 +198,7 @@ export function NutritionCard({ data }: { data: NutritionSummary }) {
             )}
           </div>
 
-          <p className="text-[10px] text-surface-600">Estimativas — não substituem acompanhamento de nutricionista.</p>
+          <p className="text-[10px] text-surface-500">Estimativas — não substituem acompanhamento de nutricionista.</p>
         </>
       )}
     </div>
@@ -189,7 +210,7 @@ function Stat({ label, value, unit, accent, big }: { label: string; value: strin
     <div className="bg-surface-700/30 rounded-lg p-2.5 text-center">
       <p className="text-[10px] text-surface-500 uppercase tracking-wide">{label}</p>
       <p className={`font-black tabular-nums ${big ? "text-xl text-brand-400" : accent ? "text-base text-orange-300" : "text-base text-surface-100"}`}>{value}</p>
-      <p className="text-[9px] text-surface-600">{unit}</p>
+      <p className="text-[10px] text-surface-500">{unit}</p>
     </div>
   );
 }

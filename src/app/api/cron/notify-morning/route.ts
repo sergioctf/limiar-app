@@ -1,166 +1,76 @@
 /**
- * GET /api/cron/notify-morning
- * Runs at 08:30 UTC = 05:30 BRT every day.
- * Sends today's workout as a push notification to all subscribed users.
+ * GET /api/cron/notify-morning — daily, 05:30 BRT (08:30 UTC).
+ *
+ * Two jobs:
+ *  1. Race reminders (D-7, D-1, race day).
+ *  2. The first pass of the morning notification. Athletes without a watch get
+ *     theirs now; athletes with one get theirs only if the night has already
+ *     arrived — otherwise a later pass sends it (see `lib/morning-dispatch`).
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
-import { getMondayStr, getWorkoutForDate, formatWorkoutNotification } from "@/lib/plan-notify";
-import { computeTrainingLoad } from "@/lib/training-load";
-import { computeReadiness, restingHrBaseline } from "@/lib/readiness";
-import { shouldSuggestEasing, buildReadinessSuggestion } from "@/lib/plan-suggestion";
-import type { WeeklyPlanDay, Run, HealthCheckin, WellnessData } from "@/types";
+import { wantsNotification } from "@/lib/notification-prefs";
+import { brtDateStr } from "@/lib/plan-notify";
+import { authorizeCron } from "@/lib/cron-auth";
+import { dispatchMorning } from "@/lib/morning-dispatch";
 
 export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
-  const authHeader  = request.headers.get("authorization");
-  const querySecret = request.nextUrl.searchParams.get("secret");
-  const cronSecret  = process.env.CRON_SECRET;
-
-  if (!(cronSecret && authHeader === `Bearer ${cronSecret}`) && querySecret !== "limiar_admin_2026") {
+  if (!authorizeCron(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const now   = new Date();
   const admin = createAdminClient();
 
-  // Get all users with push subscriptions
-  const { data: subs } = await admin
-    .from("push_subscriptions")
-    .select("user_id")
-    .order("user_id");
-
+  const { data: subs } = await admin.from("push_subscriptions").select("user_id").order("user_id");
   if (!subs || subs.length === 0) {
     return NextResponse.json({ ok: true, message: "No push subscribers" });
   }
-
-  // Deduplicate user IDs
   const userIds: string[] = Array.from(new Set(subs.map((s: { user_id: string }) => s.user_id)));
 
-  const results: Record<string, string> = {};
+  // ── Race reminders ─────────────────────────────────────────────────────────
+  const { data: prefRows } = await admin.from("profiles").select("id, notification_prefs").in("id", userIds);
+  const optedOut = new Set(
+    ((prefRows ?? []) as Array<{ id: string; notification_prefs: unknown }>)
+      .filter(r => !wantsNotification(r.notification_prefs, "dailyWorkout"))
+      .map(r => r.id),
+  );
 
-  const todayStr = now.toISOString().slice(0, 10);
-  const today0   = new Date(now); today0.setHours(0, 0, 0, 0);
+  const todayStr = brtDateStr(now);
+  const today0   = new Date(`${todayStr}T12:00:00`);
+  const races: Record<string, string> = {};
 
   for (const userId of userIds) {
+    if (optedOut.has(userId)) continue;
     try {
-      // ── Race reminders (D-7, D-1, D-day) ───────────────────────────────────
-      try {
-        const { data: races } = await admin
-          .from("races")
-          .select("name, race_date, distance_km")
-          .eq("user_id", userId)
-          .is("time_seconds", null)
-          .gte("race_date", todayStr);
+      const { data: rows } = await admin
+        .from("races").select("name, race_date, distance_km")
+        .eq("user_id", userId).is("time_seconds", null).gte("race_date", todayStr);
 
-        for (const race of races ?? []) {
-          const raceDay = new Date(`${race.race_date}T12:00:00`);
-          const daysOut = Math.round((raceDay.getTime() - today0.getTime()) / 86400000);
-
-          let title: string | null = null;
-          let body:  string | null = null;
-
-          if (daysOut === 7) {
-            title = "Sua prova é em 1 semana! 🏁";
-            body  = `${race.name} (${race.distance_km} km) — última semana de preparação. Bons treinos!`;
-          } else if (daysOut === 1) {
-            title = "Sua prova é amanhã! 🔥";
-            body  = `${race.name} — descanse, hidrate-se e prepare tudo hoje. Boa sorte!`;
-          } else if (daysOut === 0) {
-            title = "Hoje é dia de prova! 🎉";
-            body  = `${race.name} — confie no seu treino. Vai dar tudo certo!`;
-          }
-
-          if (title && body) {
-            sendPushToUser(admin, userId, {
-              title, body,
-              url:  "/races",
-              tag:  `limiar-race-reminder-${race.race_date}-${daysOut}`,
-              icon: "/limiar_icone_app.png",
-            }).catch(() => {});
-          }
+      for (const race of rows ?? []) {
+        const daysOut = Math.round((new Date(`${race.race_date}T12:00:00`).getTime() - today0.getTime()) / 86400000);
+        const msg =
+          daysOut === 7 ? { title: "Sua prova é em 1 semana", body: `${race.name} (${race.distance_km} km) — última semana de preparação.` }
+          : daysOut === 1 ? { title: "Sua prova é amanhã", body: `${race.name} — descanse, hidrate-se e prepare tudo hoje.` }
+          : daysOut === 0 ? { title: "Hoje é dia de prova", body: `${race.name} — confie no seu treino.` }
+          : null;
+        if (msg) {
+          await sendPushToUser(admin, userId, {
+            ...msg, url: "/races", tag: `limiar-race-reminder-${race.race_date}-${daysOut}`, icon: "/limiar_icone_app.png",
+          }).catch(() => {});
+          races[userId.slice(0, 8)] = `D-${daysOut}`;
         }
-      } catch {
-        // races table may not exist — ignore
       }
-
-      const mondayStr = getMondayStr(now);
-
-      // Fetch current week's plan
-      const { data: plans } = await admin
-        .from("coach_reports")
-        .select("full_report, period_start")
-        .eq("user_id", userId)
-        .eq("period_type", "week")
-        .eq("period_start", mondayStr)
-        .limit(1);
-
-      const workout = getWorkoutForDate(admin, plans ?? [], now) as WeeklyPlanDay | null;
-
-      if (!workout) {
-        results[userId] = "no-plan";
-        continue;
-      }
-
-      // Readiness context (Limiar Score) — TSB + today's check-in if present
-      let contextLine = "";
-      try {
-        const since = new Date(now);
-        since.setDate(since.getDate() - 90);
-        const todayStr = now.toISOString().slice(0, 10);
-        const [{ data: tsbRuns }, { data: ci }, { data: wd }, { data: wHist }] = await Promise.all([
-          admin.from("runs")
-            .select("date, distance_km, duration_seconds, avg_pace_seconds_per_km, avg_hr")
-            .eq("user_id", userId).gte("date", since.toISOString().slice(0, 10)).is("deleted_at", null),
-          admin.from("health_checkins").select("*").eq("user_id", userId).eq("date", todayStr).maybeSingle(),
-          admin.from("wellness_data").select("*").eq("user_id", userId).eq("date", todayStr).maybeSingle(),
-          admin.from("wellness_data").select("resting_hr").eq("user_id", userId)
-            .gte("date", since.toISOString().slice(0, 10)),
-        ]);
-        const load = computeTrainingLoad((tsbRuns ?? []) as Run[], null, null, 90);
-        const tsb = load.length > 0 ? load[load.length - 1].tsb : null;
-        const readiness = computeReadiness({
-          wellness: (wd ?? null) as WellnessData | null,
-          checkin: (ci ?? null) as HealthCheckin | null,
-          tsb,
-          rhrBaseline: restingHrBaseline((wHist ?? []) as WellnessData[]),
-        });
-        if (readiness.verdict === "baixa") {
-          contextLine = ` ⚠️ Prontidão ${readiness.score}/100 — priorize recuperação hoje.`;
-          // Low readiness on a hard/long day → create an opt-in suggestion the
-          // app will show as a pop-up (never changes the plan automatically).
-          if (shouldSuggestEasing(workout, readiness.score)) {
-            const s = buildReadinessSuggestion(workout, readiness.score);
-            await admin.from("plan_suggestions").upsert({
-              user_id: userId, date: todayStr, kind: "readiness_adjust",
-              reason: s.reason, message: s.message,
-              original_day: workout, suggested_day: s.suggestedDay, status: "pending",
-            }, { onConflict: "user_id,date,kind" }).then(() => {}, () => {});
-            contextLine += " Abra o app para ajustar o treino.";
-          }
-        } else if (readiness.verdict === "alta" && readiness.score >= 80) {
-          contextLine = ` ✨ Prontidão ${readiness.score}/100 — corpo pronto, pode caprichar.`;
-        } else if (readiness.verdict === "moderada") {
-          contextLine = ` Prontidão ${readiness.score}/100 — ajuste a intensidade ao que sentir.`;
-        }
-      } catch {
-        // readiness is best-effort
-      }
-
-      const notification = formatWorkoutNotification(workout, "Hoje");
-      const { sent, removed } = await sendPushToUser(admin, userId, {
-        ...notification,
-        body: (notification.body + contextLine).slice(0, 180),
-        icon: "/api/icons/192",
-      });
-
-      results[userId] = `sent:${sent} removed:${removed}`;
-    } catch (err) {
-      results[userId] = `error: ${err instanceof Error ? err.message : "unknown"}`;
+    } catch {
+      // races table may not exist — ignore
     }
   }
 
-  return NextResponse.json({ ok: true, ran_at: now.toISOString(), results });
+  // ── Morning notification, first pass ──────────────────────────────────────
+  const morning = await dispatchMorning(admin, { now, final: false, legacyPass: true });
+
+  return NextResponse.json({ ok: true, ran_at: now.toISOString(), races, morning });
 }

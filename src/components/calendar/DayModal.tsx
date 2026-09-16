@@ -38,7 +38,7 @@ export function DayModal({ date, entries, onClose, onAddGym, onDelete }: Props) 
   const label = `${DAY_PT[d.getDay()]}, ${d.getDate()} de ${MONTHS_PT[d.getMonth()]} de ${d.getFullYear()}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center overlay-safe bg-black/60 backdrop-blur-sm">
       <div className="bg-surface-800 border border-surface-700 rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-surface-700">
@@ -51,7 +51,7 @@ export function DayModal({ date, entries, onClose, onAddGym, onDelete }: Props) 
           <div className="flex gap-2">
             <button
               onClick={onAddGym}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/15 text-blue-400 border border-blue-500/20 rounded-lg text-sm font-medium hover:bg-blue-500/25 transition-colors"
+              className="flex items-center gap-1.5 px-3 min-h-[44px] py-1.5 bg-blue-500/15 text-blue-400 border border-blue-500/20 rounded-lg text-sm font-medium hover:bg-blue-500/25 transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
               Academia
@@ -73,7 +73,7 @@ export function DayModal({ date, entries, onClose, onAddGym, onDelete }: Props) 
                   {sportLabel(e.sport_type)}
                 </span>
                 {e.source === "strava" && (
-                  <span className="text-[10px] text-surface-600 ml-auto">Strava</span>
+                  <span className="text-[10px] text-surface-500 ml-auto">Strava</span>
                 )}
               </div>
 
@@ -139,7 +139,7 @@ export function DayModal({ date, entries, onClose, onAddGym, onDelete }: Props) 
                       await onDelete(e.id, e.sport_type);
                     }
                   }}
-                  className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-surface-600 hover:text-red-400 hover:bg-red-400/10 transition-all"
+                  className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-surface-500 hover:text-red-400 hover:bg-red-400/10 transition-all"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>

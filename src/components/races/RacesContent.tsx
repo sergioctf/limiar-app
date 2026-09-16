@@ -5,13 +5,15 @@ import Link from "next/link";
 import {
   Trophy, Plus, MapPin, Clock, TrendingUp,
   Calendar, Flag, Trash2, Pencil, ChevronRight,
-  Medal, Star,
+  Medal, Star, Sparkles,
 } from "lucide-react";
 import { timeToString } from "@/lib/performance";
 import { computeMetrics } from "@/lib/performance";
 import { formatDate } from "@/lib/utils";
 import { RaceForm } from "@/components/races/RaceForm";
+import { RaceAnalysisModal } from "@/components/races/RaceAnalysisModal";
 import type { Race } from "@/types";
+import { localDateStr } from "@/lib/week";
 
 interface Props {
   initialRaces: Race[];
@@ -81,8 +83,9 @@ export function RacesContent({ initialRaces }: Props) {
   const [editRace, setEditRace] = useState<Race | null>(null);
   const [addResultFor, setAddResultFor] = useState<Race | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [analyzeRace, setAnalyzeRace] = useState<Race | null>(null);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateStr();
 
   // Split into future and past
   const futureRaces = useMemo(
@@ -199,14 +202,14 @@ export function RacesContent({ initialRaces }: Props) {
                   <span className="text-sm text-surface-400">
                     {distanceLabel(nextRace.distance_km)}
                   </span>
-                  <span className="text-surface-600">·</span>
+                  <span className="text-surface-500">·</span>
                   <span className="text-sm text-surface-400 flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5" />
                     {formatDate(nextRace.race_date)}
                   </span>
                   {nextRace.location && (
                     <>
-                      <span className="text-surface-600">·</span>
+                      <span className="text-surface-500">·</span>
                       <span className="text-sm text-surface-400 flex items-center gap-1">
                         <MapPin className="w-3.5 h-3.5" />{nextRace.location}
                       </span>
@@ -229,13 +232,13 @@ export function RacesContent({ initialRaces }: Props) {
             <div className="flex items-center gap-2 mt-4">
               <button
                 onClick={() => openAddResult(nextRace)}
-                className="btn-primary text-sm py-1.5"
+                className="btn-primary text-sm min-h-[44px] py-1.5"
               >
                 <Trophy className="w-3.5 h-3.5" /> Registrar resultado
               </button>
               <button
                 onClick={() => { setEditRace(nextRace); setAddResultFor(null); setShowForm(true); }}
-                className="btn-secondary text-sm py-1.5"
+                className="btn-secondary text-sm min-h-[44px] py-1.5"
               >
                 <Pencil className="w-3.5 h-3.5" /> Editar
               </button>
@@ -256,7 +259,7 @@ export function RacesContent({ initialRaces }: Props) {
                   <div className={`text-xl font-black tabular-nums ${
                     days <= 30 ? "text-yellow-400" : "text-brand-300"
                   }`}>{days}</div>
-                  <div className="text-xs text-surface-600">dias</div>
+                  <div className="text-xs text-surface-500">dias</div>
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-surface-100 text-sm truncate">{race.name}</p>
@@ -272,7 +275,7 @@ export function RacesContent({ initialRaces }: Props) {
                   <button onClick={() => { setEditRace(race); setAddResultFor(null); setShowForm(true); }} className="btn-ghost p-1.5">
                     <Pencil className="w-4 h-4" />
                   </button>
-                  <button onClick={() => handleDelete(race.id)} disabled={deleting === race.id} className="btn-ghost p-1.5 text-surface-600 hover:text-red-400">
+                  <button onClick={() => handleDelete(race.id)} disabled={deleting === race.id} className="btn-ghost p-1.5 text-surface-500 hover:text-red-400">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -305,7 +308,7 @@ export function RacesContent({ initialRaces }: Props) {
                         {timeToString(pr.time)}
                       </p>
                       <p className="text-xs text-surface-500 mt-1 truncate">{pr.name}</p>
-                      <p className="text-xs text-surface-600 mt-0.5">{formatDate(pr.date)}</p>
+                      <p className="text-xs text-surface-500 mt-0.5">{formatDate(pr.date)}</p>
                       {pr.vdot && (
                         <span className="inline-block mt-2 text-xs font-semibold text-brand-400 bg-brand-500/10 rounded-lg px-2 py-0.5">
                           VDOT {pr.vdot}
@@ -313,7 +316,7 @@ export function RacesContent({ initialRaces }: Props) {
                       )}
                     </>
                   ) : (
-                    <p className="text-sm text-surface-600 mt-1">Sem resultado</p>
+                    <p className="text-sm text-surface-500 mt-1">Sem resultado</p>
                   )}
                 </div>
               );
@@ -374,7 +377,7 @@ export function RacesContent({ initialRaces }: Props) {
                       )}
                     </div>
                     {race.notes && (
-                      <p className="text-xs text-surface-600 mt-1 line-clamp-1 italic">{race.notes}</p>
+                      <p className="text-xs text-surface-500 mt-1 line-clamp-1 italic">{race.notes}</p>
                     )}
                   </div>
 
@@ -390,12 +393,21 @@ export function RacesContent({ initialRaces }: Props) {
                         </p>
                       </>
                     ) : (
-                      <span className="text-xs text-surface-600 italic">sem resultado</span>
+                      <span className="text-xs text-surface-500 italic">sem resultado</span>
                     )}
                   </div>
 
                   {/* Actions (on hover) */}
                   <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {race.time_seconds && (
+                      <button
+                        onClick={() => setAnalyzeRace(race)}
+                        title="Análise pós-prova"
+                        className="btn-ghost p-1.5 text-brand-400 hover:text-brand-300"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <button
                       onClick={() => { setEditRace(race); setAddResultFor(null); setShowForm(true); }}
                       className="btn-ghost p-1.5"
@@ -405,7 +417,7 @@ export function RacesContent({ initialRaces }: Props) {
                     <button
                       onClick={() => handleDelete(race.id)}
                       disabled={deleting === race.id}
-                      className="btn-ghost p-1.5 text-surface-600 hover:text-red-400"
+                      className="btn-ghost p-1.5 text-surface-500 hover:text-red-400"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -441,6 +453,11 @@ export function RacesContent({ initialRaces }: Props) {
           editRace={editRace}
           addResult={!!addResultFor}
         />
+      )}
+
+      {/* Post-race debrief */}
+      {analyzeRace && (
+        <RaceAnalysisModal race={analyzeRace} onClose={() => setAnalyzeRace(null)} />
       )}
     </div>
   );

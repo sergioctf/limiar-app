@@ -1,12 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import { ThemeSelector } from "@/components/settings/ThemeSelector";
+import { Section } from "@/components/ui/Surface";
+import { Disclosure } from "@/components/ui/Disclosure";
+import { TutorialButton } from "@/components/settings/TutorialButton";
 import {
   Activity, CheckCircle2, XCircle, RefreshCw, Link2, Link2Off,
   User, LogOut, Clock, Check, AlertCircle, Loader2, Bell, Smartphone, Edit2
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { PushNotificationButton } from "@/components/PushNotificationButton";
+import { NotificationPrefsCard } from "@/components/settings/NotificationPrefsCard";
+import { WearableConnections } from "@/components/settings/WearableConnections";
+import { InviteManagerCard } from "@/components/settings/InviteManagerCard";
 import { InstallPWAButton } from "@/components/InstallPWAButton";
 import { EditProfileModal } from "@/components/profile/EditProfileModal";
 import type { SyncLog } from "@/types";
@@ -24,10 +31,13 @@ interface Props {
   stravaConnection: StravaConn | null;
   syncLogs: SyncLog[];
   stravaRunsCount: number;
+  /** Unlocks the invite manager — checked server-side. */
+  isAdmin?: boolean;
 }
 
 export function SettingsContent({
-  userEmail, userName, userUsername, stravaConnection, syncLogs, stravaRunsCount
+  userEmail, userName, userUsername, stravaConnection, syncLogs, stravaRunsCount,
+  isAdmin = false,
 }: Props) {
   const [syncing, setSyncing]     = useState(false);
   const [syncResult, setSyncResult] = useState<{ imported: number; updated: number; ignored: number } | null>(null);
@@ -109,6 +119,20 @@ export function SettingsContent({
           </button>
         </div>
       </div>
+
+      {/*
+        Grouped by what the athlete came to change, rather than by the order
+        the features happened to be built in. Eight equal cards made finding
+        the notification switch a scan of the whole page.
+      */}
+      <Section title="Aparência e ajuda">
+        <div className="space-y-3">
+          <ThemeSelector />
+          <TutorialButton />
+        </div>
+      </Section>
+
+      <Section title="Integrações">
 
       {/* Strava integration */}
       <div className="card p-5">
@@ -214,33 +238,59 @@ export function SettingsContent({
         )}
       </div>
 
-      {/* Sync logs */}
+      {/*
+        Sync history is reference material: worth having, almost never worth
+        reading. It sat open as a full card between two things people actually
+        come to Settings to change.
+      */}
       {syncLogs.length > 0 && (
-        <div className="card p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Clock className="w-4 h-4 text-surface-500" />
-            <h2 className="section-title">Histórico de sincronização</h2>
-          </div>
+        <Disclosure
+          title="Histórico de sincronização"
+          icon={<Clock className="w-4 h-4" />}
+          summary={syncLogs.length + " registro(s) · último em " + new Date(syncLogs[0].created_at).toLocaleDateString("pt-BR")}
+        >
           <div className="space-y-2">
             {syncLogs.map((log) => (
               <div key={log.id} className="flex items-start gap-3 text-sm">
                 {log.status === "success" ? (
-                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 ) : (
                   <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="text-surface-300 line-clamp-2">{log.message}</p>
-                  <p className="text-xs text-surface-600 mt-0.5">
+                  <p className="text-xs text-surface-500 mt-0.5">
                     {new Date(log.created_at).toLocaleString("pt-BR")}
                   </p>
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </Disclosure>
       )}
+      <WearableConnections />
 
+      </Section>
+
+      <Section title="Notificações">
+      {/* Push Notifications */}
+      <div className="card p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-9 h-9 rounded-xl bg-brand-500/20 flex items-center justify-center shrink-0">
+            <Bell className="w-5 h-5 text-brand-400" />
+          </div>
+          <div>
+            <h2 className="section-title">Notificações push</h2>
+            <p className="text-xs text-surface-500">Treino do dia às 05:30h · amanhã às 22:00h</p>
+          </div>
+        </div>
+        <PushNotificationButton />
+        <NotificationPrefsCard />
+      </div>
+
+      </Section>
+
+      <Section title="Este dispositivo">
       {/* Install PWA */}
       <div className="card p-5">
         <div className="flex items-center gap-3 mb-4">
@@ -255,19 +305,10 @@ export function SettingsContent({
         <InstallPWAButton />
       </div>
 
-      {/* Push Notifications */}
-      <div className="card p-5">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-9 h-9 rounded-xl bg-brand-500/20 flex items-center justify-center shrink-0">
-            <Bell className="w-5 h-5 text-brand-400" />
-          </div>
-          <div>
-            <h2 className="section-title">Notificações push</h2>
-            <p className="text-xs text-surface-500">Treino do dia às 05:30h · amanhã às 22:00h</p>
-          </div>
-        </div>
-        <PushNotificationButton />
-      </div>
+      </Section>
+
+      {/* Invites — admins only */}
+      {isAdmin && <InviteManagerCard />}
 
       <div className="card p-4 border-green-500/20 bg-green-500/5">
         <div className="flex items-center gap-2">

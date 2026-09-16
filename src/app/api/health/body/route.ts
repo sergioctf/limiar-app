@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { BodyMeasurement } from "@/types";
+import { athleteDateStr } from "@/lib/week";
 
 function num(v: unknown, min: number, max: number): number | null {
   const n = Number(v);
@@ -43,9 +44,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Informe um peso válido" }, { status: 400 });
   }
 
+  // The athlete's calendar — a weigh-in after 21:00 in Brazil is still today's.
   const date = typeof body?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
     ? body.date
-    : new Date().toISOString().slice(0, 10);
+    : athleteDateStr();
 
   const row = {
     user_id:        user.id,

@@ -77,7 +77,7 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="mt-auto">
-        <div className="flex items-center gap-2 px-3 py-2 mb-2 text-xs text-surface-600">
+        <div className="flex items-center gap-2 px-3 py-2 mb-2 text-xs text-surface-500">
           <TrendingUp className="w-3.5 h-3.5" />
           <span>Corrida com inteligência</span>
         </div>

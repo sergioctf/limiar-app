@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { HealthCheckin } from "@/types";
+import { athleteDateStr } from "@/lib/week";
 
 function clampInt(v: unknown, min: number, max: number): number | null {
   const n = Number(v);
@@ -39,9 +40,10 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Corpo inválido" }, { status: 400 });
 
+  // The athlete's calendar: a check-in after 21:00 in Brazil must not land on tomorrow.
   const date = typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
     ? body.date
-    : new Date().toISOString().slice(0, 10);
+    : athleteDateStr();
 
   const sleepHours = body.sleep_hours != null && Number.isFinite(Number(body.sleep_hours))
     ? Math.max(0, Math.min(24, Math.round(Number(body.sleep_hours) * 2) / 2))

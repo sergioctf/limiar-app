@@ -8,11 +8,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { computeMetrics, paceToString, timeToString } from "@/lib/performance";
 import { secondsToPaceString, secondsToReadable } from "@/lib/utils";
+import { isStrengthActivity } from "@/lib/sports";
 import type { Run, Activity, Goal } from "@/types";
 import type { PerformanceTest } from "@/types";
 
-const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const MODEL = "llama-3.3-70b-versatile";
+// One definition, shared. Two copies of the model name meant the retirement
+// notice had to be acted on in two files, and the second was easy to miss.
+import { GROQ_API_URL, groqBody } from "@/lib/ai";
 
 function getGroqKey(): string | undefined {
   const rawKey = process.env.GROQ_API_KEY ?? "";
@@ -33,15 +35,7 @@ async function callGroq(systemPrompt: string, userPrompt: string): Promise<strin
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user",   content: userPrompt   },
-        ],
-        max_tokens: 1500,
-        temperature: 0.65,
-      }),
+      body: groqBody(systemPrompt, userPrompt, { maxTokens: 1500, temperature: 0.65 }),
     });
 
     if (!res.ok) {
@@ -183,10 +177,8 @@ DISTRIBUIÇÃO DE ZONAS (últimas 90 dias, corridas com FC registrada: ${runsWit
     }
   }
 
-  // Gym sessions count
-  const gymSessions = acts.filter(a =>
-    ["WeightTraining", "Workout", "Crossfit"].includes(a.sport_type)
-  ).length;
+  // Gym sessions count (strength bucket — includes HIIT)
+  const gymSessions = acts.filter(a => isStrengthActivity(a.sport_type)).length;
 
   // Goals context
   const goalsBlock = activeGoals.length > 0

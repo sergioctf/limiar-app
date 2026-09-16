@@ -6,29 +6,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
-import { getMondayStr, getWorkoutForDate, formatWorkoutNotification } from "@/lib/plan-notify";
+import { wantsNotification } from "@/lib/notification-prefs";
+import {
+  getMondayStr, getWorkoutForDate, formatWorkoutNotification, toBrt, brtDateIn,
+} from "@/lib/plan-notify";
 import { computeWeeklyInsights, formatWeeklyInsightsPush } from "@/lib/weekly-insights";
 import type { WeeklyPlanDay, Run } from "@/types";
+import { authorizeCron } from "@/lib/cron-auth";
 
 export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
-  const authHeader  = request.headers.get("authorization");
-  const querySecret = request.nextUrl.searchParams.get("secret");
-  const cronSecret  = process.env.CRON_SECRET;
-
-  if (!(cronSecret && authHeader === `Bearer ${cronSecret}`) && querySecret !== "limiar_admin_2026") {
+  if (!authorizeCron(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const now      = new Date();
-  // Tomorrow = now + 1 day
-  const tomorrow = new Date(now.getTime() + 86400000);
-  const admin    = createAdminClient();
+  const now   = new Date();
+  const admin = createAdminClient();
 
-  // Is it Sunday night in BRT (UTC-3)? The cron fires at 22:00 BRT.
+  // The cron fires at 01:00 UTC = 22:00 BRT of the PREVIOUS day, so every date
+  // decision has to be made on the athlete's calendar, not UTC. Deriving
+  // "tomorrow" from UTC here used to skip a day and announce the wrong workout.
+  const brtNow      = toBrt(now);
+  const brtTomorrow = brtDateIn(1, now);
+
   // `?weekly=1` forces the weekly recap for manual testing on any day.
-  const brtNow = new Date(now.getTime() - 3 * 3600000);
   const forceWeekly = request.nextUrl.searchParams.get("weekly") === "1";
   const isSundayBRT = brtNow.getUTCDay() === 0 || forceWeekly;
 
@@ -44,7 +46,27 @@ export async function GET(request: NextRequest) {
   const userIds: string[] = Array.from(new Set(subs.map((s: { user_id: string }) => s.user_id)));
   const results: Record<string, string> = {};
 
+  /*
+   * Who opted out of this particular notification.
+   *
+   * Granting push permission is one decision; wanting every kind of message the
+   * app sends is another. Someone who wants the 05:30 workout but not the
+   * evening preview used to have to revoke the permission and lose both.
+   *
+   * Read once for the whole batch rather than once per athlete.
+   */
+  const { data: prefRows } = await admin
+    .from("profiles").select("id, notification_prefs").in("id", userIds);
+  const optedOut = new Set(
+    ((prefRows ?? []) as Array<{ id: string; notification_prefs: unknown }>)
+      .filter(r => !wantsNotification(r.notification_prefs, "tomorrowWorkout"))
+      .map(r => r.id),
+  );
+
+
   for (const userId of userIds) {
+    if (optedOut.has(userId)) { results[userId] = "opted-out"; continue; }
+
     try {
       // ── Sunday night: weekly recap ────────────────────────────────────────
       if (isSundayBRT) {
@@ -68,7 +90,7 @@ export async function GET(request: NextRequest) {
       }
 
       // ── Tomorrow's workout ────────────────────────────────────────────────
-      const mondayStr = getMondayStr(tomorrow);
+      const mondayStr = getMondayStr(brtTomorrow);
 
       const { data: plans } = await admin
         .from("coach_reports")
@@ -78,7 +100,7 @@ export async function GET(request: NextRequest) {
         .eq("period_start", mondayStr)
         .limit(1);
 
-      const workout = getWorkoutForDate(admin, plans ?? [], tomorrow) as WeeklyPlanDay | null;
+      const workout = getWorkoutForDate(admin, plans ?? [], brtTomorrow) as WeeklyPlanDay | null;
 
       if (!workout) {
         results[userId] = isSundayBRT ? "weekly-recap-only" : "no-plan";

@@ -33,6 +33,8 @@ export function PushNotificationButton() {
   const [error,      setError]   = useState<string | null>(null);
   const [iosGuide,   setIosGuide] = useState(false);
   const [debugInfo,  setDebugInfo] = useState<string | null>(null);
+  const [testing,    setTesting]  = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     const ctx = detectContext();
@@ -123,6 +125,23 @@ export function PushNotificationButton() {
     }
   }
 
+  /** Verify the whole chain end-to-end, right now. */
+  async function handleTest() {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res  = await fetch("/api/push/test", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      setTestResult(res.ok
+        ? { ok: true,  text: `Enviada para ${data.sent} dispositivo(s). Deve chegar em segundos.` }
+        : { ok: false, text: data.error ?? "Falha ao enviar." });
+    } catch {
+      setTestResult({ ok: false, text: "Falha na conexão." });
+    } finally {
+      setTesting(false);
+    }
+  }
+
   async function handleDisable() {
     setError(null);
     setState("loading");
@@ -165,7 +184,7 @@ export function PushNotificationButton() {
             <Smartphone className="w-4 h-4" />
             Como instalar no iPhone
           </button>
-          <p className="text-xs text-surface-600">
+          <p className="text-xs text-surface-500">
             Após instalar, abra o app pela tela inicial e ative as notificações aqui.
           </p>
         </div>
@@ -219,7 +238,7 @@ export function PushNotificationButton() {
                 </li>
               </ol>
 
-              <p className="text-[11px] text-surface-600 text-center">
+              <p className="text-[11px] text-surface-500 text-center">
                 Funciona apenas no Safari · não no Chrome do iPhone
               </p>
 
@@ -257,18 +276,36 @@ export function PushNotificationButton() {
   return (
     <div className="space-y-2">
       {subscribed && state !== "loading" ? (
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-green-400">
-            <Check className="w-4 h-4" />
-            <span>Notificações ativas — 05:30h e 22:00h (BRT)</span>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm text-green-400">
+              <Check className="w-4 h-4" />
+              <span>Notificações ativas — 05:30h e 22:00h (BRT)</span>
+            </div>
+            <button
+              onClick={handleDisable}
+              disabled={(state as string) === "loading"}
+              className="text-xs text-surface-500 hover:text-red-400 transition-colors px-2 min-h-[44px] py-1 rounded"
+            >
+              Desativar
+            </button>
           </div>
+
           <button
-            onClick={handleDisable}
-            disabled={(state as string) === "loading"}
-            className="text-xs text-surface-500 hover:text-red-400 transition-colors px-2 py-1 rounded"
+            onClick={handleTest}
+            disabled={testing}
+            className="btn-secondary text-xs min-h-[44px] py-1.5 px-3"
           >
-            Desativar
+            {testing
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enviando…</>
+              : <><Bell className="w-3.5 h-3.5" /> Enviar notificação de teste</>}
           </button>
+
+          {testResult && (
+            <p className={`text-xs ${testResult.ok ? "text-green-400" : "text-red-400"}`}>
+              {testResult.text}
+            </p>
+          )}
         </div>
       ) : (
         <button
@@ -290,7 +327,7 @@ export function PushNotificationButton() {
           <p className="text-red-500 opacity-50">💡 Abra o console (F12) para mais detalhes</p>
         </div>
       )}
-      <p className="text-xs text-surface-600">
+      <p className="text-xs text-surface-500">
         Receba o treino do dia às 05:30h e o treino de amanhã às 22:00h direto no celular.
       </p>
     </div>

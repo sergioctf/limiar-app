@@ -5,8 +5,12 @@ import {
   Brain, ChevronDown, ChevronUp, Award, AlertTriangle,
   TrendingUp, Calendar, CalendarDays, BookOpen, Flag, Layers,
   Sparkles, Loader2, Activity, FlaskConical, User,
+  Gauge, Dumbbell, Footprints, Target,
 } from "lucide-react";
-import { formatDate } from "@/lib/utils";
+import { formatDate, secondsToPaceString } from "@/lib/utils";
+import { Card, Section } from "@/components/ui/Surface";
+import { Metric, MetricGrid } from "@/components/ui/Metric";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { computeMetrics, paceToString } from "@/lib/performance";
 import type { CoachReport, TrainingCycle, PerformanceTest, WeeklyPlanData } from "@/types";
 import { ZonesCard }            from "@/components/coach/ZonesCard";
@@ -15,6 +19,18 @@ import { PredictionsCard }      from "@/components/coach/PredictionsCard";
 import { TestHistoryCard }      from "@/components/coach/TestHistoryCard";
 import { TestForm }             from "@/components/coach/TestForm";
 import { WeeklyPlanCard }       from "@/components/coach/WeeklyPlanCard";
+import { PlanFreshnessBanner } from "@/components/coach/PlanFreshnessBanner";
+import { SportSelector }        from "@/components/coach/SportSelector";
+import { ShoesCard }            from "@/components/coach/ShoesCard";
+import { SportZonesCard }       from "@/components/coach/SportZonesCard";
+import { TrainingPrefsCard }    from "@/components/coach/TrainingPrefsCard";
+import { PersonalRecords }       from "@/components/records/PersonalRecords";
+import { StaleTestWarning }     from "@/components/coach/StaleTestWarning";
+import { AdvisorCard }          from "@/components/coach/AdvisorCard";
+import { DefaultWeekNotice }    from "@/components/coach/DefaultWeekNotice";
+import { StrengthPrefsCard }    from "@/components/coach/StrengthPrefsCard";
+import { SplitRebalanceCard }   from "@/components/coach/SplitRebalanceCard";
+import { StrengthProgressCard } from "@/components/coach/StrengthProgressCard";
 import { VdotEvolutionChart }   from "@/components/coach/VdotEvolutionChart";
 import { AthleteProfileCard }   from "@/components/coach/AthleteProfileCard";
 import { PlanAdherenceCard }    from "@/components/coach/PlanAdherenceCard";
@@ -168,7 +184,7 @@ export function CoachContent({ reports, cycles, tests: initialTests, adherenceHi
             {tab.icon}
             <span className="truncate">{tab.label}</span>
             {tab.badge ? (
-              <span className="w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none shrink-0">
+              <span className="w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none shrink-0">
                 {tab.badge > 9 ? "9+" : tab.badge}
               </span>
             ) : null}
@@ -178,10 +194,45 @@ export function CoachContent({ reports, cycles, tests: initialTests, adherenceHi
 
       {/* ── TAB: Zonas & Plano ─────────────────────────────────────────────────── */}
       {activeTab === "zonas" && (
-        <div className="space-y-4">
+        <div className="space-y-5">
+          {/*
+            What the athlete came for, with nothing competing against it.
+
+            This tab used to stack twenty five blocks of equal weight — the plan,
+            the advisor, five configuration cards, the zones, the paces, the
+            predictions, two charts and the macro plan, all at once. The plan is
+            the reason anybody opens the coach; the rest is the machinery behind
+            it, and machinery belongs one tap down.
+          */}
+
+          {/* Stale VDOT silently corrupts every pace below — flag it first */}
+          <StaleTestWarning
+            latestTest={latestTest}
+            onAddTest={() => { setShowTestForm(true); setActiveTab("testes"); }}
+          />
+
+          <DefaultWeekNotice onConfigure={() => {
+            document.getElementById("training-prefs")?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }} />
+
+          <PlanFreshnessBanner />
+
+          <WeeklyPlanCard
+            initialPlan={initialWeeklyPlan}
+            initialReportId={latestWeekReport?.id ?? null}
+            paces={pacesForPlan}
+          />
+
+          {/* The advisor reads everything above and proposes; it never edits. */}
+          <AdvisorCard onGoToTests={() => { setShowTestForm(true); setActiveTab("testes"); }} />
+
           {!latestTest ? (
-            /* No tests yet — CTA */
-            <div className="card p-8 text-center space-y-4">
+            /*
+              No test yet — the one case where calibration outranks the plan.
+              Without it the engine cannot prescribe a single pace, so the plan
+              above is structure with every number missing.
+            */
+            <Card density="roomy" className="text-center space-y-4">
               <div className="w-14 h-14 rounded-2xl bg-brand-500/10 flex items-center justify-center mx-auto">
                 <FlaskConical className="w-7 h-7 text-brand-400" />
               </div>
@@ -198,81 +249,141 @@ export function CoachContent({ reports, cycles, tests: initialTests, adherenceHi
               >
                 + Registrar primeiro teste
               </button>
-            </div>
+            </Card>
           ) : (
-            /* Has tests — show metrics */
-            <>
-              {/* Top stats row */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="card p-4 text-center">
-                  <p className="text-xs text-surface-500 uppercase tracking-wide">VDOT</p>
-                  <p className="text-2xl font-bold text-brand-400 mt-1">
-                    {metrics?.vdot.toFixed(1)}
-                  </p>
-                  <p className="text-xs text-surface-600">ml/kg/min</p>
-                </div>
-                <div className="card p-4 text-center">
-                  <p className="text-xs text-surface-500 uppercase tracking-wide">VO2max</p>
-                  <p className="text-2xl font-bold text-surface-100 mt-1">
-                    {metrics?.vo2max.toFixed(1)}
-                  </p>
-                  <p className="text-xs text-surface-600">estimado</p>
-                </div>
-                <div className="card p-4 text-center">
-                  <p className="text-xs text-surface-500 uppercase tracking-wide">Último teste</p>
-                  <p className="text-sm font-bold text-surface-200 mt-1">
-                    {formatDate(latestTest.test_date)}
-                  </p>
-                  <p className="text-xs text-surface-600">{latestTest.distance_km} km</p>
-                </div>
-              </div>
+            <Section title="Calibração" subtitle={"Teste de " + formatDate(latestTest.test_date)}>
+              <div className="space-y-2">
+                <Card>
+                  <MetricGrid cols={3}>
+                    <Metric label="VDOT" value={metrics?.vdot.toFixed(1) ?? "—"} tone="brand" detail="ml/kg/min" />
+                    <Metric label="VO2max" value={metrics?.vo2max.toFixed(1) ?? "—"} detail="estimado" />
+                    <Metric label="Teste" value={latestTest.distance_km + " km"} detail={formatDate(latestTest.test_date)} />
+                  </MetricGrid>
+                </Card>
 
-              {/* Zones + Paces (side by side on desktop) */}
-              {metrics && metrics.zones.length > 0 && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <ZonesCard
-                    zones={metrics.zones}
-                    lthr={metrics.lthr}
-                    hrmax={metrics.hrmax_estimate}
-                  />
-                  <PacesCard paces={metrics.paces} />
-                </div>
-              )}
-
-              {/* If no HR data, only paces */}
-              {metrics && metrics.zones.length === 0 && (
-                <PacesCard paces={metrics.paces} />
-              )}
-
-              {/* Predictions */}
-              {metrics && (
-                <PredictionsCard
-                  predictions={metrics.predictions}
-                  testDate={latestTest.test_date}
-                />
-              )}
-
-              {/* VDOT evolution chart (only when ≥2 tests) */}
-              <VdotEvolutionChart tests={tests} />
-
-              {/* Full AI analysis */}
-              <div className="card p-5">
-                <div className="flex items-center justify-between gap-3 mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-brand-500/20 flex items-center justify-center">
-                      <Brain className="w-5 h-5 text-brand-400" />
-                    </div>
-                    <div>
-                      <h2 className="font-bold text-surface-100">Análise completa IA</h2>
-                      <p className="text-xs text-surface-500">
-                        Usa testes, histórico completo e treinos
-                      </p>
-                    </div>
+                <Disclosure
+                  title="Ritmos e zonas"
+                  icon={<Gauge className="w-4 h-4" />}
+                  summary={
+                    metrics?.paces.find(x => x.name === "threshold")
+                      ? "Limiar " + secondsToPaceString(metrics.paces.find(x => x.name === "threshold")!.pace_max_sec) + "/km"
+                      : "Seis ritmos calculados pelo seu VDOT"
+                  }
+                >
+                  <div className="space-y-4">
+                    {metrics && <PacesCard paces={metrics.paces} />}
+                    {metrics && metrics.zones.length > 0 && (
+                      <ZonesCard zones={metrics.zones} lthr={metrics.lthr} hrmax={metrics.hrmax_estimate} />
+                    )}
+                    <SportZonesCard
+                      runningLthr={metrics?.lthr ?? null}
+                      thresholdPaceSecKm={metrics?.paces.find(x => x.name === "threshold")?.pace_min_sec ?? null}
+                    />
                   </div>
+                </Disclosure>
+
+                <Disclosure
+                  title="Previsões de prova"
+                  icon={<Flag className="w-4 h-4" />}
+                  summary="Do 5 km à maratona, pelo seu VDOT atual"
+                >
+                  <div className="space-y-4">
+                    {metrics && (
+                      <PredictionsCard predictions={metrics.predictions} testDate={latestTest.test_date} />
+                    )}
+                    <VdotEvolutionChart tests={tests} />
+                  </div>
+                </Disclosure>
+              </div>
+            </Section>
+          )}
+
+          {/* ── The machinery: how the plan gets built ────────────────────── */}
+          <Section title="Sua configuração" subtitle="O plano se molda ao que você marcar aqui">
+            <div className="space-y-2">
+              <Disclosure
+                title="Minha semana"
+                icon={<CalendarDays className="w-4 h-4" />}
+                summary="Dias de corrida, longão e treinos fortes"
+              >
+                <div className="space-y-4">
+                  <TrainingPrefsCard />
+                  <SportSelector />
+                </div>
+              </Disclosure>
+
+              <Disclosure
+                title="Musculação"
+                icon={<Dumbbell className="w-4 h-4" />}
+                summary="Dias, split e progressão de carga"
+              >
+                <div className="space-y-4">
+                  <StrengthPrefsCard />
+                  <SplitRebalanceCard />
+                  <StrengthProgressCard />
+                </div>
+              </Disclosure>
+
+              <Disclosure
+                title="Seus tênis"
+                icon={<Footprints className="w-4 h-4" />}
+                summary="O plano sugere qual usar em cada treino"
+              >
+                <ShoesCard />
+              </Disclosure>
+            </div>
+          </Section>
+
+          {/* ── Where the training is going ───────────────────────────────── */}
+          <Section title="Progresso">
+            <div className="space-y-2">
+              {adherenceHistory.length > 0 && (
+                <ProactiveAdjustBanner currentWeek={adherenceHistory[0]} />
+              )}
+
+              {adherenceHistory.length > 0 && (
+                <Disclosure
+                  title="Adesão ao plano"
+                  icon={<Target className="w-4 h-4" />}
+                  summary={
+                    /*
+                     * The most recent week that has a score, not simply the
+                     * most recent week: the current one is still being lived
+                     * in and reads null until it ends, which would leave this
+                     * row carrying a label where every other row carries a fact.
+                     */
+                    (() => {
+                      const w = adherenceHistory.find(x => x.score != null);
+                      return w
+                        ? Math.round(w.score!) + "% na semana de " + w.weekStart.slice(8, 10) + "/" + w.weekStart.slice(5, 7)
+                        : "Previsto contra executado, semana a semana";
+                    })()
+                  }
+                >
+                  <PlanAdherenceCard history={adherenceHistory} />
+                </Disclosure>
+              )}
+
+              {efficiencyTrend && (
+                <Disclosure
+                  title="Eficiência aeróbica"
+                  icon={<TrendingUp className="w-4 h-4" />}
+                  summary="Velocidade por batimento, ao longo das semanas"
+                >
+                  <AerobicEfficiencyCard trend={efficiencyTrend} />
+                </Disclosure>
+              )}
+
+              <Disclosure
+                title="Análise completa por IA"
+                icon={<Brain className="w-4 h-4" />}
+                summary={analysisResult ? "Análise gerada — toque para reler" : "Usa testes, histórico completo e treinos"}
+              >
+                <div className="space-y-3">
                   <button
                     onClick={handleFullAnalysis}
                     disabled={analyzing}
-                    className="btn-primary text-xs py-1.5 px-3 shrink-0"
+                    className="btn-primary w-full"
                   >
                     {analyzing ? (
                       <><Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1.5" />Analisando…</>
@@ -280,53 +391,35 @@ export function CoachContent({ reports, cycles, tests: initialTests, adherenceHi
                       <><Sparkles className="w-3.5 h-3.5 inline mr-1.5" />{analysisResult ? "Reanalisar" : "Analisar"}</>
                     )}
                   </button>
-                </div>
 
-                {analysisError && (
-                  <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-3">
-                    <p className="text-sm text-red-400">{analysisError}</p>
-                  </div>
-                )}
+                  {analysisError && (
+                    <Card tone="alert" density="tight">
+                      <p className="text-sm text-red-400">{analysisError}</p>
+                    </Card>
+                  )}
 
-                {analysisResult ? (
-                  <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
-                    {analysisResult}
-                  </p>
-                ) : !analyzing && (
-                  <div className="text-center py-6 text-surface-500">
-                    <Sparkles className="w-7 h-7 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">Análise profunda com todos os seus dados</p>
-                    <p className="text-xs mt-1 text-surface-600">
-                      Inclui VDOT, zonas de FC, progressão e plano 8 semanas
+                  {analysisResult ? (
+                    <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
+                      {analysisResult}
                     </p>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
+                  ) : !analyzing && (
+                    <p className="text-xs text-surface-500 leading-relaxed">
+                      Análise profunda com todos os seus dados: VDOT, zonas de FC,
+                      progressão e um plano de 8 semanas.
+                    </p>
+                  )}
+                </div>
+              </Disclosure>
 
-          {/* Long-term periodization toward the target race */}
-          <MacroPlanCard initialPlan={macroPlan} weeklyActualKm={weeklyActualKm} />
-
-          {/* Proactive coach: replan the rest of the week after deviations */}
-          {adherenceHistory.length > 0 && (
-            <ProactiveAdjustBanner currentWeek={adherenceHistory[0]} />
-          )}
-
-          {/* Plan adherence — planned vs done */}
-          {adherenceHistory.length > 0 && (
-            <PlanAdherenceCard history={adherenceHistory} />
-          )}
-
-          {/* Aerobic efficiency trend (pace ÷ HR) */}
-          {efficiencyTrend && <AerobicEfficiencyCard trend={efficiencyTrend} />}
-
-          {/* Interactive weekly plan — always shown */}
-          <WeeklyPlanCard
-            initialPlan={initialWeeklyPlan}
-            initialReportId={latestWeekReport?.id ?? null}
-            paces={pacesForPlan}
-          />
+              <Disclosure
+                title="Plano de longo prazo"
+                icon={<Layers className="w-4 h-4" />}
+                summary={macroPlan ? "Periodização ativa" : "Periodização até uma prova-alvo"}
+              >
+                <MacroPlanCard initialPlan={macroPlan} weeklyActualKm={weeklyActualKm} />
+              </Disclosure>
+            </div>
+          </Section>
         </div>
       )}
 
@@ -347,6 +440,13 @@ export function CoachContent({ reports, cycles, tests: initialTests, adherenceHi
       {/* ── TAB: Relatórios ─────────────────────────────────────────────────────── */}
       {activeTab === "relatorios" && (
         <div className="space-y-3">
+          {/*
+            Above the report list on purpose: the reports are a log, this is the
+            scoreboard. It is also the only place in the app that answers "am I
+            getting faster?" with a number the athlete set themselves.
+          */}
+          <PersonalRecords />
+
           {reports.length === 0 ? (
             <div className="card p-8 text-center text-surface-500">
               Nenhum relatório cadastrado.
@@ -373,7 +473,7 @@ export function CoachContent({ reports, cycles, tests: initialTests, adherenceHi
                             <span className="text-[11px] sm:text-xs text-surface-500">
                               {formatDate(report.report_date)}
                             </span>
-                            <span className="badge bg-surface-700 text-surface-500 text-[9px] sm:text-[10px] px-1.5 py-0">
+                            <span className="badge bg-surface-700 text-surface-500 text-[10px] sm:text-[10px] px-1.5 py-0">
                               {report.period_type}
                             </span>
                           </div>

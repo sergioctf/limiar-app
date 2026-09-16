@@ -6,8 +6,17 @@
  *   DELETE /api/friends?id=xxx     → remove friend / decline / cancel request
  */
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { notifyFriendRequest, notifyFriendAccepted } from "@/lib/friend-notify";
+import { sendPushToUser } from "@/lib/push";
 import type { Friendship, FriendSummary } from "@/types";
+
+/**
+ * Push needs the service role: it reads the recipient's subscriptions and
+ * profile, neither of which the sender may see under RLS.
+ */
+const push = (userId: string, payload: { title: string; body: string; url: string; tag: string }) =>
+  sendPushToUser(createAdminClient(), userId, payload);
 
 export async function GET() {
   const supabase = createClient();
@@ -67,14 +76,18 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => null);
   const username = (body?.username as string | undefined)?.trim().toLowerCase().replace(/^@/, "");
-  if (!username) return NextResponse.json({ error: "Informe um username" }, { status: 400 });
+  // Suggestions identify people by id: not every profile has a username, and
+  // requiring one would make half the suggested cards un-clickable.
+  const userId = (body?.userId as string | undefined)?.trim();
 
-  // Look up the target profile by username (case-insensitive)
-  const { data: target } = await supabase
-    .from("profiles")
-    .select("id, name, username")
-    .ilike("username", username)
-    .maybeSingle();
+  if (!username && !userId) {
+    return NextResponse.json({ error: "Informe um username" }, { status: 400 });
+  }
+
+  const query = supabase.from("profiles").select("id, name, username");
+  const { data: target } = userId
+    ? await query.eq("id", userId).maybeSingle()
+    : await query.ilike("username", username!).maybeSingle();
 
   if (!target) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
   if (target.id === user.id) return NextResponse.json({ error: "Você não pode adicionar a si mesmo" }, { status: 400 });
@@ -94,6 +107,9 @@ export async function POST(request: NextRequest) {
     // If the other person already requested you, accept it instead of creating a duplicate
     if (existing.addressee_id === user.id) {
       await supabase.from("friendships").update({ status: "accepted" }).eq("id", existing.id);
+      // They asked first; adding them back is an acceptance, and they should
+      // hear about it exactly as if it had come through the accept button.
+      await notifyFriendAccepted(createAdminClient(), user.id, target.id, push);
       return NextResponse.json({ ok: true, accepted: true });
     }
     return NextResponse.json({ error: "Pedido já enviado" }, { status: 409 });
@@ -110,6 +126,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Falha ao enviar pedido" }, { status: 500 });
   }
 
+  // Best-effort: the request is stored, and a request nobody is told about is
+  // still a request sitting in their inbox.
+  await notifyFriendRequest(createAdminClient(), user.id, target.id, push);
+
   return NextResponse.json({ ok: true, sent: true, to: { name: target.name, username: target.username } });
 }
 
@@ -122,15 +142,23 @@ export async function PATCH(request: NextRequest) {
   const id = body?.id as string | undefined;
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
-  // RLS ensures only the addressee can update
-  const { error } = await supabase
+  // RLS ensures only the addressee can update. `select()` so the requester's id
+  // comes back — without it there is nobody to tell.
+  const { data: updated, error } = await supabase
     .from("friendships")
     .update({ status: "accepted" })
     .eq("id", id)
     .eq("addressee_id", user.id)
-    .eq("status", "pending");
+    .eq("status", "pending")
+    .select("requester_id")
+    .maybeSingle();
 
   if (error) return NextResponse.json({ error: "Falha ao aceitar" }, { status: 500 });
+
+  if (updated?.requester_id) {
+    await notifyFriendAccepted(createAdminClient(), user.id, updated.requester_id, push);
+  }
+
   return NextResponse.json({ ok: true });
 }
 

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { buildWorkoutFit } from "@/lib/workout-fit";
+import { ALL_SPORTS, type SportKey, type PrimarySport } from "@/lib/sports";
 import type { StructuredWorkout } from "@/types";
 
 export async function POST(request: NextRequest) {
@@ -16,13 +17,15 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const label = (body?.label as string | undefined)?.trim() || "Treino Limiar";
   const structure = body?.structure as StructuredWorkout | undefined;
+  const sport: PrimarySport = ALL_SPORTS.includes(body?.sport as PrimarySport)
+    ? (body.sport as PrimarySport) : "corrida";
 
   if (!structure || !Array.isArray(structure.blocks) || structure.blocks.length === 0) {
     return NextResponse.json({ error: "Treino sem estrutura para exportar" }, { status: 400 });
   }
 
   try {
-    const bytes = buildWorkoutFit(label, structure);
+    const bytes = buildWorkoutFit(label, structure, sport);
     return new NextResponse(Buffer.from(bytes), {
       status: 200,
       headers: {

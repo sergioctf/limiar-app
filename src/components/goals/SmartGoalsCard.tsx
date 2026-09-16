@@ -114,7 +114,7 @@ export function SmartGoalsCard({ latestTest }: Props) {
           <button
             key={s.label}
             onClick={() => setSelected(s.label)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            className={`px-3 min-h-[44px] py-1.5 rounded-lg text-xs font-semibold transition-all ${
               active.label === s.label
                 ? "bg-brand-500 text-white"
                 : "bg-surface-700 text-surface-400 hover:text-surface-200"
@@ -182,7 +182,7 @@ export function SmartGoalsCard({ latestTest }: Props) {
         })}
       </div>
 
-      <p className="text-[11px] text-surface-600 flex items-center gap-1">
+      <p className="text-[11px] text-surface-500 flex items-center gap-1">
         <ChevronRight className="w-3 h-3" />
         Toque no alvo para criar uma meta com esse tempo
       </p>

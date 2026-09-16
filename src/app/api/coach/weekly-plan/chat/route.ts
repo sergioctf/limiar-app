@@ -116,24 +116,35 @@ export async function POST(request: NextRequest) {
     })
     .catch(() => {});
 
-  // ── 6. If AI updated the plan, persist it ────────────────────────────────
+  // ── 6. Persist, and confirm the write actually landed ────────────────────
+  //
+  // An UPDATE that matches no row returns no error. With a stale reportId the
+  // app told the athlete their plan had changed and silently kept the old one.
   if (result.updatedPlan) {
     const weekStart = (result.updatedPlan as WeeklyPlanData).week_start;
-    const updatedJson = JSON.stringify(result.updatedPlan);
+    const patch = {
+      full_report: JSON.stringify(result.updatedPlan),
+      updated_at: new Date().toISOString(),
+    };
 
-    if (reportId) {
-      await admin
-        .from("coach_reports")
-        .update({ full_report: updatedJson, updated_at: new Date().toISOString() })
-        .eq("id", reportId)
-        .eq("user_id", user.id);
-    } else if (weekStart) {
-      await admin
-        .from("coach_reports")
-        .update({ full_report: updatedJson, updated_at: new Date().toISOString() })
-        .eq("user_id", user.id)
-        .eq("period_type", "week")
-        .eq("period_start", weekStart);
+    const write = reportId
+      ? admin.from("coach_reports").update(patch)
+          .eq("id", reportId).eq("user_id", user.id).select("id")
+      : admin.from("coach_reports").update(patch)
+          .eq("user_id", user.id).eq("period_type", "week").eq("period_start", weekStart)
+          .select("id");
+
+    const { data: written, error } = await write;
+
+    if (error || !written || written.length === 0) {
+      // Say so rather than claim a change that isn't in the database.
+      return NextResponse.json({
+        updatedPlan: null,
+        assistantMessage:
+          "Entendi o pedido, mas não consegui salvar a mudança no plano desta semana. " +
+          "Recarregue a página e tente de novo — se persistir, use Regenerar.",
+        saveFailed: true,
+      });
     }
   }
 

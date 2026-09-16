@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X, Timer, Heart, FileText, Info } from "lucide-react";
 import type { PerformanceTest } from "@/types";
+import { localDateStr } from "@/lib/week";
 
 interface Props {
   onClose: () => void;
@@ -19,7 +20,7 @@ interface FormState {
 }
 
 export function TestForm({ onClose, onSaved }: Props) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateStr();
 
   const [form, setForm] = useState<FormState>({
     test_date:         today,
@@ -80,7 +81,7 @@ export function TestForm({ onClose, onSaved }: Props) {
       if (!res.ok) {
         if (data.migration_needed) {
           setError(
-            "Tabela de testes não encontrada. Acesse /api/admin/create-perf-table?secret=limiar_admin_2026 para criá-la."
+            "A tabela de testes ainda não existe no banco. Avise o administrador do app para rodar a migração."
           );
         } else {
           setError(data.error ?? "Erro ao salvar teste.");
@@ -97,7 +98,7 @@ export function TestForm({ onClose, onSaved }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overlay-safe bg-black/60 backdrop-blur-sm">
       <div className="w-full max-w-md bg-surface-800 border border-surface-700 rounded-2xl shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-surface-700">
@@ -223,7 +224,7 @@ export function TestForm({ onClose, onSaved }: Props) {
               placeholder="Condições, sensações, terreno..."
               value={form.notes}
               onChange={e => update("notes", e.target.value)}
-              className="w-full bg-surface-700 border border-surface-600 text-surface-100 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-surface-600"
+              className="w-full bg-surface-700 border border-surface-600 text-surface-100 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-surface-500"
             />
           </div>
 

@@ -68,7 +68,7 @@ export function AerobicEfficiencyCard({ trend }: Props) {
           <circle cx={pts[pts.length - 1].x} cy={pts[pts.length - 1].y} r="3"
             className={trend.verdict === "improving" ? "fill-green-400" : trend.verdict === "declining" ? "fill-yellow-400" : "fill-brand-400"} />
         </svg>
-        <div className="flex justify-between text-[9px] text-surface-600 mt-1">
+        <div className="flex justify-between text-[10px] text-surface-500 mt-1">
           <span>{new Date(`${trend.points[0].weekStart}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}</span>
           <span>velocidade ÷ FC por semana (corridas leves)</span>
           <span>{new Date(`${trend.points[trend.points.length - 1].weekStart}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}</span>
@@ -76,7 +76,7 @@ export function AerobicEfficiencyCard({ trend }: Props) {
       </div>
 
       {trend.pctChange !== null && (
-        <p className="text-[11px] text-surface-600 mt-2">
+        <p className="text-[11px] text-surface-500 mt-2">
           Variação do índice: <span className={faster ? "text-green-400 font-semibold" : trend.verdict === "declining" ? "text-yellow-400 font-semibold" : "text-surface-400"}>
             {trend.pctChange > 0 ? "+" : ""}{trend.pctChange}%
           </span> · baseado em corridas com monitor de FC

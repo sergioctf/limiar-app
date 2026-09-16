@@ -57,20 +57,65 @@ const HRV_STATUS_SCORE: Record<string, number> = {
   balanced: 92, unbalanced: 55, low: 30, poor: 25,
 };
 
+/**
+ * HRV scored against the athlete's own baseline.
+ *
+ * `hrv_status` is a Garmin concept. Apple Health, Whoop and every chest strap
+ * report HRV as milliseconds, so an iPhone shortcut could only ever send
+ * `hrv_ms` — which this engine stored and then ignored, leaving the readiness
+ * score running without the signal it most wanted.
+ *
+ * Absolute values carry no meaning across people: 40 ms is excellent for one
+ * athlete and a warning for another. The information is in the ratio to your
+ * own recent nights, which is what the wearables compute internally.
+ *
+ * Above baseline plateaus rather than climbing forever — an unusually high
+ * reading is not proportionally better news, and can itself accompany deep
+ * fatigue.
+ */
+function hrvScoreFromRatio(today: number, baseline: number): number {
+  if (baseline <= 0) return 50;
+  const ratio = today / baseline;
+
+  if (ratio >= 1.05) return 95;
+  if (ratio >= 0.95) return clamp(85 + (ratio - 0.95) * 100);
+  if (ratio >= 0.85) return clamp(60 + (ratio - 0.85) * 250);
+  if (ratio >= 0.75) return clamp(35 + (ratio - 0.75) * 250);
+  return clamp(15 + Math.max(0, ratio - 0.60) * 133);
+}
+
 export interface ReadinessInput {
   wellness?: WellnessData | null;
   checkin?: HealthCheckin | null;
   tsb?: number | null;
   rhrBaseline?: number | null;   // trailing avg resting HR (to judge "elevated")
+  /** Trailing median HRV in ms — see `hrvBaseline`. */
+  hrvBaselineMs?: number | null;
 }
 
-export function computeReadiness({ wellness, checkin, tsb, rhrBaseline }: ReadinessInput): Readiness {
+export function computeReadiness({
+  wellness, checkin, tsb, rhrBaseline, hrvBaselineMs,
+}: ReadinessInput): Readiness {
   const c: ReadinessComponent[] = [];
   const w = wellness ?? null;
 
   // ── Wearable signals (preferred) ──────────────────────────────────────────
-  if (w?.body_battery != null) {
-    c.push({ key: "body_battery", label: "Body Battery", score: clamp(w.body_battery), weight: 0.30, auto: true });
+  //
+  // Body Battery and Whoop's recovery percentage are the same kind of input:
+  // the device's own composite estimate of how recovered the athlete is, built
+  // from more overnight signal than we ever receive. They share a slot and a
+  // weight, and the label follows whichever one arrived — showing "Body
+  // Battery" to a Whoop user would be putting one vendor's word on another
+  // vendor's number.
+  const vendorRecovery = w?.body_battery ?? w?.recovery_score ?? null;
+  if (vendorRecovery != null) {
+    c.push({
+      key: "body_battery",
+      label: w?.body_battery != null ? "Body Battery" : "Recovery",
+      score: clamp(vendorRecovery),
+      weight: 0.30,
+      auto: true,
+    });
   }
 
   // Sleep — wearable score > wearable duration > manual
@@ -83,8 +128,17 @@ export function computeReadiness({ wellness, checkin, tsb, rhrBaseline }: Readin
     if (ms != null) c.push({ key: "sleep", label: "Sono", score: Math.round(ms), weight: 0.22, auto: false });
   }
 
+  // The watch's own verdict beats our arithmetic — Garmin did this analysis
+  // with more nights and more signals than we have. Falling back to the raw
+  // number is what lets an Apple Watch or a Whoop contribute at all.
   if (w?.hrv_status && HRV_STATUS_SCORE[w.hrv_status] != null) {
     c.push({ key: "hrv", label: "HRV", score: HRV_STATUS_SCORE[w.hrv_status], weight: 0.18, auto: true });
+  } else if (w?.hrv_ms != null && hrvBaselineMs != null && hrvBaselineMs > 0) {
+    c.push({
+      key: "hrv", label: "HRV",
+      score: Math.round(hrvScoreFromRatio(w.hrv_ms, hrvBaselineMs)),
+      weight: 0.18, auto: true,
+    });
   }
 
   if (w?.resting_hr != null && rhrBaseline != null && rhrBaseline > 0) {
@@ -128,4 +182,27 @@ export function restingHrBaseline(rows: WellnessData[]): number | null {
   const vals = rows.map(r => r.resting_hr).filter((v): v is number => v != null);
   if (vals.length < 3) return null;
   return Math.round(vals.reduce((s, v) => s + v, 0) / vals.length);
+}
+
+/**
+ * Trailing HRV baseline in ms — the number today gets compared against.
+ *
+ * Median rather than mean, because HRV is noisy and one restless night or one
+ * bad sensor contact produces an outlier that would drag an average around.
+ *
+ * Seven nights minimum. Fewer than that and the "baseline" is mostly whichever
+ * nights happened to be measured, and a readiness score built on it would move
+ * for reasons the athlete cannot act on.
+ */
+export function hrvBaseline(rows: WellnessData[]): number | null {
+  const vals = rows
+    .map(r => r.hrv_ms)
+    .filter((v): v is number => v != null && v > 0)
+    .sort((a, b) => a - b);
+
+  if (vals.length < 7) return null;
+
+  const mid = Math.floor(vals.length / 2);
+  const median = vals.length % 2 === 0 ? (vals[mid - 1] + vals[mid]) / 2 : vals[mid];
+  return Math.round(median * 10) / 10;
 }

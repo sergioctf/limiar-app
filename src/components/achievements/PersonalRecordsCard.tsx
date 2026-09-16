@@ -45,15 +45,25 @@ export function PersonalRecordsCard({ records }: PersonalRecordsCardProps) {
           >
             {/* Distance label + PR */}
             <div className="flex items-center justify-between">
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs font-semibold text-surface-400 uppercase tracking-wide">
                   {record.label}
                 </p>
-                <p className="text-sm font-bold text-surface-100 mt-0.5">
-                  {record.personalBest?.pace} /km
+                {/* Time leads, as it does in the coach's records card — the two
+                    are the same number and must look like it. */}
+                <p className="text-sm font-bold text-surface-100 mt-0.5 tabular-nums">
+                  {record.personalBest?.time}
+                  <span className="text-surface-500 font-normal ml-1.5">
+                    {record.personalBest?.pace}/km
+                  </span>
                 </p>
+                {record.personalBest?.fromInsideRun && (
+                  <p className="text-[10px] text-brand-300/80 mt-0.5">
+                    dentro de um treino de {record.personalBest.activityKm?.toFixed(1)} km
+                  </p>
+                )}
               </div>
-              <div className="text-right text-xs text-surface-500">
+              <div className="text-right text-xs text-surface-500 shrink-0">
                 <p>{record.personalBest?.date}</p>
               </div>
             </div>
@@ -62,7 +72,7 @@ export function PersonalRecordsCard({ records }: PersonalRecordsCardProps) {
             {record.thisMonth || record.lastMonth ? (
               <div className="flex items-center gap-2 pt-1 border-t border-surface-600/30">
                 {record.lastMonth && (
-                  <div className="text-[10px] text-surface-600">
+                  <div className="text-[10px] text-surface-500">
                     Mês passado: {record.lastMonth.pace} /km
                   </div>
                 )}
@@ -93,7 +103,7 @@ export function PersonalRecordsCard({ records }: PersonalRecordsCardProps) {
         ))}
       </div>
 
-      <p className="text-xs text-surface-600 pt-2">
+      <p className="text-xs text-surface-500 pt-2">
         💡 Baseado em suas {withRecords.length} distância(s)
       </p>
     </div>

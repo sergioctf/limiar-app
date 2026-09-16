@@ -107,7 +107,7 @@ export function FriendsFeed() {
                 onClick={() => toggleKudo(item)}
                 disabled={item.isMe}
                 title={item.isMe ? "Sua corrida" : item.didIKudo ? "Remover reação" : "Mandar fogo"}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-90 shrink-0 ${
+                className={`flex items-center gap-1 px-2.5 min-h-[44px] py-1.5 rounded-lg text-xs font-bold transition-all active:scale-90 shrink-0 ${
                   item.didIKudo
                     ? "bg-orange-500/20 text-orange-400 border border-orange-500/30"
                     : item.isMe

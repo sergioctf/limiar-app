@@ -4,6 +4,8 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { notifyFriendsOfWorkout } from "@/lib/friend-notify";
+import { sendPushToUser } from "@/lib/push";
 
 export async function GET(request: NextRequest) {
   const supabase = createClient();
@@ -81,12 +83,16 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const {
     name, sport_type, date, duration_seconds,
-    calories, avg_hr, notes, exercises,
+    calories, avg_hr, notes, exercises, distance_m,
   } = body;
 
   if (!name || !sport_type || !date) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
+
+  // Distance matters for bike/swim — it's what pace and speed are derived from.
+  const distanceM = Number(distance_m);
+  const validDistance = Number.isFinite(distanceM) && distanceM > 0 ? Math.round(distanceM) : null;
 
   const admin = createAdminClient();
   const { data, error } = await admin.from("activities").insert({
@@ -95,6 +101,7 @@ export async function POST(request: NextRequest) {
     sport_type,
     date,
     duration_seconds: duration_seconds ?? null,
+    distance_m:       validDistance,
     calories:         calories ?? null,
     avg_hr:           avg_hr ?? null,
     notes:            notes?.trim() || null,
@@ -103,5 +110,16 @@ export async function POST(request: NextRequest) {
   }).select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Logged by hand — the same announcement the Strava webhook makes, through
+  // the same throttle, so a session entered manually and then synced does not
+  // buzz twice.
+  await notifyFriendsOfWorkout(admin, user.id, {
+    label: name.trim(),
+    distanceKm: validDistance != null ? validDistance / 1000 : null,
+    durationMin: duration_seconds != null ? duration_seconds / 60 : null,
+    date,
+  }, (id, payload) => sendPushToUser(admin, id, payload));
+
   return NextResponse.json(data, { status: 201 });
 }

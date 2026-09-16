@@ -3,9 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { ChevronLeft, ChevronRight, Plus, Loader2 } from "lucide-react";
 import { CalendarEntry } from "@/types";
+import { toSportKey } from "@/lib/sports";
 import { DayModal } from "./DayModal";
 import { GymSessionForm } from "./GymSessionForm";
 import { cn } from "@/lib/utils";
+import { localDateStr } from "@/lib/week";
 
 const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const MONTHS_PT = [
@@ -87,13 +89,16 @@ export function ActivityCalendar() {
     return acc;
   }, {});
 
-  const todayStr = today.toISOString().slice(0, 10);
+  const todayStr = localDateStr(today);
   const selectedEntries = selected ? (byDate[selected] ?? []) : [];
 
   // Summary stats
   const totalActivities = entries.length;
   const totalMinutes    = entries.reduce((s, e) => s + (e.duration_seconds ?? 0) / 60, 0);
-  const totalKm         = entries.reduce((s, e) => s + (e.distance_km ?? 0), 0);
+  // Running km only — mixing in bike distance inflates it and swim deflates it.
+  const totalKm         = entries
+    .filter(e => toSportKey(e.sport_type) === "corrida")
+    .reduce((s, e) => s + (e.distance_km ?? 0), 0);
   const runDays         = new Set(entries.filter(e => e.sport_type === "Run" || e.sport_type === "TrailRun").map(e => e.date)).size;
   const gymDays         = new Set(entries.filter(e => {
     const t = e.sport_type?.toLowerCase();
@@ -147,7 +152,7 @@ export function ActivityCalendar() {
           {WEEKDAYS.map(d => (
             <div key={d} className="py-2 text-center text-xs font-semibold text-surface-500">{d}</div>
           ))}
-          <div className="py-2 px-2 text-right text-xs font-semibold text-surface-600 hidden sm:block">Semana</div>
+          <div className="py-2 px-2 text-right text-xs font-semibold text-surface-500 hidden sm:block">Semana</div>
         </div>
 
         {/* Week rows */}
@@ -160,7 +165,9 @@ export function ActivityCalendar() {
             .map((d) => `${year}-${String(month).padStart(2,"0")}-${String(d).padStart(2,"0")}`);
 
           const weekKm = weekDates.reduce((sum, dateStr) => {
-            return sum + (byDate[dateStr] ?? []).reduce((s, e) => s + (e.distance_km ?? 0), 0);
+            return sum + (byDate[dateStr] ?? [])
+              .filter(e => toSportKey(e.sport_type) === "corrida")
+              .reduce((s, e) => s + (e.distance_km ?? 0), 0);
           }, 0);
 
           const weekActivityCount = weekDates.reduce((sum, dateStr) => {

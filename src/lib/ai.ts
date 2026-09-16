@@ -10,11 +10,80 @@
  * o que comporta centenas de corridas confortavelmente.
  */
 
-import type { Run, WeeklyPlanData, WeeklyPlanDay, PlanChatMessage, AthleteNoteCategory, MacroPlanData, MacroPlanWeek, MacroRaceType } from "@/types";
+import type { Run, WeeklyPlanData, WeeklyPlanDay, PlanDayType, StructuredWorkout, PlanChatMessage, AthleteNoteCategory, MacroPlanData, MacroPlanWeek, MacroRaceType } from "@/types";
 import { secondsToPaceString, secondsToReadable } from "@/lib/utils";
+import { SPORTS, ALL_SPORTS, DEFAULT_SPORTS, toSportKey, type SportKey, type PrimarySport } from "@/lib/sports";
+import { normalizePlanEdits, applyPlanEdits } from "@/lib/plan-edit";
 
-const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const MODEL = "llama-3.3-70b-versatile";
+export const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+
+/**
+ * The model behind every narrative in the app.
+ *
+ * Was `llama-3.3-70b-versatile` until Groq retired it on 16 August 2026. The
+ * replacement was chosen by testing the two Groq recommended against the two
+ * things this codebase actually needs:
+ *
+ *   • JSON that parses. Eight call sites here take the model's answer, strip
+ *     the code fences and `JSON.parse` it. `qwen/qwen3.6-27b` writes its
+ *     deliberation as a `<think>` block *inside* `content`, so every one of
+ *     those would have fallen into its catch and the feature would have gone
+ *     quiet rather than broken loudly. It was rejected for that.
+ *   • Portuguese that reads like a coach.
+ *
+ * `openai/gpt-oss-120b` does both, in roughly half the latency, and it returns
+ * its reasoning in a separate `reasoning` field instead of contaminating the
+ * answer.
+ *
+ * Overridable by env so the next retirement is a redeploy, not a patch.
+ */
+export const MODEL = process.env.GROQ_MODEL?.trim() || "openai/gpt-oss-120b";
+
+/**
+ * Reasoning is billed against `max_tokens` and then thrown away.
+ *
+ * At the default effort the model spent 198 of a 200-token budget thinking and
+ * returned three characters. These are short coaching notes, not proofs — the
+ * budget belongs to the answer.
+ */
+export const REASONING_EFFORT = "low";
+
+/**
+ * Models that do *not* reason reject `reasoning_effort` outright:
+ *
+ *   POST … → 400 {"error":{"message":"`reasoning_effort` is not supported
+ *                            with this model","type":"invalid_request_error"}}
+ *
+ * Since MODEL is overridable by env and `callGroq` swallows failures into
+ * `null`, pointing GROQ_MODEL at a non-reasoning model would take every AI
+ * feature in the app silently offline. So the parameter is sent only where it
+ * is understood.
+ *
+ * Unknown models are treated as non-reasoning on purpose: the cost of omitting
+ * it is a slightly larger reasoning budget, while the cost of sending it to a
+ * model that refuses it is total, silent failure.
+ */
+export function supportsReasoningEffort(model = MODEL): boolean {
+  return /^(openai\/gpt-oss|qwen\/qwen3|deepseek-r1)/i.test(model.trim());
+}
+
+/** The request body every Groq call in the app shares. */
+export function groqBody(
+  systemPrompt: string,
+  userPrompt: string,
+  opts: { maxTokens: number; temperature: number },
+): string {
+  return JSON.stringify({
+    model: MODEL,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user",   content: userPrompt   },
+    ],
+    max_tokens: opts.maxTokens,
+    temperature: opts.temperature,
+    ...(supportsReasoningEffort() ? { reasoning_effort: REASONING_EFFORT } : {}),
+  });
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -48,15 +117,7 @@ async function callGroq(systemPrompt: string, userPrompt: string, maxTokens = 60
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user",   content: userPrompt   },
-        ],
-        max_tokens: maxTokens,
-        temperature: 0.7,
-      }),
+      body: groqBody(systemPrompt, userPrompt, { maxTokens, temperature: 0.7 }),
     });
 
     if (!res.ok) {
@@ -190,6 +251,75 @@ ${history.map(fmtRun).join("\n")}
 
 const DAY_ORDER: WeeklyPlanDay["day"][] = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 
+const DAY_PT: Record<WeeklyPlanDay["day"], string> = {
+  Mon: "Segunda", Tue: "Terça", Wed: "Quarta", Thu: "Quinta",
+  Fri: "Sexta", Sat: "Sábado", Sun: "Domingo",
+};
+
+const VALID_PLAN_TYPES: PlanDayType[] = [
+  "rest", "easy", "tempo", "intervals", "long_run", "recovery", "test", "race", "strength", "hiit",
+];
+
+const RUN_TYPES = new Set(["easy", "tempo", "intervals", "long_run", "recovery", "test", "race"]);
+
+/** Infer the sport for a plan day from its explicit sport, type, then label. */
+function inferPlanSport(d: Partial<WeeklyPlanDay>): SportKey | undefined {
+  if (d.sport && ALL_SPORTS.includes(d.sport as PrimarySport)) return d.sport;
+  if (d.type === "rest") return undefined;
+  if (d.type === "strength" || d.type === "hiit") return "musculacao";
+  const fromLabel = toSportKey(d.label) ?? toSportKey(d.type);
+  if (fromLabel) return fromLabel;
+  if (d.type && RUN_TYPES.has(d.type)) return "corrida";
+  return undefined;
+}
+
+/**
+ * Guarantee a complete, well-formed 7-day plan. Repairs partial day objects and
+ * fills any missing day as rest, so the UI never renders `undefined` fields
+ * (this was the root cause of the coach-page crash). Also stamps each session
+ * with its `sport`.
+ */
+export function normalizeWeeklyPlanDays(input: unknown): WeeklyPlanDay[] {
+  const arr = Array.isArray(input) ? input : [];
+  const byDay = new Map<WeeklyPlanDay["day"], WeeklyPlanDay>();
+
+  for (const raw of arr) {
+    if (!raw || typeof raw !== "object") continue;
+    const d = raw as Partial<WeeklyPlanDay>;
+    if (!d.day || !DAY_ORDER.includes(d.day)) continue;
+
+    const type: PlanDayType = VALID_PLAN_TYPES.includes(d.type as PlanDayType)
+      ? (d.type as PlanDayType) : "rest";
+    const sport = type === "rest" ? undefined : inferPlanSport({ ...d, type });
+
+    byDay.set(d.day, {
+      day:          d.day,
+      dayPt:        typeof d.dayPt === "string" && d.dayPt ? d.dayPt : DAY_PT[d.day],
+      type,
+      sport,
+      label:        typeof d.label === "string" && d.label
+                      ? d.label
+                      : type === "rest" ? "Descanso" : sport ? SPORTS[sport].label : "Treino",
+      distance_km:  typeof d.distance_km === "number" ? d.distance_km : undefined,
+      duration_min: typeof d.duration_min === "number" ? d.duration_min : undefined,
+      pace:         typeof d.pace === "string" ? d.pace : undefined,
+      description:  typeof d.description === "string" ? d.description : "",
+      structure:    d.structure && Array.isArray((d.structure as StructuredWorkout).blocks)
+                      ? (d.structure as StructuredWorkout) : undefined,
+      // The lifting session was missing from this whitelist, so every plan
+      // built with strength lost it the moment it was read back: the engine
+      // prescribed it, the database stored it, and the screen never saw it.
+      strength:     d.strength && Array.isArray((d.strength as { exercises?: unknown }).exercises)
+                      ? (d.strength as WeeklyPlanDay["strength"]) : undefined,
+    });
+  }
+
+  // Ensure all 7 days exist; any missing day becomes rest.
+  return DAY_ORDER.map(day => byDay.get(day) ?? {
+    day, dayPt: DAY_PT[day], type: "rest" as PlanDayType, label: "Descanso", description: "",
+  });
+}
+
 /**
  * Gera um plano semanal estruturado (JSON) com 7 dias.
  * Retorna WeeklyPlanData ou null se GROQ_API_KEY não estiver configurada.
@@ -201,10 +331,27 @@ export async function generateStructuredWeeklyPlan(
   nextRace?: { name: string; date: string; distance_km: number } | null,
   vdot?: number | null,
   athleteProfile?: string | null,
+  sports: SportKey[] = [...DEFAULT_SPORTS],
 ): Promise<WeeklyPlanData | null> {
+  const active = (sports.length ? sports : DEFAULT_SPORTS).filter(s => ALL_SPORTS.includes(s as PrimarySport));
+  const hasStrength = active.includes("musculacao");
+  const hasRun      = active.includes("corrida");
+  const hasSwim     = active.includes("natacao");
+  const hasBike     = active.includes("ciclismo");
+  const sportsList  = active.map(s => SPORTS[s].label).join(", ");
+
+  const sportRules = [
+    hasStrength && 'MUSCULAÇÃO: 2 a 4 sessões/semana. Use type "strength" (label "Musculação") OU type "hiit" (label "HIIT") — HIIT conta como musculação. Sempre duration_min (45-60), distance_km = null, structure = null, sport = "musculacao".',
+    hasRun      && 'CORRIDA: no máximo 3 sessões/semana. Varie easy/tempo/intervals/long_run. Use os paces fornecidos; longão tipicamente no sábado. sport = "corrida".',
+    hasSwim     && 'NATAÇÃO: 1 a 2 sessões/semana. sport = "natacao". Prescreva por distance_km (ex: 1.5-2.5) e/ou duration_min; varie técnica/leve (easy) e séries (intervals). structure = null.',
+    hasBike     && 'CICLISMO: 1 a 2 sessões/semana. sport = "ciclismo". Prescreva por duration_min (60-120) e/ou distance_km; ótimo para volume aeróbico de baixo impacto (easy/tempo/long_run). structure = null.',
+  ].filter(Boolean).map((r, i) => `${i + 4}. ${r}`).join("\n");
+
   const systemPrompt = `
-Você é um treinador de corrida e musculação especialista. Gere um plano semanal de treino estruturado para um corredor brasileiro.
+Você é um treinador esportivo especialista (corrida, natação, ciclismo e musculação). Gere um plano semanal de treino estruturado para um atleta brasileiro.
 RESPONDA SOMENTE com um objeto JSON válido — sem texto antes nem depois, sem markdown, sem código fence.
+
+O atleta pratica SOMENTE estes esportes: ${sportsList}. NUNCA inclua treino de um esporte fora dessa lista.
 
 Formato JSON obrigatório:
 {
@@ -212,11 +359,12 @@ Formato JSON obrigatório:
     {
       "day": "Mon"|"Tue"|"Wed"|"Thu"|"Fri"|"Sat"|"Sun",
       "dayPt": "Segunda"|"Terça"|"Quarta"|"Quinta"|"Sexta"|"Sábado"|"Domingo",
-      "type": "rest"|"easy"|"tempo"|"intervals"|"long_run"|"recovery"|"test"|"race"|"strength",
-      "label": string (ex: "Musculação", "Rodagem", "Tiro 400m", "Longão", "Descanso"),
+      "sport": "musculacao"|"corrida"|"natacao"|"ciclismo"|null,
+      "type": "rest"|"easy"|"tempo"|"intervals"|"long_run"|"recovery"|"test"|"race"|"strength"|"hiit",
+      "label": string (ex: "Musculação", "HIIT", "Rodagem", "Tiro 400m", "Longão", "Natação técnica", "Pedal Z2", "Descanso"),
       "distance_km": number | null,
       "duration_min": number | null,
-      "pace": string | null (ex: "6:00–6:20/km"),
+      "pace": string | null (ex: "6:00–6:20/km" para corrida),
       "description": string (1-2 frases descritivas e práticas),
       "structure": null | {
         "blocks": [
@@ -229,20 +377,14 @@ Formato JSON obrigatório:
   "ai_message": string (1-2 frases proativas: observação sobre o histórico ou pergunta para engajar o atleta)
 }
 
-REGRAS OBRIGATÓRIAS — nunca viole estas regras:
-1. Inclua TODOS os 7 dias (Mon a Sun)
-2. DOMINGO (Sun) é SEMPRE "rest" — nunca coloque treino no domingo
-3. Máximo 3 corridas por semana — não coloque corrida em mais de 3 dias
-4. MUSCULAÇÃO 4x/semana — use type "strength", label "Musculação" em 4 dias da semana
-5. Template padrão: Seg=Musculação, Ter=Corrida, Qua=Musculação, Qui=Musculação, Sex=Corrida, Sáb=Corrida/Prova, Dom=Descanso
-6. Se houver prova no sábado, o sábado é "race" e a semana é de redução de volume
-7. Se houver dados de pace, use-os nas prescrições de corrida
-8. Para musculação, duration_min deve ter valor (ex: 60), distance_km = null
-9. ai_message deve ser específica e baseada nos dados reais do atleta
-10. ESTRUTURA: para treinos de qualidade (tempo/intervals/test) e longão, preencha "structure" com os passos executáveis:
-    sempre warmup no início e cooldown no fim; intervalos como bloco repeat (ex: 6×(800m forte + 400m trote)).
-    Cada step tem distance_km OU duration_min (nunca os dois). Para easy/recovery/strength/rest, structure = null.
-    A soma das distâncias dos steps deve bater (±10%) com distance_km do dia.
+REGRAS OBRIGATÓRIAS — nunca viole:
+1. Inclua TODOS os 7 dias (Mon a Sun).
+2. DOMINGO (Sun) é SEMPRE "rest" (sport null) — nunca coloque treino no domingo.
+3. Todo dia que NÃO seja descanso DEVE ter "sport" preenchido, e o sport DEVE estar na lista do atleta (${sportsList}). Distribua 5-6 dias de treino respeitando recuperação.
+${sportRules}
+${active.length + 4}. Se houver prova, o dia é type "race" (sport "corrida") e a semana reduz volume (taper).
+${active.length + 5}. ai_message deve ser específica e baseada nos dados reais do atleta.
+${active.length + 6}. ESTRUTURA: apenas para treinos de qualidade de CORRIDA (tempo/intervals/test) e longão — preencha "structure" com passos executáveis: warmup no início e cooldown no fim; intervalos como bloco repeat (ex: 6×(800m forte + 400m trote)). Cada step tem distance_km OU duration_min. Para todos os outros casos, structure = null.
 `.trim();
 
   const recent = recentRuns.slice(0, 10).sort((a,b) => b.date.localeCompare(a.date));
@@ -266,6 +408,7 @@ REGRAS OBRIGATÓRIAS — nunca viole estas regras:
 
   const userPrompt = `
 Semana de ${weekStart}.
+Esportes praticados pelo atleta: ${sportsList}.
 ${vdotStr}
 ${raceStr}
 ${pacesStr}
@@ -281,17 +424,10 @@ Gere o plano semanal em JSON conforme o formato especificado.
   try {
     // Strip markdown code fences if model wrapped anyway
     const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
-    const parsed = JSON.parse(cleaned) as { days: WeeklyPlanDay[]; ai_message?: string };
+    const parsed = JSON.parse(cleaned) as { days?: unknown; ai_message?: string };
 
-    // Validate days and sort Mon→Sun
-    const days = (parsed.days ?? []).sort(
-      (a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day)
-    );
-
-    // Drop malformed structures (defensive — model occasionally returns junk)
-    for (const d of days) {
-      if (d.structure && !Array.isArray(d.structure.blocks)) d.structure = undefined;
-    }
+    // Normalize: guarantees 7 well-formed days (no undefined fields) + sport stamp.
+    const days = normalizeWeeklyPlanDays(parsed.days);
 
     return {
       week_start: weekStart,
@@ -506,15 +642,15 @@ Replaneje os dias de ${todayKey} a Sun em JSON.
     const newRemaining = parsed.days.filter(d => DAY_ORDER.indexOf(d.day) >= todayIdx);
     if (newRemaining.length === 0) return null;
 
-    const mergedDays = [...pastDays, ...newRemaining].sort(
-      (a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day)
-    );
+    // Normalize so no merged/AI day can render undefined fields (crash-proof).
+    const mergedDays = normalizeWeeklyPlanDays([...pastDays, ...newRemaining]);
 
     // Safety net: Sunday is rest, always
     const sunday = mergedDays.find(d => d.day === "Sun");
     if (sunday && sunday.type !== "rest" && sunday.type !== "race") {
       sunday.type = "rest";
       sunday.label = "Descanso";
+      sunday.sport = undefined;
       sunday.distance_km = undefined;
       sunday.duration_min = undefined;
     }
@@ -544,26 +680,28 @@ export async function processPlanFeedback(
   recentRuns: Run[],
   athleteProfile?: string | null,
 ): Promise<{ updatedPlan: WeeklyPlanData | null; assistantMessage: string } | null> {
+  // The model translates the request into structured edits; it never rewrites
+  // the plan. Asking it for a whole seven-day plan is how the chat ended up
+  // confirming changes it had not made.
   const systemPrompt = `
-Você é um treinador de corrida e musculação interativo. O atleta tem um plano semanal e você deve ajustá-lo conforme pedido.
-RESPONDA SOMENTE com um objeto JSON válido — sem texto antes nem depois, sem markdown, sem código fence.
+Você é o tradutor de pedidos de um treinador. O atleta descreve um ajuste no plano da semana e você converte isso em EDIÇÕES ESTRUTURADAS. Você NÃO escreve o plano.
 
-REGRA CRÍTICA: Se o atleta pedir QUALQUER mudança no plano (remover treino, trocar dia, ajustar distância, mudar tipo de treino, adicionar atividade), você OBRIGATORIAMENTE deve:
-1. Fazer a mudança no plano JSON
-2. Retornar action:"update" com o plano COMPLETO e ATUALIZADO (todos os 7 dias)
-3. NUNCA confirmar uma mudança sem incluir o updatedPlan — isso seria um erro grave
+RESPONDA SOMENTE com um objeto JSON válido — sem texto antes ou depois, sem markdown, sem code fence.
 
-Formato para mudança no plano (use SEMPRE que o atleta pedir qualquer ajuste):
-{"action":"update","updatedPlan":{"days":[...7 dias completos...],"week_start":"YYYY-MM-DD","generated_at":"ISO"},"message":"Descrição breve do que foi mudado"}
+{"edits":[...],"message":"resposta curta em português"}
 
-Formato para pergunta/dúvida SEM mudança no plano:
-{"action":"reply","message":"Sua resposta em português"}
+Edições possíveis (use apenas estas):
+  {"kind":"set_distance","day":"Sat","km":8}      → mudar a distância de um dia
+  {"kind":"set_rest","day":"Thu"}                 → transformar um dia em descanso
+  {"kind":"swap_days","a":"Wed","b":"Sat"}        → trocar o conteúdo de dois dias
+  {"kind":"scale_week","factor":1.2}              → aumentar/reduzir todas as corridas
 
-Regras do plano (sempre respeite ao atualizar):
-- DOMINGO sempre "rest" — nunca coloque treino no domingo
-- Máximo 3 corridas por semana
-- 4x musculação por semana (type:"strength")
-- Cada dia deve ter: day, dayPt, type, label, distance_km, duration_min, pace, description
+Dias: Mon, Tue, Wed, Thu, Fri, Sat, Sun.
+
+REGRAS:
+- Se o atleta não pediu mudança nenhuma (só uma pergunta), devolva "edits":[] e responda no "message".
+- NUNCA prometa no "message" uma mudança que não esteja em "edits". O sistema aplica as edições e reescreve a confirmação a partir do que realmente mudou.
+- Não invente edições que o atleta não pediu.
 `.trim();
 
   const planStr = JSON.stringify(currentPlan.days.map(d => ({
@@ -597,23 +735,30 @@ MENSAGEM DO ATLETA: ${userMessage}
 
   try {
     const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
-    const parsed = JSON.parse(cleaned) as
-      | { action: "update"; updatedPlan: { days: WeeklyPlanDay[] }; message: string }
-      | { action: "reply"; message: string };
+    const parsed = JSON.parse(cleaned) as { edits?: unknown; message?: unknown };
 
-    if (parsed.action === "update" && parsed.updatedPlan?.days) {
-      const days = parsed.updatedPlan.days.sort(
-        (a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day)
-      );
-      const updatedPlan: WeeklyPlanData = {
-        ...currentPlan,
-        days,
-        generated_at: new Date().toISOString(),
-      };
-      return { updatedPlan, assistantMessage: parsed.message };
+    const edits = normalizePlanEdits(parsed.edits);
+    const reply = typeof parsed.message === "string" ? parsed.message : "";
+
+    if (edits.length === 0) {
+      return { updatedPlan: null, assistantMessage: reply || "Entendi." };
     }
 
-    return { updatedPlan: null, assistantMessage: parsed.message };
+    const { plan, changes, rejected } = applyPlanEdits(currentPlan, edits);
+
+    // The confirmation is written from what actually landed, never from what
+    // the model said it would do.
+    if (changes.length === 0) {
+      const why = rejected.length > 0 ? ` ${rejected.join(" ")}` : "";
+      return {
+        updatedPlan: null,
+        assistantMessage: `Não mudei nada no plano.${why} Se não era isso, me diga o dia e a distância.`,
+      };
+    }
+
+    const summary = changes.map(c => `• ${c}`).join("\n");
+    const caveat = rejected.length > 0 ? `\n\nNão apliquei: ${rejected.join(" ")}` : "";
+    return { updatedPlan: plan, assistantMessage: `Plano atualizado:\n${summary}${caveat}` };
   } catch (err) {
     console.error("[AI] Failed to parse plan feedback JSON:", err, "\nRaw:", raw);
     return null;
@@ -668,6 +813,261 @@ Treinador: ${assistantResponse}
       .map(n => ({ category: n.category as AthleteNoteCategory, content: n.content.trim() }));
   } catch {
     return [];
+  }
+}
+
+// ─── Coach's note for the week ───────────────────────────────────────────────
+
+const PHASE_PT: Record<string, string> = {
+  base:  "base aeróbica",
+  build: "construção (qualidade específica)",
+  peak:  "pico (específico de prova)",
+  taper: "polimento (taper)",
+  race:  "semana de prova",
+};
+
+/**
+ * One-paragraph coach's note framing the week. It does NOT prescribe workouts —
+ * those are computed deterministically by the workout engine — it only explains
+ * the intent, which is what the model is actually good at.
+ */
+export async function generateCoachNote(input: {
+  weeklyKm:  number;
+  phase:     string;
+  nextRace:  { name: string; date: string; distance_km: number } | null;
+  vdot:      number | null;
+  athleteProfile: string | null;
+  recentKm:  number;
+}): Promise<string | null> {
+  const systemPrompt = `
+Você é o treinador do atleta. Escreva UMA mensagem curta (2-3 frases, português do Brasil)
+enquadrando a semana de treino que já foi montada.
+
+REGRAS:
+1. NÃO prescreva treinos, distâncias ou ritmos — isso já está definido no plano.
+2. Explique a INTENÇÃO da semana (o que essa fase busca) e dê um ponto de atenção prático.
+3. Seja específico ao contexto dado. Nada de motivação genérica.
+4. Sem markdown, sem emojis, sem listas.
+`.trim();
+
+  const userPrompt = `
+FASE: ${PHASE_PT[input.phase] ?? input.phase}
+VOLUME PLANEJADO: ~${input.weeklyKm} km de corrida
+VOLUME RECENTE: ~${input.recentKm} km
+${input.vdot ? `VDOT: ${input.vdot.toFixed(1)}` : "Sem teste recente"}
+${input.nextRace ? `PRÓXIMA PROVA: ${input.nextRace.name} (${input.nextRace.distance_km} km) em ${input.nextRace.date}` : "Sem prova marcada"}
+${input.athleteProfile ? `\nPERFIL:\n${input.athleteProfile}` : ""}
+
+Escreva a mensagem da semana.
+`.trim();
+
+  return callGroq(systemPrompt, userPrompt, 220);
+}
+
+// ─── Post-race analysis ──────────────────────────────────────────────────────
+
+export interface GeneratedRaceAnalysis {
+  summary:         string;   // 2-3 sentences: how the race went
+  whatWorked:      string;
+  whatToImprove:   string;
+  nextCycleFocus:  string;   // concrete training focus for the next block
+}
+
+/**
+ * Post-race debrief: compares what was predicted against what actually
+ * happened, reads the pacing pattern, and turns it into the focus for the
+ * next training block.
+ */
+export async function generateRaceAnalysis(input: {
+  raceName:       string;
+  distanceKm:     number;
+  raceDate:       string;
+  actualSeconds:  number;
+  predictedSeconds: number | null;
+  targetSeconds:  number | null;
+  vdotBefore:     number | null;
+  vdotFromRace:   number | null;
+  avgHr:          number | null;
+  splitSummary:   string;    // per-km or per-segment pacing, or "sem dados"
+  trainingSummary: string;   // volume/consistency in the build-up
+}): Promise<GeneratedRaceAnalysis | null> {
+  const systemPrompt = `
+Você é um treinador de corrida analisando a prova que o atleta acabou de correr.
+RESPONDA SOMENTE com JSON válido, sem markdown:
+{
+  "summary": string (2-3 frases: como foi a prova, comparando previsto x real, sem rodeios),
+  "what_worked": string (2-3 frases sobre o que funcionou — pacing, preparo, execução),
+  "what_to_improve": string (2-3 frases objetivas sobre o que custou tempo),
+  "next_cycle_focus": string (2-4 frases: o foco concreto do próximo bloco de treino, com tipos de treino)
+}
+
+REGRAS:
+1. Use os NÚMEROS fornecidos. Não invente dados que não estão no contexto.
+2. Se o ritmo caiu no final (positive split), diga isso claramente e ligue à causa provável (largada rápida demais, volume insuficiente, ou nutrição).
+3. Se bateu o previsto, reconheça — sem exagero. Se ficou aquém, seja direto e construtivo, nunca condescendente.
+4. next_cycle_focus deve ser acionável: tipos de treino e ênfase (ex: "longões progressivos até 24km", "tempo runs de 8km no limiar").
+5. Português do Brasil, tom de treinador experiente. Sem markdown, sem bullet points.
+`.trim();
+
+  const fmt = (s: number | null) => {
+    if (!s) return "—";
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.round(s % 60);
+    return h > 0 ? `${h}h${String(m).padStart(2, "0")}min${String(sec).padStart(2, "0")}` : `${m}min${String(sec).padStart(2, "0")}`;
+  };
+  const pace = Math.round(input.actualSeconds / input.distanceKm);
+  const paceStr = `${Math.floor(pace / 60)}:${String(pace % 60).padStart(2, "0")}/km`;
+
+  const delta = input.predictedSeconds
+    ? input.actualSeconds - input.predictedSeconds
+    : null;
+
+  const userPrompt = `
+PROVA: ${input.raceName} — ${input.distanceKm} km em ${input.raceDate}
+TEMPO REAL: ${fmt(input.actualSeconds)} (ritmo médio ${paceStr})
+TEMPO PREVISTO PELO CONDICIONAMENTO: ${fmt(input.predictedSeconds)}${
+  delta !== null ? ` (${delta > 0 ? "+" : ""}${Math.round(delta)}s vs previsto)` : ""
+}
+TEMPO-ALVO DEFINIDO: ${fmt(input.targetSeconds)}
+${input.vdotBefore ? `VDOT ANTES DA PROVA: ${input.vdotBefore.toFixed(1)}` : ""}
+${input.vdotFromRace ? `VDOT IMPLICADO PELA PROVA: ${input.vdotFromRace.toFixed(1)}` : ""}
+${input.avgHr ? `FC MÉDIA NA PROVA: ${input.avgHr} bpm` : ""}
+
+RITMO AO LONGO DA PROVA:
+${input.splitSummary}
+
+PREPARAÇÃO (semanas anteriores):
+${input.trainingSummary}
+
+Gere a análise em JSON.
+`.trim();
+
+  const raw = await callGroq(systemPrompt, userPrompt, 1200);
+  if (!raw) return null;
+
+  try {
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+    const p = JSON.parse(cleaned) as {
+      summary?: string; what_worked?: string;
+      what_to_improve?: string; next_cycle_focus?: string;
+    };
+    if (!p.summary) return null;
+    return {
+      summary:        p.summary.trim(),
+      whatWorked:     p.what_worked?.trim() ?? "",
+      whatToImprove:  p.what_to_improve?.trim() ?? "",
+      nextCycleFocus: p.next_cycle_focus?.trim() ?? "",
+    };
+  } catch (err) {
+    console.error("[AI] Failed to parse race analysis:", err, "\nRaw:", raw?.slice(0, 400));
+    return null;
+  }
+}
+
+// ─── Race strategy ───────────────────────────────────────────────────────────
+
+export interface RaceStrategySplit { range: string; pace: string; note?: string }
+
+export interface GeneratedRaceStrategy {
+  title:              string;
+  scenario:           "conservative" | "balanced" | "aggressive";
+  targetTimeSeconds:  number | null;
+  strategyText:       string;
+  hydrationPlan:      string;
+  gelPlan:            string;
+  splits:             RaceStrategySplit[];
+}
+
+/**
+ * Race-day strategy for a specific upcoming race, grounded in the athlete's
+ * CURRENT fitness (VDOT, recent volume, predicted time). Regenerating after new
+ * training produces an updated plan — that's how the strategy "keeps up".
+ */
+export async function generateRaceStrategy(input: {
+  raceName:        string;
+  distanceKm:      number;
+  raceDate:        string | null;
+  daysOut:         number | null;
+  targetTimeSeconds: number | null;
+  predictedTimeSeconds: number | null;
+  vdot:            number | null;
+  weeklyKm:        number;
+  longestRecentKm: number;
+  recentSummary:   string;
+}): Promise<GeneratedRaceStrategy | null> {
+  const systemPrompt = `
+Você é um treinador de corrida especialista em prova. Monte a ESTRATÉGIA DE PROVA para o atleta brasileiro.
+RESPONDA SOMENTE com JSON válido — sem markdown, sem texto fora do JSON.
+
+{
+  "title": string (ex: "Estratégia — Meia do Rio"),
+  "scenario": "conservative" | "balanced" | "aggressive",
+  "target_time_seconds": number,
+  "strategy_text": string (3-5 frases: como largar, quando acelerar, o que evitar; específico à prova e ao condicionamento atual),
+  "hydration_plan": string (1-2 frases práticas, com quilômetros/intervalos),
+  "gel_plan": string (1-2 frases; se a prova for curta demais para géis, diga isso),
+  "splits": [ { "range": "0–5 km", "pace": "5:30/km", "note": string curto } ]
+}
+
+REGRAS:
+1. Baseie os ritmos no condicionamento ATUAL (VDOT e tempo previsto), não em desejos. Se o tempo-alvo for irreal frente ao previsto, escolha "conservative" e explique no strategy_text.
+2. Cubra TODA a distância nos splits, em 3 a 6 faixas contíguas (a última terminando na distância da prova).
+3. Negative split como padrão: primeiros km levemente mais lentos que o ritmo médio.
+4. Ajuste ao volume atual: pouco volume ou longão curto frente à prova → mais conservador.
+5. Géis: ~1 a cada 35-45 min em provas acima de 75 min; abaixo de 60 min normalmente não precisa.
+6. Português do Brasil, tom direto e prático. Sem markdown.
+`.trim();
+
+  const fmt = (s: number | null) => {
+    if (!s) return "não definido";
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    return h > 0 ? `${h}h${String(m).padStart(2, "0")}min` : `${m}min${String(sec).padStart(2, "0")}`;
+  };
+
+  const userPrompt = `
+PROVA: ${input.raceName} — ${input.distanceKm} km${input.raceDate ? ` em ${input.raceDate}` : ""}
+${input.daysOut != null ? `FALTAM: ${input.daysOut} dias` : ""}
+TEMPO-ALVO DO ATLETA: ${fmt(input.targetTimeSeconds)}
+TEMPO PREVISTO PELO CONDICIONAMENTO ATUAL: ${fmt(input.predictedTimeSeconds)}
+${input.vdot ? `VDOT: ${input.vdot.toFixed(1)}` : ""}
+VOLUME SEMANAL ATUAL: ~${Math.round(input.weeklyKm)} km
+LONGÃO MAIS LONGO RECENTE: ${input.longestRecentKm.toFixed(1)} km
+
+HISTÓRICO RECENTE:
+${input.recentSummary}
+
+Gere a estratégia em JSON.
+`.trim();
+
+  const raw = await callGroq(systemPrompt, userPrompt, 1400);
+  if (!raw) return null;
+
+  try {
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+    const p = JSON.parse(cleaned) as {
+      title?: string; scenario?: string; target_time_seconds?: number;
+      strategy_text?: string; hydration_plan?: string; gel_plan?: string;
+      splits?: RaceStrategySplit[];
+    };
+
+    const scenario = p.scenario === "conservative" || p.scenario === "aggressive"
+      ? p.scenario : "balanced";
+
+    return {
+      title:             p.title?.trim() || `Estratégia — ${input.raceName}`,
+      scenario,
+      targetTimeSeconds: Number.isFinite(p.target_time_seconds) ? Number(p.target_time_seconds) : null,
+      strategyText:      p.strategy_text?.trim() ?? "",
+      hydrationPlan:     p.hydration_plan?.trim() ?? "",
+      gelPlan:           p.gel_plan?.trim() ?? "",
+      splits: Array.isArray(p.splits)
+        ? p.splits
+            .filter(s => s && typeof s.range === "string" && typeof s.pace === "string")
+            .map(s => ({ range: s.range, pace: s.pace, note: s.note }))
+        : [],
+    };
+  } catch (err) {
+    console.error("[AI] Failed to parse race strategy:", err, "\nRaw:", raw?.slice(0, 400));
+    return null;
   }
 }
 

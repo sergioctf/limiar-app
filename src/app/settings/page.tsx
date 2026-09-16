@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/AppShell";
 import { SettingsContent } from "@/components/settings/SettingsContent";
+import { isAdminEmail } from "@/lib/admin";
 
 export default async function SettingsPage() {
   const supabase = createClient();
@@ -29,6 +30,7 @@ export default async function SettingsPage() {
         stravaConnection={conn ?? null}
         syncLogs={syncLogs ?? []}
         stravaRunsCount={stravaRunsCount ?? 0}
+        isAdmin={isAdminEmail(user.email)}
       />
     </AppShell>
   );

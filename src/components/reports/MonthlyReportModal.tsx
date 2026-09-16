@@ -41,7 +41,7 @@ export function MonthlyReportModal({ runs, onClose }: Props) {
             </select>
             <button
               onClick={() => window.print()}
-              className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
+              className="btn-primary text-xs min-h-[44px] py-1.5 px-3 flex items-center gap-1.5"
             >
               <Download className="w-3.5 h-3.5" />PDF
             </button>
@@ -131,7 +131,7 @@ export function MonthlyReportModal({ runs, onClose }: Props) {
               </div>
             )}
 
-            <p className="text-center text-[10px] text-surface-600 pt-2 border-t border-surface-700 print:border-gray-300">
+            <p className="text-center text-[10px] text-surface-500 pt-2 border-t border-surface-700 print:border-gray-300">
               Gerado por Limiar Performance · {formatDate(new Date().toISOString().slice(0, 10))}
             </p>
           </div>

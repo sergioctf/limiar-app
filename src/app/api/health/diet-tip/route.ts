@@ -7,7 +7,8 @@ import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { generateDietTip } from "@/lib/ai";
 import { getMondayStr, getWorkoutForDate } from "@/lib/plan-notify";
-import { bmrMifflin, tdeeForDay, calorieTarget, macrosFor, ageFromBirth, type CalorieGoal, type Sex } from "@/lib/nutrition";
+import { bmrMifflin, energyForDay, calorieTarget, macrosFor, ageFromBirth, type CalorieGoal, type Sex } from "@/lib/nutrition";
+import { athleteDateStr } from "@/lib/week";
 import type { WeeklyPlanDay } from "@/types";
 
 export const maxDuration = 30;
@@ -19,7 +20,9 @@ export async function GET() {
 
   const admin = createAdminClient();
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
+  // The athlete's calendar: after 21:00 in Brazil the UTC date is tomorrow, and
+  // the tip was reading tomorrow's (empty) training calories.
+  const today = athleteDateStr(now);
 
   // Profile + latest weight
   const [{ data: profile }, { data: weights }] = await Promise.all([
@@ -50,8 +53,14 @@ export async function GET() {
     : (trainingKcal > 0 ? "Treino realizado" : "Sem treino previsto");
 
   const goal = (profile.calorie_goal as CalorieGoal) ?? "maintain";
-  const bmr = bmrMifflin({ weightKg, heightCm: profile.height_cm, age, sex: profile.sex as Sex });
-  const tdee = tdeeForDay(bmr, trainingKcal);
+  const formulaBmr = bmrMifflin({ weightKg, heightCm: profile.height_cm, age, sex: profile.sex as Sex });
+  // Same energy model as the Saúde screen, so the tip and the card agree.
+  const since = new Date(`${today}T12:00:00Z`);
+  since.setUTCDate(since.getUTCDate() - 14);
+  const { data: readings } = await admin.from("wellness_data")
+    .select("date, active_kcal, resting_kcal")
+    .eq("user_id", user.id).gte("date", since.toISOString().slice(0, 10));
+  const { tdee } = energyForDay({ formulaBmr, trainingKcal, today, readings: readings ?? [] });
   const target = calorieTarget(tdee, goal);
   const macros = macrosFor(target, weightKg);
 

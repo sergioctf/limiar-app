@@ -60,15 +60,21 @@ self.addEventListener("notificationclick", (event) => {
 
 // ── Offline cache ─────────────────────────────────────────────────────────────
 
-const CACHE_NAME  = "limiar-cache-v2";
+const CACHE_NAME  = "limiar-cache-v3";
 const OFFLINE_URL = "/offline";
 
 // Precached on install so the offline fallback always works
 const PRECACHE_URLS = [OFFLINE_URL, "/manifest.json", "/limiar_icone_app.png"];
 
+// Routes worth having available without signal. The dashboard and the coach
+// carry the day's workout — the two screens actually opened mid-training.
+const PRIORITY_ROUTES = ["/", "/coach"];
+
 // Data endpoints worth serving stale when offline (GET only)
 const CACHEABLE_API_PATHS = [
   "/api/coach/weekly-plan",
+  "/api/coach/training-prefs",
+  "/api/coach/sports",
   "/api/coach/full-analysis",
   "/api/performance-tests",
   "/api/friends",
@@ -172,5 +178,14 @@ self.addEventListener("activate", (event) => {
         keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
       ))
       .then(() => clients.claim())
+      // Warm the screens the athlete opens mid-training, so the first time
+      // they lose signal isn't the first time these are needed from cache.
+      .then(() => caches.open(CACHE_NAME).then((cache) =>
+        Promise.all(PRIORITY_ROUTES.map((route) =>
+          fetch(route, { credentials: "same-origin" })
+            .then((res) => (res.ok ? cache.put(route, res) : null))
+            .catch(() => null)
+        ))
+      ))
   );
 });

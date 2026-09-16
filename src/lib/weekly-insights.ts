@@ -2,6 +2,7 @@
  * Weekly Insights — a lightweight end-of-week recap computed from runs.
  * Used for the Sunday-night push notification and (optionally) in-app display.
  */
+import { localDateStr } from "@/lib/week";
 import type { Run } from "@/types";
 
 export interface WeeklyInsights {
@@ -32,8 +33,8 @@ export function computeWeeklyInsights(runs: Run[], ref: Date = new Date()): Week
   const thisMonday = mondayOf(ref);
   const lastMonday = new Date(thisMonday); lastMonday.setDate(thisMonday.getDate() - 7);
 
-  const thisMondayStr = thisMonday.toISOString().slice(0, 10);
-  const lastMondayStr = lastMonday.toISOString().slice(0, 10);
+  const thisMondayStr = localDateStr(thisMonday);
+  const lastMondayStr = localDateStr(lastMonday);
 
   const thisWeekRuns = runs.filter(r => r.date >= thisMondayStr);
   const lastWeekRuns = runs.filter(r => r.date >= lastMondayStr && r.date < thisMondayStr);

@@ -29,7 +29,7 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 gap-3">
-      <Inbox className="w-10 h-10 text-surface-600" />
+      <Inbox className="w-10 h-10 text-surface-500" />
       <div className="text-center">
         <p className="font-medium text-surface-300">{title}</p>
         {description && <p className="text-sm text-surface-500 mt-1">{description}</p>}

@@ -5,15 +5,72 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
+  /*
+   * The palette is semantic, not literal: 900 is always the page background and
+   * 100 is always the primary text, whichever theme is on. That is what lets a
+   * light theme exist without touching a single component — the hundred files
+   * that say `bg-surface-800` keep saying it, and only these numbers move.
+   *
+   * Values are RGB triples rather than hex because Tailwind needs them that way
+   * to keep opacity modifiers working, and the codebase leans on those heavily
+   * (`bg-surface-700/30` and friends appear over 150 times).
+   */
+  :root,
+  :root.dark {
     --color-brand: 249 115 22;        /* orange-500 */
-    --color-surface-900: 10 10 10;    /* near-black */
+    /* Accent *text* shades. Separate from the background scale because orange
+       that reads well on near-black is unreadable on white. */
+    --color-brand-300: 253 186 116;
+    --color-brand-400: 251 146 60;
+    --color-surface-900: 10 10 10;    /* page bg — near black */
     --color-surface-800: 20 20 20;    /* card bg */
     --color-surface-700: 35 35 35;    /* border / elevated */
+    --color-surface-600: 58 58 58;    /* muted input bg */
+    --color-surface-500: 107 107 107; /* muted text */
+    --color-surface-400: 154 154 154; /* secondary text */
+    --color-surface-300: 212 212 212; /* primary text */
+    --color-surface-200: 232 232 232;
+    --color-surface-100: 245 245 245; /* headings */
+
+    --gradient-surface: linear-gradient(180deg, #141414 0%, #0a0a0a 100%);
+    --shadow-card: 0 1px 3px rgb(0 0 0 / 0.4);
+
     --animation-duration-fast: 150ms;
     --animation-duration-normal: 300ms;
     --animation-duration-slow: 500ms;
   }
+
+  /*
+   * Light is not an inversion of dark. A straight flip gives pure white cards on
+   * a pure white page — no separation — and text at #f5f5f5 contrast ratios that
+   * are punishing to read. So the page is faintly grey, cards are white, and the
+   * text ramp is tuned rather than mirrored.
+   */
+  :root.light {
+    --color-brand: 234 88 12;         /* orange-600 */
+    --color-brand-300: 194 65 12;     /* orange-700 — accent text on white */
+    --color-brand-400: 234 88 12;     /* orange-600 */
+    --color-surface-900: 244 244 245; /* page bg — soft grey */
+    --color-surface-800: 255 255 255; /* card bg — white, so cards lift off the page */
+    --color-surface-700: 228 228 231; /* border / elevated */
+    /* Purely a surface now. It used to double as muted text — 151 uses — which
+       forced a mid-grey compromise that served neither role: 1.74:1 as text on
+       dark, barely a border on light. Those 151 uses moved up to surface-500,
+       and this went back to being an input background. */
+    --color-surface-600: 212 212 216;
+    --color-surface-500: 130 130 138; /* muted text */
+    --color-surface-400: 90 90 98;    /* secondary text */
+    --color-surface-300: 55 55 62;    /* primary text */
+    --color-surface-200: 35 35 40;
+    --color-surface-100: 20 20 24;    /* headings — near black */
+
+    --gradient-surface: linear-gradient(180deg, #ffffff 0%, #f4f4f5 100%);
+    --shadow-card: 0 1px 3px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.04);
+  }
+
+  /* Native controls, scrollbars and form widgets follow the theme too. */
+  :root.dark  { color-scheme: dark; }
+  :root.light { color-scheme: light; }
 
   @keyframes slideInUp {
     from { transform: translateY(20px); opacity: 0; }
@@ -115,6 +172,31 @@
 }
 
 @layer components {
+  /*
+   * Safe areas for anything that escapes the document flow.
+   *
+   * `body` carries env(safe-area-inset-*), but a `fixed inset-0` overlay is
+   * positioned against the viewport and ignores it entirely — so on a phone the
+   * first-run flow rendered its logo and "Pular tudo" underneath the clock and
+   * the battery. A desktop browser at 375×812 has no notch, so no amount of
+   * measuring there would have caught it.
+   */
+  .overlay-fullscreen {
+    padding-top:    env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left:   env(safe-area-inset-left);
+    padding-right:  env(safe-area-inset-right);
+  }
+
+  /* For centred modals that already carry their own padding: whichever is
+     larger, so the inset never shrinks the breathing room they were given. */
+  .overlay-safe {
+    padding-top:    max(1rem, env(safe-area-inset-top));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    padding-left:   max(1rem, env(safe-area-inset-left));
+    padding-right:  max(1rem, env(safe-area-inset-right));
+  }
+
   .card {
     @apply bg-surface-800 rounded-2xl border border-surface-700;
   }
@@ -123,8 +205,16 @@
     @apply card transition-all duration-200 hover:border-brand-500/40 hover:bg-surface-800/80;
   }
 
+  /*
+   * min-h-[44px] on every button, everywhere.
+   *
+   * Measured on a 375px viewport, the primary buttons came out 40px tall and the
+   * secondary ones 32-33px — below the 44px both Apple and Google publish as the
+   * minimum a thumb can hit reliably. It is not a matter of taste: a 25px chip
+   * is missed, and a missed tap on a form reads as a broken app.
+   */
   .btn-primary {
-    @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-xl
+    @apply inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-xl
            bg-brand-500 hover:bg-brand-600 active:scale-95 active:bg-brand-700
            text-white font-semibold text-sm
            transition-all duration-150 ease-smooth
@@ -132,7 +222,7 @@
   }
 
   .btn-secondary {
-    @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-xl
+    @apply inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-xl
            bg-surface-700 hover:bg-surface-600 active:scale-95
            text-surface-200 font-medium text-sm
            transition-all duration-150 ease-smooth
@@ -140,14 +230,15 @@
   }
 
   .btn-ghost {
-    @apply inline-flex items-center gap-2 px-3 py-2 rounded-xl
+    @apply inline-flex items-center justify-center gap-2 px-3 py-2.5 min-h-[44px] rounded-xl
            text-surface-400 hover:text-surface-200 hover:bg-surface-700/60 active:scale-95
            font-medium text-sm
            transition-all duration-150 ease-smooth;
   }
 
+  /* Inputs get the same floor: a field too short to tap is a field not filled. */
   .input {
-    @apply w-full px-3 py-2.5 rounded-xl
+    @apply w-full px-3 py-3 min-h-[44px] rounded-xl
            bg-surface-700 border border-surface-600
            text-surface-200 placeholder-surface-500
            text-sm

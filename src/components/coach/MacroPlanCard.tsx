@@ -5,6 +5,7 @@ import {
   CalendarRange, Loader2, Sparkles, Wand2, X, Flag, ChevronDown, ChevronUp, RefreshCcw,
 } from "lucide-react";
 import type { MacroPlan, MacroRaceType, MacroPhase } from "@/types";
+import { localMondayStr } from "@/lib/week";
 
 interface Props {
   initialPlan: MacroPlan | null;
@@ -33,12 +34,7 @@ function monthLabel(ym: string): string {
   return new Date(`${ym}-15T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 }
 
-function currentMondayStr(): string {
-  const d = new Date();
-  const dow = (d.getDay() + 6) % 7;
-  d.setDate(d.getDate() - dow);
-  return d.toISOString().slice(0, 10);
-}
+const currentMondayStr = localMondayStr;
 
 export function MacroPlanCard({ initialPlan, weeklyActualKm }: Props) {
   const [plan, setPlan] = useState<MacroPlan | null>(initialPlan);
@@ -128,7 +124,7 @@ export function MacroPlanCard({ initialPlan, weeklyActualKm }: Props) {
         <div className="flex gap-1.5 flex-wrap mb-3">
           {RACE_TYPES.map(rt => (
             <button key={rt.key} onClick={() => setRaceType(rt.key)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`px-3 min-h-[44px] py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 raceType === rt.key ? "bg-brand-500 text-white" : "bg-surface-700 text-surface-400 hover:text-surface-200"
               }`}>
               {rt.label}
@@ -152,7 +148,7 @@ export function MacroPlanCard({ initialPlan, weeklyActualKm }: Props) {
             className="bg-surface-700 border border-surface-600 rounded-xl px-3 py-2.5 text-sm text-surface-200 focus:outline-none focus:border-brand-500"
           />
         </div>
-        <p className="text-[11px] text-surface-600 mb-3">O mês é uma estimativa — dá pra mudar depois sem perder o histórico.</p>
+        <p className="text-[11px] text-surface-500 mb-3">O mês é uma estimativa — dá pra mudar depois sem perder o histórico.</p>
 
         {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
 
@@ -282,7 +278,7 @@ export function MacroPlanCard({ initialPlan, weeklyActualKm }: Props) {
       <button onClick={adapt} disabled={busy} className="btn-secondary w-full justify-center mt-3">
         {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> Reavaliando…</> : <><RefreshCcw className="w-4 h-4" /> Reavaliar com base nos treinos reais</>}
       </button>
-      <p className="text-[10px] text-surface-600 text-center mt-1.5">O plano também se adapta sozinho toda segunda-feira.</p>
+      <p className="text-[10px] text-surface-500 text-center mt-1.5">O plano também se adapta sozinho toda segunda-feira.</p>
     </div>
   );
 }

@@ -118,7 +118,7 @@ export function RouteReplay({ polyline, distanceKm, latlng }: Props) {
             d={projected.pathD}
             fill="none"
             stroke="currentColor"
-            className="text-surface-600"
+            className="text-surface-500"
             strokeWidth={3}
             strokeLinecap="round"
             strokeLinejoin="round"

@@ -52,7 +52,7 @@ export function ZonesCard({ zones, lthr, hrmax }: Props) {
         ))}
       </div>
 
-      <p className="text-xs text-surface-600 pt-1">
+      <p className="text-xs text-surface-500 pt-1">
         * Zonas calculadas pelo método Friel baseado no LTHR estimado do teste.
       </p>
     </div>

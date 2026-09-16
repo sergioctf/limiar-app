@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { X, MapPin, Timer, Heart, FileText, Target, Trophy, Info } from "lucide-react";
 import { timeToString } from "@/lib/performance";
 import type { Race } from "@/types";
+import { localDateStr } from "@/lib/week";
 
 const DISTANCE_PRESETS = [
   { label: "5 km",    km: 5     },
@@ -49,7 +50,7 @@ function secsToHMS(s: number): { h: string; m: string; ss: string } {
 }
 
 export function RaceForm({ onClose, onSaved, editRace, addResult }: Props) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateStr();
   const isEdit = !!editRace;
 
   function initForm(): FormState {
@@ -160,7 +161,7 @@ export function RaceForm({ onClose, onSaved, editRace, addResult }: Props) {
       const data = await res.json();
       if (!res.ok) {
         if (data.migration_needed) {
-          setError("Tabela de provas não encontrada. Execute o SQL em /api/admin/create-races-table?secret=limiar_admin_2026");
+          setError("A tabela de provas ainda não existe no banco. Avise o administrador do app para rodar a migração.");
         } else {
           setError(data.error ?? "Erro ao salvar prova.");
         }
@@ -205,7 +206,7 @@ export function RaceForm({ onClose, onSaved, editRace, addResult }: Props) {
                 placeholder="Meia Maratona do Rio, São Silvestre…"
                 value={form.name}
                 onChange={(e) => set("name", e.target.value)}
-                className="w-full bg-surface-700 border border-surface-600 text-surface-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-surface-600"
+                className="w-full bg-surface-700 border border-surface-600 text-surface-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-surface-500"
                 required
               />
             </div>
@@ -233,7 +234,7 @@ export function RaceForm({ onClose, onSaved, editRace, addResult }: Props) {
                   placeholder="Rio de Janeiro…"
                   value={form.location}
                   onChange={(e) => set("location", e.target.value)}
-                  className="w-full bg-surface-700 border border-surface-600 text-surface-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-surface-600"
+                  className="w-full bg-surface-700 border border-surface-600 text-surface-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-surface-500"
                 />
               </div>
             </div>
@@ -249,7 +250,7 @@ export function RaceForm({ onClose, onSaved, editRace, addResult }: Props) {
                     key={p.km}
                     type="button"
                     onClick={() => set("distance_km", String(p.km))}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                    className={`px-3 min-h-[44px] py-1.5 rounded-lg text-sm font-medium border transition-colors ${
                       form.distance_km === String(p.km)
                         ? "bg-brand-500/20 border-brand-500/40 text-brand-400"
                         : "bg-surface-700 border-surface-600 text-surface-400 hover:text-surface-200"
@@ -261,7 +262,7 @@ export function RaceForm({ onClose, onSaved, editRace, addResult }: Props) {
                 <button
                   type="button"
                   onClick={() => set("distance_km", "custom")}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                  className={`px-3 min-h-[44px] py-1.5 rounded-lg text-sm font-medium border transition-colors ${
                     form.distance_km === "custom"
                       ? "bg-brand-500/20 border-brand-500/40 text-brand-400"
                       : "bg-surface-700 border-surface-600 text-surface-400 hover:text-surface-200"
@@ -433,7 +434,7 @@ export function RaceForm({ onClose, onSaved, editRace, addResult }: Props) {
                   placeholder="Sensações, condições, estratégia…"
                   value={form.notes}
                   onChange={(e) => set("notes", e.target.value)}
-                  className="w-full bg-surface-700 border border-surface-600 text-surface-100 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-surface-600"
+                  className="w-full bg-surface-700 border border-surface-600 text-surface-100 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-surface-500"
                 />
               </div>
             </>

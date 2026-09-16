@@ -8,6 +8,9 @@ import {
 import { TrendingUp } from "lucide-react";
 import type { DailyLoad } from "@/lib/training-load";
 import { tsbLabel } from "@/lib/training-load";
+import { explainLoad } from "@/lib/load-explainer";
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 
 interface Props {
   data: DailyLoad[];
@@ -67,6 +70,8 @@ export function FitnessCard({ data }: Props) {
 
   const latest  = data[data.length - 1];
   const { label: formLabel, color: formColor, bg: formBg } = tsbLabel(latest.tsb);
+  const explanation = explainLoad(latest, { daysOfData: data.length });
+  const [glossary, setGlossary] = useState(false);
 
   // Sample data for display: show every 3rd point to keep chart clean
   const chartData = data.filter((_, i) => i % 2 === 0 || i === data.length - 1);
@@ -91,6 +96,17 @@ export function FitnessCard({ data }: Props) {
         <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${formBg} ${formColor}`}>
           {formLabel}
         </span>
+      </div>
+
+      {/*
+        What the three numbers mean for this athlete, right now.
+        Above the chart because it is the reason to look at the chart, and the
+        card used to open with "Fitness 42 · Fadiga 51 · Forma −9" and no clue
+        as to whether that was a good week or a warning.
+      */}
+      <div className={`rounded-xl p-3 border ${formBg} border-current/15`}>
+        <p className="text-sm text-surface-200 leading-relaxed">{explanation.headline}</p>
+        <p className="text-xs text-surface-400 leading-relaxed mt-1.5">{explanation.advice}</p>
       </div>
 
       {/* Current values */}
@@ -191,16 +207,45 @@ export function FitnessCard({ data }: Props) {
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 text-[10px] text-surface-500">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-surface-500">
         <span className="flex items-center gap-1.5">
-          <span className="w-3 h-0.5 bg-blue-500 inline-block rounded" /> CTL = Fitness crônico
+          <span className="w-3 h-0.5 bg-blue-500 inline-block rounded" /> CTL = Fitness
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-3 h-0.5 bg-orange-400 inline-block rounded" style={{ background: "repeating-linear-gradient(90deg,#f97316 0,#f97316 4px,transparent 4px,transparent 6px)" }} /> ATL = Fadiga aguda
+          <span className="w-3 h-0.5 bg-orange-400 inline-block rounded" style={{ background: "repeating-linear-gradient(90deg,#f97316 0,#f97316 4px,transparent 4px,transparent 6px)" }} /> ATL = Fadiga
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-0.5 bg-green-500 inline-block rounded" /> TSB = Forma
         </span>
+      </div>
+
+      {/*
+        The definitions, folded away.
+        Three acronyms are three questions for anyone seeing them the first
+        time, and permanently visible they are clutter for everyone else.
+      */}
+      <div className="border-t border-surface-700 pt-2">
+        <button
+          onClick={() => setGlossary(v => !v)}
+          aria-expanded={glossary}
+          className="w-full flex items-center justify-between min-h-[44px] text-left text-xs text-surface-400 hover:text-surface-200 transition-colors"
+        >
+          O que significam estes números?
+          <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${glossary ? "rotate-180" : ""}`} />
+        </button>
+
+        {glossary && (
+          <dl className="space-y-2 pb-1">
+            {explanation.glossary.map(g => (
+              <div key={g.term}>
+                <dt className="text-xs font-semibold text-surface-200">
+                  {g.label} <span className="text-surface-500 font-normal">({g.term})</span>
+                </dt>
+                <dd className="text-[11px] text-surface-400 leading-relaxed">{g.text}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
       </div>
     </div>
   );

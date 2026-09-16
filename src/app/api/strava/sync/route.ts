@@ -3,6 +3,7 @@ import { createClient, createAdminClient } from "@/lib/supabase/server";
 import {
   refreshStravaToken,
   getStravaActivities,
+  enrichActivitiesWithCalories,
   stravaActivityToRun,
   StravaApiError,
 } from "@/lib/strava";
@@ -82,8 +83,14 @@ export async function POST(request: NextRequest) {
     let page = 1;
 
     while (true) {
-      const activities = await getStravaActivities(accessToken, page, 50);
-      if (!Array.isArray(activities) || activities.length === 0) break;
+      const listed = await getStravaActivities(accessToken, page, 50);
+      if (!Array.isArray(listed) || listed.length === 0) break;
+
+      // The list has no calories. Ask for the detail of the ones missing it, so
+      // a burn the watch actually measured is not replaced by an estimate.
+      const activities = await enrichActivitiesWithCalories(
+        accessToken, listed as Array<{ id: number; calories?: number | null }>,
+      );
 
       for (const activity of activities) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

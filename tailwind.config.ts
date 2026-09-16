@@ -14,25 +14,27 @@ const config: Config = {
           50:  "#fff7ed",
           100: "#ffedd5",
           200: "#fed7aa",
-          300: "#fdba74",
-          400: "#fb923c",
+          300: "rgb(var(--color-brand-300) / <alpha-value>)",
+          400: "rgb(var(--color-brand-400) / <alpha-value>)",
           500: "#f97316",   // primary orange
           600: "#ea580c",
           700: "#c2410c",
           800: "#9a3412",
           900: "#7c2d12",
         },
-        // Dark surface — neutral black/zinc (no blue tint)
+        // Surface — semantic, not literal. 900 is always the page background and
+        // 100 always the primary text; globals.css decides what those mean per
+        // theme. The rgb(...) form is what keeps opacity modifiers working.
         surface: {
-          900: "#0a0a0a",   // page bg — near black
-          800: "#141414",   // card bg
-          700: "#232323",   // elevated card / border
-          600: "#3a3a3a",   // muted input bg
-          500: "#6b6b6b",   // muted text
-          400: "#9a9a9a",   // secondary text
-          300: "#d4d4d4",   // primary text (on dark)
-          200: "#e8e8e8",
-          100: "#f5f5f5",
+          900: "rgb(var(--color-surface-900) / <alpha-value>)",
+          800: "rgb(var(--color-surface-800) / <alpha-value>)",
+          700: "rgb(var(--color-surface-700) / <alpha-value>)",
+          600: "rgb(var(--color-surface-600) / <alpha-value>)",
+          500: "rgb(var(--color-surface-500) / <alpha-value>)",
+          400: "rgb(var(--color-surface-400) / <alpha-value>)",
+          300: "rgb(var(--color-surface-300) / <alpha-value>)",
+          200: "rgb(var(--color-surface-200) / <alpha-value>)",
+          100: "rgb(var(--color-surface-100) / <alpha-value>)",
         },
       },
       fontFamily: {
@@ -41,7 +43,7 @@ const config: Config = {
       },
       backgroundImage: {
         "gradient-brand": "linear-gradient(135deg, #f97316 0%, #ea580c 100%)",
-        "gradient-dark": "linear-gradient(180deg, #141414 0%, #0a0a0a 100%)",
+        "gradient-dark": "var(--gradient-surface)",
       },
       animation: {
         "fade-in": "fadeIn 0.3s ease-in-out",

@@ -119,7 +119,7 @@ export function EvolutionChart({ runs, height = 220 }: { runs: Run[]; height?: n
           <button
             key={key}
             onClick={() => setRange(key)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            className={`px-3 min-h-[44px] py-1.5 rounded-lg text-xs font-semibold transition-all ${
               range === key
                 ? "bg-brand-500 text-white shadow"
                 : "bg-surface-700 text-surface-400 hover:text-surface-200"

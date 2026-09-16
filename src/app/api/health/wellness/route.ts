@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { WellnessData } from "@/types";
+import { upsertWellness } from "@/lib/wellness-upsert";
 
 const SOURCES = new Set(["healthconnect", "healthkit", "garmin", "manual_import"]);
 
@@ -70,14 +71,13 @@ export async function POST(request: NextRequest) {
   const daysInput: Record<string, unknown>[] = Array.isArray(body.days) ? body.days : [body];
   const rows = daysInput.slice(0, 60).map(d => normalize(d, user.id, source));
 
-  const { data, error } = await supabase
-    .from("wellness_data")
-    .upsert(rows, { onConflict: "user_id,date" })
-    .select();
+  // Merge, not replace: a field this source did not measure keeps whatever
+  // another source already wrote for the day.
+  const { saved, error } = await upsertWellness(supabase, rows);
 
   if (error) {
     console.error("[health/wellness] upsert error:", error);
     return NextResponse.json({ error: "Falha ao salvar wellness" }, { status: 500 });
   }
-  return NextResponse.json({ ok: true, saved: data?.length ?? 0 });
+  return NextResponse.json({ ok: true, saved });
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Trophy, ChevronRight, Lock } from "lucide-react";
+import Link from "next/link";
+import { Trophy, ChevronRight, Lock, Users } from "lucide-react";
 import type { Achievement } from "@/lib/achievements";
 import { Confetti } from "@/components/shared/Confetti";
 
@@ -50,7 +51,7 @@ export function AchievementsCard({ achievements }: AchievementsCardProps) {
         {unlockedCount > 0 && (
           <div className="text-right">
             <p className="text-2xl font-black text-brand-400 tabular-nums">{unlockedCount}</p>
-            <p className="text-[10px] text-surface-600">badges</p>
+            <p className="text-[10px] text-surface-500">badges</p>
           </div>
         )}
       </div>
@@ -94,7 +95,7 @@ export function AchievementsCard({ achievements }: AchievementsCardProps) {
                     style={{ width: `${achievement.progress}%` }}
                   />
                 </div>
-                <p className="text-[9px] text-surface-600 mt-0.5">
+                <p className="text-[10px] text-surface-500 mt-0.5">
                   {Math.round(achievement.progress)}%
                 </p>
               </div>
@@ -127,6 +128,11 @@ export function AchievementsCard({ achievements }: AchievementsCardProps) {
           Mostrar menos
         </button>
       )}
+
+      {/* The point of a badge is that someone else has one you don't. */}
+      <Link href="/friends/conquistas" className="btn-secondary w-full justify-center text-xs">
+        <Users className="w-3.5 h-3.5" /> Comparar com amigos
+      </Link>
     </div>
   );
 }

@@ -28,6 +28,86 @@ export function tdeeForDay(bmr: number, trainingKcal: number): number {
   return Math.round(bmr * 1.2 + trainingKcal);
 }
 
+/** The watch's energy readings for one day, as stored in `wellness_data`. */
+export interface EnergyReading {
+  date: string;
+  active_kcal?: number | null;
+  resting_kcal?: number | null;
+}
+
+export interface DayEnergy {
+  bmr: number;
+  bmrSource: "watch" | "formula";
+  /** Energy above basal counted into the day. */
+  activeKcal: number;
+  activeSource: "watch" | "estimate";
+  tdee: number;
+}
+
+const median = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+
+/**
+ * The day's energy, measured where the watch measured it and estimated where it
+ * did not.
+ *
+ * **Basal.** The watch's resting energy for a *finished* day is its own basal
+ * estimate, built from the athlete's heart rate rather than from a population
+ * formula. Today's reading is useless for this — at 8 am it holds eight hours
+ * of a twenty-four hour number — so only earlier days count, and only readings
+ * within a plausible band of the formula: a shortcut that ran at breakfast
+ * leaves a day holding a third of its basal, and that must not become the
+ * athlete's metabolism. The median of the last two weeks, so one odd day moves
+ * nothing.
+ *
+ * **Active.** The old model allowed 20% of basal for ordinary movement plus the
+ * training Strava recorded. That allowance stays as the floor, because the
+ * watch's active energy accumulates through the day and in the morning is
+ * nearly zero — a target that starts low and climbs by dinner would be useless
+ * at breakfast. Once the watch has measured *more* than the allowance — a long
+ * walk, a day on foot — the measurement wins. Taking the larger of the two also
+ * avoids counting the run twice, since the watch's figure already includes it.
+ *
+ * With no watch data at all this reduces exactly to `tdeeForDay`.
+ */
+export function energyForDay(input: {
+  formulaBmr: number;
+  trainingKcal: number;
+  today: string;
+  readings?: EnergyReading[];
+}): DayEnergy {
+  const { formulaBmr, trainingKcal, today } = input;
+  const readings = input.readings ?? [];
+
+  const since = new Date(`${today}T12:00:00Z`);
+  since.setUTCDate(since.getUTCDate() - 14);
+  const sinceStr = since.toISOString().slice(0, 10);
+
+  const basalDays = readings
+    .filter(r => r.date < today && r.date >= sinceStr)
+    .map(r => Number(r.resting_kcal))
+    .filter(v => Number.isFinite(v) && v >= formulaBmr * 0.75 && v <= formulaBmr * 1.5);
+
+  const bmr = basalDays.length > 0 ? Math.round(median(basalDays)) : formulaBmr;
+  const bmrSource = basalDays.length > 0 ? "watch" : "formula";
+
+  const estimate = bmr * 0.2 + trainingKcal;
+  const measured = Number(readings.find(r => r.date === today)?.active_kcal);
+  const watchWins = Number.isFinite(measured) && measured > estimate;
+
+  const activeKcal = Math.round(watchWins ? measured : estimate);
+  return {
+    bmr,
+    bmrSource,
+    activeKcal,
+    activeSource: watchWins ? "watch" : "estimate",
+    tdee: Math.round(bmr + activeKcal),
+  };
+}
+
 const GOAL_ADJUST: Record<CalorieGoal, number> = {
   maintain: 0,
   cut: -400,    // ~0.4 kg/week deficit, safe for runners

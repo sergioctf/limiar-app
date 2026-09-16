@@ -1,4 +1,6 @@
+import { localDateStr } from "@/lib/week";
 import type { Run } from "@/types";
+import { buildRecords, bestAt, type RunForRecords, type StoredEffort } from "@/lib/records";
 
 export interface Achievement {
   id: string;
@@ -13,7 +15,12 @@ export interface Achievement {
 /**
  * Detect all achievements for a user based on their runs.
  */
-export function detectAchievements(runs: Run[]): Achievement[] {
+/**
+ * `efforts` is optional so callers that have not loaded them still get badges —
+ * `buildRecords` then falls back to whole activities, which is strictly better
+ * than the rule this used to carry.
+ */
+export function detectAchievements(runs: Run[], efforts: StoredEffort[] = []): Achievement[] {
   if (!runs || runs.length === 0) {
     return getAllAchievements().map(a => ({ ...a, unlocked: false }));
   }
@@ -162,21 +169,25 @@ export function detectAchievements(runs: Run[]): Achievement[] {
     ? Math.min(...pacedRuns.map(r => r.avg_pace_seconds_per_km as number))
     : Infinity;
 
-  // best finishing time for a given distance bucket
-  const bestDuration = (km: number, tol: number): number => {
-    const m = runs.filter(r => Math.abs(r.distance_km - km) <= tol && r.duration_seconds > 0);
-    return m.length ? Math.min(...m.map(r => r.duration_seconds)) : Infinity;
-  };
-  const best10k      = bestDuration(10, 0.5);
-  const bestHalf     = bestDuration(21.1, 0.5);
-  const bestMarathon = bestDuration(42.2, 1.0);
+  /*
+   * Records from the shared engine — see lib/records.ts.
+   *
+   * The badges used to run their own bucket rule, which made "10K abaixo de 45
+   * min" a different claim from the 10 km on the athlete's own records card.
+   * Unlocking is a promise about a number the athlete can see; the two had
+   * better be the same number.
+   */
+  const records = buildRecords(runs as unknown as RunForRecords[], efforts);
+  const best10k      = bestAt(records, 10000) ?? Infinity;
+  const bestHalf     = bestAt(records, 21097) ?? Infinity;
+  const bestMarathon = bestAt(records, 42195) ?? Infinity;
 
   // biggest single calendar-week volume (grouped by Monday)
   const mondayKey = (dateStr: string): string => {
     const d = new Date(`${dateStr}T12:00:00`);
     const day = (d.getDay() + 6) % 7;
     d.setDate(d.getDate() - day);
-    return d.toISOString().slice(0, 10);
+    return localDateStr(d);
   };
   const weekKm = new Map<string, number>();
   runs.forEach(r => weekKm.set(mondayKey(r.date), (weekKm.get(mondayKey(r.date)) ?? 0) + r.distance_km));
@@ -303,7 +314,7 @@ function calculateCurrentStreak(sortedDates: string[]): number {
   return current;
 }
 
-function getAllAchievements(): Achievement[] {
+export function getAllAchievements(): Achievement[] {
   return [
     { id: "first_run", label: "Primeiro passo", description: "Registre sua primeira corrida", icon: "🏃", unlocked: false },
     { id: "rookie", label: "Estreante", description: "Complete 10 corridas", icon: "🌱", unlocked: false },

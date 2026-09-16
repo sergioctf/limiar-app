@@ -50,7 +50,7 @@ export function PredictionsCard({ predictions, testDate }: Props) {
         })}
       </div>
 
-      <p className="text-xs text-surface-600 pt-1">
+      <p className="text-xs text-surface-500 pt-1">
         Baseado no teste de {formatDate(testDate)} · Fórmula Riegel (fator 1.06).
       </p>
     </div>
