@@ -15,8 +15,9 @@
  */
 import { useState } from "react";
 import Link from "next/link";
+import { compareSessions, executionDiffers, parseProposal, parsedLabel, VERDICT_LABEL } from "@/lib/session-adapt";
 import {
-  EFFORTS, VERY_HARD, contextQuestion, evaluateRunFeedback,
+  EFFORTS, EXECUTIONS, VERY_HARD, contextQuestion, evaluateRunFeedback, type Execution,
   type FeedbackItem, type RunContext, type RunFeedback,
 } from "@/lib/run-feedback";
 
@@ -30,12 +31,14 @@ const choice = "rounded-xl border px-3 py-2 min-h-[44px] text-sm transition-colo
 const picked = (on: boolean) => choice + (on ? "border-brand-400 bg-brand-500/15" : "border-surface-600 hover:border-surface-500");
 
 export function RunFeedbackForm({
-  item, onSaved, onLater, onClose, lightened = [],
+  item, onSaved, onLater, onNever, onClose, lightened = [],
 }: {
   item: FeedbackItem;
   onSaved: (saved: SavedFeedback) => void;
-  /** Pop-up only: postpone to the run's page. */
+  /** Pop-up only: ask again on a later visit. */
   onLater?: () => void;
+  /** Pop-up only: do not ask about this run again. */
+  onNever?: () => void;
   /** Pop-up only: close after reading the assessment. */
   onClose?: () => void;
   lightened?: string[];
@@ -45,6 +48,17 @@ export function RunFeedbackForm({
   const [context, setContext] = useState<RunContext | null>(answered ? item.feedback?.context ?? null : null);
   const [reduce, setReduce] = useState<boolean | null>(answered ? item.feedback?.reduce_requested ?? null : null);
   const [note, setNote] = useState(item.feedback?.note ?? "");
+  const [execution, setExecution] = useState<Execution | null>(answered ? item.feedback?.execution ?? null : null);
+  const [executedText, setExecutedText] = useState(item.feedback?.executed_text ?? "");
+
+  // Asked only when the run looks clearly different from the plan — never as a
+  // routine question. A session adapted beforehand is already known.
+  const planned = item.feedback?.planned ?? item.planned;
+  const askExecution = Boolean(planned) && (executionDiffers(planned, item.run) || item.feedback?.execution != null);
+  const parsedExecuted = execution && execution !== "as_planned" && executedText.trim() ? parseProposal(executedText) : null;
+  const executedLabel = parsedExecuted ? parsedLabel(parsedExecuted) : null;
+  const executedVerdict = planned && parsedExecuted?.kind && executedLabel && execution === "adapted"
+    ? compareSessions(planned, parsedExecuted.kind, executedLabel).verdict : null;
   const [editing, setEditing] = useState(!answered);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -52,7 +66,7 @@ export function RunFeedbackForm({
   const question = contextQuestion(effort);
   const tooHeavy = effort === VERY_HARD && context === "session_too_hard";
   const alreadyLightened = item.feedback?.reduce_requested === true;
-  const ready = effort != null && context != null && (!tooHeavy || reduce != null);
+  const ready = effort != null && context != null && (!tooHeavy || reduce != null) && (!askExecution || execution != null);
 
   function chooseEffort(level: number) {
     setEffort(level);
@@ -75,6 +89,7 @@ export function RunFeedbackForm({
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           runId: item.run.id, status: "answered", effort, context, note,
+          ...(askExecution && execution ? { execution, executedText: execution === "as_planned" ? undefined : executedText } : {}),
           ...(tooHeavy ? { reduce } : {}),
         }),
       });
@@ -110,6 +125,33 @@ export function RunFeedbackForm({
 
       {editing ? (
         <>
+          {askExecution && planned && (
+            <fieldset disabled={busy} className="space-y-2">
+              <legend className="text-sm font-medium mb-2">Estava previsto: {planned.label}. Como foi?</legend>
+              <div className="flex flex-wrap gap-2">
+                {(Object.entries(EXECUTIONS) as Array<[Execution, string]>).map(([key, label]) => (
+                  <button key={key} type="button" aria-pressed={execution === key}
+                    onClick={() => setExecution(key)} className={picked(execution === key)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {execution && execution !== "as_planned" && (
+                <label className="block text-sm">
+                  O que você fez? <span className="text-surface-500">(opcional)</span>
+                  <input className="input mt-1 w-full" maxLength={300} value={executedText} disabled={busy}
+                    placeholder="Ex.: 2 km de aquecimento, 8 × 400 m, 1 km de desaquecimento"
+                    onChange={e => setExecutedText(e.target.value)} />
+                  {executedLabel && (
+                    <span className="mt-1 block text-xs text-surface-400">
+                      Entendi: {executedLabel}{executedVerdict ? ` · ${VERDICT_LABEL[executedVerdict].toLowerCase()} do treino previsto` : ""}
+                    </span>
+                  )}
+                </label>
+              )}
+            </fieldset>
+          )}
+
           <fieldset disabled={busy} className="space-y-2">
             <legend className="text-sm font-medium mb-2">Como esse treino pareceu para você?</legend>
             <div className="flex flex-wrap gap-2">
@@ -178,6 +220,11 @@ export function RunFeedbackForm({
             {onLater && (
               <button type="button" disabled={busy} onClick={onLater} className="text-sm text-surface-400 min-h-[44px]">
                 Responder depois
+              </button>
+            )}
+            {onNever && (
+              <button type="button" disabled={busy} onClick={onNever} className="text-xs text-surface-500 min-h-[44px] underline-offset-2 hover:underline">
+                Não quero responder
               </button>
             )}
           </div>

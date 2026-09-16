@@ -27,7 +27,7 @@ import type { RunContext } from "@/lib/run-feedback";
 /** Why a week fell short. `too_much` only ever comes from the athlete. */
 export type ShortfallReason = "life" | "body" | "too_much" | "unknown";
 
-export type AskKind = "what_happened" | "does_it_fit";
+export type AskKind = "what_happened" | "does_it_fit" | "body_lighter";
 
 export interface WeekReading {
   plannedKm: number;
@@ -40,6 +40,8 @@ export interface WeekReading {
   creditedKm: number;
   /** True when the shortfall was not allowed to pull the plan down. */
   holding: boolean;
+  /** Next week must not climb above this one (the athlete asked, or the body is in question). */
+  noRamp?: boolean;
   ask: AskKind | null;
   headline: string;
   detail: string;
@@ -95,6 +97,7 @@ export function readWeek(input: {
       return {
         plannedKm, actualKm, completion, status: "met", reason: "too_much",
         creditedKm: actualKm, holding: false, ask: null,
+        noRamp: true,
         headline: "Semana cumprida, sem aumento",
         detail: `Você fez ${km(actualKm)} dos ${km(plannedKm)} previstos, mas achou um treino pesado demais e pediu para aliviar. Por isso a semana seguinte não aumenta o volume.`,
       };
@@ -139,18 +142,30 @@ export function readWeek(input: {
   }
 
   if (reason === "body") {
+    // The athlete said so themselves, in answer to the coach: ease off.
+    if (input.answer === "body") {
+      return {
+        plannedKm, actualKm, completion, status: "short", reason,
+        creditedKm: actualKm, holding: false, noRamp: true, ask: null,
+        headline: "Semana mais leve, e tudo bem",
+        detail: `${done}. Você pediu uma semana mais leve, então a seguinte parte do que foi feito, sem forçar a volta ao volume anterior.`,
+      };
+    }
+    // Only the check-ins spoke. The individual feedback promised the plan would
+    // not change, so it does not change silently now either: hold without
+    // climbing, and ask (Sérgio's rule — ask before reducing).
     return {
       plannedKm, actualKm, completion, status: "short", reason,
-      creditedKm: actualKm, holding: false, ask: null,
-      headline: "Semana mais leve, e tudo bem",
-      detail: `${done}. Você relatou cansaço ou incômodo, então a semana seguinte parte do que foi feito, sem forçar a volta ao volume anterior.`,
+      creditedKm: plannedKm, holding: true, noRamp: true, ask: "body_lighter",
+      headline: "Semana com cansaço ou incômodo",
+      detail: `${done}. Você relatou cansaço ou incômodo. Nada foi reduzido sem você: o volume fica como estava, sem aumentar, até você dizer se prefere uma semana mais leve.`,
     };
   }
 
   if (reason === "too_much") {
     return {
       plannedKm, actualKm, completion, status: "short", reason,
-      creditedKm: actualKm, holding: false, ask: null,
+      creditedKm: actualKm, holding: false, noRamp: true, ask: null,
       headline: "Plano ajustado ao que cabe",
       detail: `${done}. Você disse que o plano estava grande demais, então ele passa a partir do que foi feito, em vez de insistir nos ${km(plannedKm)}.`,
     };
@@ -172,6 +187,15 @@ export function readWeek(input: {
 
 /** The question itself, when there is one. Short on purpose: one tap. */
 export function weekQuestion(kind: AskKind): { title: string; options: Array<{ value: ShortfallReason; label: string }> } {
+  if (kind === "body_lighter") {
+    return {
+      title: "Você relatou cansaço ou incômodo nesta semana. Como seguimos?",
+      options: [
+        { value: "life", label: "Foi pontual, pode manter" },
+        { value: "body", label: "Quero uma semana mais leve" },
+      ],
+    };
+  }
   return kind === "does_it_fit"
     ? {
       title: "Duas semanas seguidas atrapalhadas. O plano precisa mudar?",

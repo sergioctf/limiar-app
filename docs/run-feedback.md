@@ -103,3 +103,17 @@ Na leitura da semana (`week-reading.ts`), dormir pouco, estresse e questão pess
 ### Achado no primeiro uso
 
 A observação de Sérgio na corrida de 16/09: *"Não faço treino em ladeira. Fiz OUTRO treino, 2 km de aquecimento, 8 tiros de 400 m e 1,25 km de desaquecimento."* O plano prescreveu "Subidas 6×45 s" (o cardápio do mesociclo inclui subidas) e não há hoje como o atleta excluir um tipo de sessão. Registrado como próximo ajuste; não implementado nesta entrega.
+
+## Terceira versão: coerência das consequências (16/09/2026)
+
+Quatro pontos levantados na revisão com a outra IA, todos corrigidos:
+
+1. **"Responder depois" não é "não perguntar mais".** Antes, os dois viravam `skipped` e o pop-up nunca voltava. Agora:
+   - **Responder depois** → `deferred`: volta a aparecer na entrada depois de 6 horas, enquanto a corrida ainda é recente (até dois dias). Fechar o pop-up tocando fora ou com Esc também é "depois".
+   - **Não quero responder** → `skipped`: não volta.
+   - Nos dois casos, a página da corrida continua oferecendo o formulário.
+2. **Cansaço: o que o feedback promete bate com o que a semana faz.** O check-in dizia que nada mudava, mas a leitura semanal reduzia o volume em silêncio quando a semana ficava curta por cansaço ou dor. Agora a semana **segura o volume sem aumentar e pergunta** ("Você relatou cansaço ou incômodo nesta semana. Como seguimos?" → *Foi pontual, pode manter* · *Quero uma semana mais leve*), e o feedback individual avisa isso com antecedência. Só reduz depois do "quero mais leve".
+3. **Pedido de redução só é registrado se o plano mudou.** A ordem agora é: aliviar o plano → salvar a resposta → se salvar falhar, devolver o plano ao que era. Se o plano não puder ser alterado, nada é salvo e a pessoa vê o erro. Coberto por `tests/run-feedback-reduction.test.ts`.
+4. **Disposição comparável com o Garmin.** Quando o número do Garmin é informado, a tela mostra também a leitura do Limiar **sem** esse número — comparar o score que já contém o Garmin com o próprio Garmin não validaria nada.
+
+E um item novo: o check-in pergunta **o que foi feito** quando a corrida foi claramente diferente do previsto (ver `docs/adaptar-treino.md`).

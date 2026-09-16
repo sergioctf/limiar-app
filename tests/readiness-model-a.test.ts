@@ -165,3 +165,13 @@ describe("the gym is load too", () => {
     expect(load.at(-1)?.tss ?? 0).toBe(0);
   });
 });
+
+describe("an independent reading next to the Garmin number", () => {
+  it("keeps the score without the typed number, to compare fairly", () => {
+    const base = { wellness: row("d", { sleep_seconds: 7.5 * 3600, sleep_score: 85, resting_hr: 50 }), tsb: 5, rhrBaseline: 51, expectWatch: true };
+    const withGarmin = computeReadiness({ ...base, wellness: { ...base.wellness, garmin_readiness: 25 } });
+    const alone = computeReadiness(base);
+    expect(withGarmin.withoutGarmin).toBe(alone.score);
+    expect(alone.withoutGarmin).toBeUndefined();
+  });
+});

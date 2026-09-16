@@ -8,6 +8,7 @@ import { Pill } from "@/components/ui/Metric";
 import type { Tone } from "@/components/ui/tone";
 import { Ring } from "@/components/ui/Ring";
 import { SwapActions } from "@/components/today/SwapActions";
+import { AdaptSessionControl } from "@/components/today/AdaptSession";
 import { basisLabel, type RecoveryToday } from "@/lib/recovery-today";
 
 /**
@@ -139,6 +140,11 @@ export function TodayCard({ today, recovery }: { today: Today; recovery?: Recove
           {today.prompt.text}
           <ArrowRight className="w-4 h-4" />
         </Link>
+      )}
+
+      {/* Decided before leaving (Sérgio, 16/09): adapt here, and the check-in compares against it. */}
+      {today.state === "planned" && today.session && today.doneKm === 0 && (
+        <AdaptSessionControl day={today.session} />
       )}
 
       {today.state === "planned" && today.session && (

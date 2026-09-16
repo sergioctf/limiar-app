@@ -340,7 +340,7 @@ Estão todas na seção 15, com a origem de cada uma.
 ## 3.5 Banco
 
 - Supabase Postgres, com RLS ativo em quase tudo. Tabelas e decisões na seção 5.
-- **Migrations manuais:** `supabase/schema.sql` (base de maio) + `supabase/migrations/002…031`, coladas no SQL Editor. **Não existe `001`**; `schema.sql` faz esse papel. Faltam DDLs de `activities`, `performance_tests`, `races` (ver alerta 3).
+- **Migrations manuais:** `supabase/schema.sql` (base de maio) + `supabase/migrations/002…032`, coladas no SQL Editor. **Não existe `001`**; `schema.sql` faz esse papel. Faltam DDLs de `activities`, `performance_tests`, `races` (ver alerta 3).
 - **Fora do repositório, só no Supabase:**
   - **extensões:** `pg_cron`, `pg_net`;
   - **job:** `limiar-morning`;
@@ -468,7 +468,7 @@ Limiar/                               ← pasta no OneDrive (NÃO é repo git)
     │   ├── lib/          ~100 módulos de domínio (o coração do app)
     │   ├── types/index.ts  todos os tipos compartilhados
     │   └── middleware.ts
-    ├── supabase/         schema.sql, seed.sql, migrations/002–031
+    ├── supabase/         schema.sql, seed.sql, migrations/002–032
     ├── tests/            64 arquivos, ~10.700 linhas, fixtures.ts, README.md
     ├── public/           manifest.json, sw.js, ícones
     ├── scripts/import-exercises.mjs   gera src/lib/exercise-catalog.ts
@@ -1128,7 +1128,8 @@ Fluxo OAuth completo (`whoop.ts`, `/api/whoop/*`, `WhoopCard`, migration 023). I
 - **Regras:** avaliação determinística, **sem LLM**. Não julga tiros pelo ritmo médio; não trata chuva/agenda/trabalho como perda de condicionamento; não manda compensar quilometragem; dor tem precedência no texto; nada no plano é alterado.
 - **Segunda versão (16/09, após o primeiro uso real):** "Difícil" não gera alerta nenhum; só "Muito difícil" troca a segunda pergunta por *"O que deixou o treino muito difícil?"*. Motivos externos (sono, estresse, cansaço, questão pessoal, clima) só ficam registrados. *"O treino estava pesado demais"* abre *"Quer reduzir um pouco a carga dos próximos treinos?"* — com o sim, `lightenUpcomingRuns` (`plan-edit.ts`) encurta ~15% as corridas leves e o longão restantes da semana e a semana seguinte não aumenta. Migration 030.
 - **Formato:** pop-up na entrada (`EntryPrompt`), no máximo um por visita, com "Responder depois" (grava `skipped`; não volta a aparecer). A página da corrida sempre oferece o formulário. **Não há mais card fixo no topo do dashboard.** Detalhes em `docs/run-feedback.md`.
-- **Limitações:** só corrida; a observação livre não é interpretada; o atleta não consegue excluir tipos de sessão (ver 15.1).
+- **Terceira versão (16/09):** "Responder depois" (`deferred`, volta após 6 h) separado de "Não quero responder" (`skipped`); cansaço relatado não reduz a semana em silêncio — segura sem aumentar e pergunta; pedido de redução só é salvo se o plano mudou (com volta atrás se o salvamento falhar).
+- **Limitações:** só corrida; a observação livre não é interpretada.
 - **Melhorias:** alimentar `planWeeklyVolume`/`volumeWithRatchet` com o contexto, e propor (nunca aplicar sozinho) manutenção ou aumento quando a evidência se repetir.
 
 ## 6.26 Leitura da semana: o que segura e o que cai ✅ (novo, 16/09)
@@ -1141,6 +1142,15 @@ Fluxo OAuth completo (`whoop.ts`, `/api/whoop/*`, `WhoopCard`, migration 023). I
 - **Dados:** `week_feedback` (029). A rota `/api/coach/week-answer` só aceita responder a semana perguntada e, ao receber a resposta, regenera **a semana seguinte** (a atual está congelada).
 - **Limitações:** só corrida; a leitura entra no motor na geração seguinte (a semana em andamento nunca é reescrita); a observação livre não é interpretada.
 - **Documentação:** `docs/week-reading.md`.
+
+## 6.27 Adaptar o treino (antes e depois da sessão) ✅ (novo, 16/09)
+
+- **Objetivo:** o atleta que troca um treino quase sempre tenta preservar o objetivo, e decide antes de sair. O treinador participa dessa decisão e avalia a execução contra o que foi combinado — não contra a prescrição original.
+- **Antes:** botão "Adaptar este treino" no card Hoje e no detalhe das corridas da semana. Motivo (tempo, local, GPS, formato, outro) → até 3 alternativas, uma recomendada, com *preserva / muda / por quê* → ou proposta própria em texto ("8 × 400 m"), lida por um analisador determinístico e avaliada: *mantém o objetivo / mantém parte / muda o objetivo*, com sugestão ajustada quando passa do teto da semana. O dia é substituído e o original fica em `adaptation.original`; desfazer devolve.
+- **Depois:** quando a corrida ficou claramente diferente do previsto, o check-in pergunta "Fiz como previsto · Adaptei mantendo o objetivo · Fiz outro treino" e registra no dia do plano o que foi feito (`adaptation.when = "after"`), para a adesão não contar a substituição como falta.
+- **Implementação:** `src/lib/session-adapt.ts` (famílias de estímulo, alternativas, `parseProposal`, `evaluateProposal`, `compareSessions`, `applyAdaptation`, `executionDiffers`), `src/app/api/coach/adapt/route.ts`, `src/components/today/AdaptSession.tsx`; o construtor passou a marcar `WeeklyPlanDay.quality` e aceita `forceQuality`.
+- **Dados:** JSON do plano (`adaptation`); `run_feedback.execution` e `executed_text` (migration 032).
+- **Limitações:** só a semana atual e só corridas; texto livre fora dos formatos comuns vira "outro treino" sem estrutura. Detalhes em `docs/adaptar-treino.md`.
 
 # 7. TELAS E NAVEGAÇÃO
 
@@ -2290,7 +2300,7 @@ npx vercel deploy --prod --yes
 
 ## 18.4 Banco e migrations
 
-- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **031** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028, 029, 030 e 031).
+- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **032** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028 a 032).
 - **O código tolera tabela ausente** (`try/catch` e sondas como `notification_log` em `morning-dispatch.ts`), então uma migration não aplicada **não quebra**: desliga a feature em silêncio.
 - **Fora do repositório:**
 
@@ -2335,7 +2345,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 
 ## 19.1 O que existe
 
-- **Vitest 2.1**, `npm test` (= `vitest run`). **66 arquivos, 1.245 testes, todos passando** (rodado em 16/09/2026, ~4,5 s).
+- **Vitest 2.1**, `npm test` (= `vitest run`). **68 arquivos, 1.295 testes, todos passando** (rodado em 16/09/2026, ~5 s).
 - **Só funções puras de `src/lib/`.** Sem banco, sem rede, sem DOM.
 - **Fixture central** (`tests/fixtures.ts`): atleta com teste de 3 km em 13:00 e FC média 178 → **VDOT ≈ 43,7, LTHR = 165**. Falhas se leem como "isso deu errado para um corredor de VDOT 43".
 - **`tests/README.md`:** tabela dos bugs reais que cada teste protege. Leitura obrigatória.

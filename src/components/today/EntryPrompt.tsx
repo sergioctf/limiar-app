@@ -5,8 +5,9 @@
  *
  * Sérgio, 16/09: the check-in parked on top of the dashboard until answered was
  * visual clutter. It is a moment, not a fixture: you finish a run, open the app,
- * and the coach asks how it went. Answer now or "Responder depois" — and a
- * postponed run does not come back here; its own page keeps the form.
+ * and the coach asks how it went. Answer now, "Responder depois" (it comes back
+ * on a later visit while the run is fresh) or "Não quero responder" (it does
+ * not come back). The run's own page keeps the form either way.
  *
  * At most one prompt per visit, run first. Two dialogs back to back is the
  * nagging this replaces.
@@ -59,7 +60,14 @@ export function EntryPrompt({ refreshKey = "" }: { refreshKey?: string }) {
 
   const close = useCallback(() => { setPrompt(null); setAnswered(false); setLightened([]); }, []);
 
-  const later = useCallback(async () => {
+  /**
+   * "Responder depois" and "Não quero responder" are different answers.
+   *
+   * Both used to be stored as `skipped`, so "later" in practice meant "never":
+   * the pop-up did not come back. Now `deferred` returns after a few hours while
+   * the run is still fresh, and only the explicit refusal is `skipped`.
+   */
+  const putAside = useCallback(async (status: "deferred" | "skipped") => {
     const current = prompt;
     close();
     if (!current) return;
@@ -67,12 +75,12 @@ export function EntryPrompt({ refreshKey = "" }: { refreshKey?: string }) {
       try { if (current.payload.weekStart) localStorage.setItem(laterKey(current.payload.weekStart), "1"); } catch { /* sem storage */ }
       return;
     }
-    // Stored as `skipped`, so it never pops up again; the run's page keeps the form.
     await fetch("/api/run-feedback", {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ runId: current.item.run.id, status: "skipped" }),
+      body: JSON.stringify({ runId: current.item.run.id, status }),
     }).catch(() => {});
   }, [prompt, close]);
+  const later = useCallback(() => putAside("deferred"), [putAside]);
 
   // Dismissing an unanswered prompt means "later"; after an answer it just closes.
   const dismiss = useCallback(() => { if (answered) close(); else void later(); }, [answered, close, later]);
@@ -109,6 +117,7 @@ export function EntryPrompt({ refreshKey = "" }: { refreshKey?: string }) {
             item={prompt.item}
             lightened={lightened}
             onLater={() => void later()}
+            onNever={() => void putAside("skipped")}
             onClose={close}
             onSaved={({ feedback, lightened: changed }) => {
               setAnswered(true);

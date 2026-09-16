@@ -88,3 +88,7 @@ Na Saúde, abaixo do score, para quem tem relógio: *"Seu Garmin mostra outra di
 ### Próximo passo de calibração
 
 Com o campo B preenchido por 2–3 semanas, comparar o score A de cada manhã com o número do Garmin e com o esforço relatado no check-in pós-treino, e só então ajustar pesos e tetos — com dados, não no palpite.
+
+### Leitura independente (16/09/2026)
+
+Quando o número do Garmin é informado, `Readiness.withoutGarmin` guarda o score calculado **sem** ele, e o campo na Saúde mostra "Leitura do Limiar sem este número: X". É esse valor que deve ser comparado com o Garmin na calibração: o score que já inclui o número do Garmin estaria, em parte, se comparando com ele mesmo.

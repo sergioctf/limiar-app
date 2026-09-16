@@ -151,7 +151,7 @@ export function HealthScreen({
         />
 
         {/* Optional reference from the Garmin — only for athletes whose watch sends data. */}
-        {watchMode && data.garminReadinessAvailable && <GarminReadinessField value={data.garminReadiness} />}
+        {watchMode && data.garminReadinessAvailable && <GarminReadinessField value={data.garminReadiness} withoutGarmin={recovery.readiness.withoutGarmin ?? null} />}
 
         {!watchMode && (
           <CheckinPanel today={data.today} checkin={data.checkin} checkins={data.checkins} onOpen={() => setCheckinOpen(true)} />

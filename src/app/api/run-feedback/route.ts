@@ -3,6 +3,8 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { athleteDateStr, athleteDaysAgoStr } from "@/lib/week";
 import { matchFeedbackPlan, validFeedbackInput } from "@/lib/run-feedback";
 import { lightenUpcomingRuns } from "@/lib/plan-edit";
+import { applyAdaptation, compareSessions, parseProposal, parsedLabel, undoAdaptation } from "@/lib/session-adapt";
+import type { Execution } from "@/lib/run-feedback";
 import { dayKeyOf } from "@/lib/session-swap";
 import { mondayOf } from "@/lib/weekly-plan";
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
@@ -10,7 +12,7 @@ import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 export const dynamic = "force-dynamic";
 const json = (value: unknown, status = 200) => NextResponse.json(value, { status, headers: { "Cache-Control": "private, no-store" } });
 const UUID = /^[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/i;
-const FIELDS = "run_id,status,effort,context,note,planned,reduce_requested";
+const FIELDS = "run_id,status,effort,context,note,planned,reduce_requested,execution,executed_text,updated_at";
 
 async function planFor(db: ReturnType<typeof createClient>, userId: string, date: string) {
   const monday = new Date(`${date}T12:00:00Z`);
@@ -29,6 +31,16 @@ async function planFor(db: ReturnType<typeof createClient>, userId: string, date
   } catch { return null; }
 }
 
+interface Lightening {
+  /** False only when the plan could not be written: the request must not be recorded. */
+  ok: boolean;
+  changes: string[];
+  /** Puts the week back as it was, if what follows fails. */
+  rollback: () => Promise<void>;
+}
+
+const NOTHING: Lightening = { ok: true, changes: [], rollback: async () => {} };
+
 /**
  * The athlete said yes to "reduce the next sessions?".
  *
@@ -37,22 +49,83 @@ async function planFor(db: ReturnType<typeof createClient>, userId: string, date
  * is edited in place — the athlete asked for this change — and next week's
  * engine reads `reduce_requested` and holds the volume instead of ramping.
  */
-async function lightenThisWeek(userId: string): Promise<string[]> {
+async function lightenThisWeek(userId: string): Promise<Lightening> {
   const admin = createAdminClient();
   const now = new Date();
-  const { data } = await admin.from("coach_reports").select("id, full_report")
+  const { data, error: readError } = await admin.from("coach_reports").select("id, full_report")
     .eq("user_id", userId).eq("period_type", "week").eq("period_start", mondayOf(now)).limit(1);
+  if (readError) return { ...NOTHING, ok: false };
   const row = data?.[0];
-  if (!row?.full_report) return [];
+  // No plan, or nothing left to shorten: still a real request — next week holds.
+  if (!row?.full_report) return NOTHING;
   let plan: WeeklyPlanData;
-  try { plan = JSON.parse(row.full_report as string) as WeeklyPlanData; } catch { return []; }
-  if (!Array.isArray(plan.days)) return [];
+  try { plan = JSON.parse(row.full_report as string) as WeeklyPlanData; } catch { return NOTHING; }
+  if (!Array.isArray(plan.days)) return NOTHING;
   const result = lightenUpcomingRuns(plan, dayKeyOf(athleteDateStr(now)));
-  if (result.changes.length === 0) return [];
+  if (result.changes.length === 0) return NOTHING;
   const { error } = await admin.from("coach_reports")
     .update({ full_report: JSON.stringify(result.plan) })
     .eq("id", row.id).eq("user_id", userId);
-  return error ? [] : result.changes;
+  if (error) return { ...NOTHING, ok: false };
+  return {
+    ok: true,
+    changes: result.changes,
+    rollback: async () => {
+      await admin.from("coach_reports").update({ full_report: row.full_report }).eq("id", row.id).eq("user_id", userId);
+    },
+  };
+}
+
+/**
+ * "Adaptei" or "Fiz outro treino", written onto the plan day.
+ *
+ * Without this, a valid substitution stayed on the plan as the old session, and
+ * the week's adherence counted an 8 km interval workout against a 3,5 km hill
+ * session as "extra" on one side and "partial" on the other. The day now says
+ * what was done, with the prescription kept inside; answering "fiz como
+ * previsto" later puts it back.
+ */
+async function recordExecution(
+  userId: string, run: { date: string; distance_km: number | null }, execution: Execution, text: string | null,
+) {
+  const admin = createAdminClient();
+  const monday = new Date(`${run.date}T12:00:00Z`);
+  monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() + 6) % 7);
+  const { data } = await admin.from("coach_reports").select("id, full_report")
+    .eq("user_id", userId).eq("period_type", "week").eq("period_start", monday.toISOString().slice(0, 10)).limit(1);
+  const row = data?.[0];
+  if (!row?.full_report) return;
+  const plan = JSON.parse(row.full_report as string) as WeeklyPlanData;
+  const key = dayKeyOf(run.date);
+  const day = plan.days?.find(d => d.day === key);
+  if (!day) return;
+
+  let next: WeeklyPlanData | null = null;
+  if (execution === "as_planned") {
+    if (day.adaptation?.when !== "after") return;
+    const undone = undoAdaptation(plan, key);
+    if ("plan" in undone) next = undone.plan;
+  } else {
+    // An adaptation agreed before the run already describes the session.
+    if (day.adaptation?.when === "before") return;
+    const base = day.adaptation?.original ?? day;
+    const parsed = text?.trim() ? parseProposal(text) : null;
+    const label = parsed ? parsedLabel(parsed) : null;
+    const compared = execution === "adapted" && parsed?.kind && label ? compareSessions(base, parsed.kind, label) : null;
+    const done: WeeklyPlanDay = {
+      day: base.day, dayPt: base.dayPt, sport: base.sport ?? "corrida", type: base.type,
+      label: execution === "other" ? `Outro treino${label ? `: ${label}` : ""}` : `Adaptado${label ? `: ${label}` : ""}`,
+      distance_km: Math.round(Number(run.distance_km ?? 0) * 10) / 10,
+      description: text?.trim() ? `Feito: ${text.trim()}` : "Treino diferente do previsto, informado no check-in.",
+      ...(base.strength ? { strength: base.strength } : {}),
+    };
+    const applied = applyAdaptation(plan, key, done, {
+      when: "after", reason: null, source: execution === "other" ? "other_workout" : "custom",
+      text: text?.trim() || null, preserves: compared?.preserves ?? "", changes: compared?.changes ?? "", verdict: compared?.verdict,
+    });
+    if ("plan" in applied) next = applied.plan;
+  }
+  if (next) await admin.from("coach_reports").update({ full_report: JSON.stringify(next) }).eq("id", row.id).eq("user_id", userId);
 }
 
 export async function GET(request: NextRequest) {
@@ -83,7 +156,7 @@ export async function PUT(request: NextRequest) {
   if (!user) return json({ error: "Entre novamente para salvar." }, 401);
   const body: unknown = await request.json().catch(() => null);
   if (!validFeedbackInput(body)) return json({ error: "Confira as respostas e tente novamente." }, 400);
-  const { data: run, error: runError } = await db.from("runs").select("id,date").eq("id", body.runId)
+  const { data: run, error: runError } = await db.from("runs").select("id,date,distance_km").eq("id", body.runId)
     .eq("user_id", user.id).is("deleted_at", null).maybeSingle();
   if (runError) return json({ error: "Não foi possível consultar a corrida." }, 500);
   if (!run) return json({ error: "Corrida não encontrada." }, 404);
@@ -92,6 +165,22 @@ export async function PUT(request: NextRequest) {
   const planned = previous.data ? previous.data.planned : await planFor(db, user.id, run.date);
   const answered = body.status === "answered";
   const reduce = answered && body.context === "session_too_hard" ? body.reduce === true : null;
+
+  /*
+   * The plan changes first, and the request is recorded only if it did.
+   *
+   * Saving "reduce_requested" before touching the plan left a window where the
+   * record said the sessions were lightened while the plan still held the old
+   * distances. Now: lighten → save the answer → if saving fails, put the week
+   * back. Either both happen or neither does.
+   */
+  const lightening = reduce === true && previous.data?.reduce_requested !== true
+    ? await lightenThisWeek(user.id).catch(() => ({ ...NOTHING, ok: false }))
+    : NOTHING;
+  if (!lightening.ok) {
+    return json({ error: "Não consegui aliviar os próximos treinos agora. Nada foi salvo — tente de novo." }, 503);
+  }
+
   const { data, error } = await db.from("run_feedback").upsert({
     run_id: run.id, user_id: user.id, status: body.status,
     effort: answered ? body.effort : null,
@@ -100,12 +189,20 @@ export async function PUT(request: NextRequest) {
     // Once asked for, a reduction stays recorded: editing the answer later
     // neither undoes the lighter sessions nor applies them a second time.
     reduce_requested: previous.data?.reduce_requested === true ? true : reduce,
+    execution: answered ? body.execution ?? null : null,
+    executed_text: answered && body.execution && body.execution !== "as_planned" ? body.executedText?.trim() || null : null,
     planned, updated_at: new Date().toISOString(),
   }, { onConflict: "run_id" }).select(FIELDS).single();
-  if (error) return json({ error: "Não foi possível salvar. Suas respostas continuam aqui para tentar novamente." }, 500);
+  if (error) {
+    await lightening.rollback().catch(() => {});
+    return json({ error: "Não foi possível salvar. Suas respostas continuam aqui para tentar novamente." }, 500);
+  }
 
-  const lightened = reduce === true && previous.data?.reduce_requested !== true
-    ? await lightenThisWeek(user.id).catch(() => [] as string[])
-    : [];
-  return json({ feedback: data, lightened });
+  // Best-effort: the answer is already saved, and the evaluation reads it from
+  // there. Recording it on the plan is what keeps the week's adherence honest.
+  if (answered && body.execution) {
+    await recordExecution(user.id, run, body.execution, body.executedText ?? null).catch(() => {});
+  }
+
+  return json({ feedback: data, lightened: lightening.changes });
 }

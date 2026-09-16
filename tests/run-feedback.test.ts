@@ -109,7 +109,7 @@ describe("which run the entry pop-up asks about", () => {
     const newer = mk("b", "2026-09-16", null);
     expect(promptCandidate([older, newer], "2026-09-14")).toBe(newer);
   });
-  it("never pops up again for a run left for later", () => {
+  it("never pops up again for a run the athlete declined", () => {
     const later = mk("a", "2026-09-16", { run_id: "a", status: "skipped", effort: null, context: null, note: null, planned });
     expect(promptCandidate([later], "2026-09-14")).toBeNull();
   });
@@ -118,5 +118,76 @@ describe("which run the entry pop-up asks about", () => {
   });
   it("does not ask again once answered", () => {
     expect(promptCandidate([mk("a", "2026-09-16", answer(3, "none"))], "2026-09-14")).toBeNull();
+  });
+});
+
+describe("answer later is not never", () => {
+  const mk = (feedback: FeedbackItem["feedback"]): FeedbackItem => ({
+    run: { id: "a", name: "Corrida", date: "2026-09-16", distance_km: 6, avg_pace_seconds_per_km: 370, avg_hr: 150 },
+    planned, feedback,
+  });
+  const at = (iso: string, status: "deferred" | "skipped") =>
+    ({ run_id: "a", status, effort: null, context: null, note: null, planned, updated_at: iso });
+  const now = new Date("2026-09-16T20:00:00Z");
+
+  it("brings a deferred check-in back after a few hours", () => {
+    expect(promptCandidate([mk(at("2026-09-16T12:00:00Z", "deferred"))], "2026-09-14", now)).not.toBeNull();
+  });
+  it("does not bring it back on the very next visit", () => {
+    expect(promptCandidate([mk(at("2026-09-16T18:30:00Z", "deferred"))], "2026-09-14", now)).toBeNull();
+  });
+  it("never brings back a check-in the athlete declined", () => {
+    expect(promptCandidate([mk(at("2026-09-15T08:00:00Z", "skipped"))], "2026-09-14", now)).toBeNull();
+  });
+  it("accepts both ways of putting it aside", () => {
+    const runIdOk = "12345678-1234-1234-1234-123456789012";
+    expect(validFeedbackInput({ runId: runIdOk, status: "deferred" })).toBe(true);
+    expect(validFeedbackInput({ runId: runIdOk, status: "skipped" })).toBe(true);
+  });
+});
+
+describe("the fatigue promise matches the week", () => {
+  it("tells the athlete that a short week from fatigue leads to a question, not a silent cut", () => {
+    const result = evaluateRunFeedback({ ...item, feedback: answer(3, "fatigue") });
+    expect(result.next).toContain("pergunta antes de mexer no volume");
+  });
+});
+
+describe("what was actually done", () => {
+  const hills: WeeklyPlanDay = { day: "Wed", dayPt: "Quarta", type: "intervals", sport: "corrida", label: "Subidas 6×45 s", distance_km: 3.5, description: "", quality: "hills" };
+  const run = { id: "a", name: "Corrida matinal", date: "2026-09-16", distance_km: 8.01, avg_pace_seconds_per_km: 330, avg_hr: 159 };
+
+  it("does not call a valid adaptation an incomplete run", () => {
+    const result = evaluateRunFeedback({ run, planned: hills, feedback: answer(4, "none", { planned: hills, execution: "adapted", executed_text: "8x400m" }) });
+    expect(result.title).toBe("Treino adaptado");
+    expect(result.evidence.join(" ")).toContain("não conta como treino incompleto");
+    expect(result.evidence.join(" ")).not.toContain("km previstos");
+  });
+
+  it("says honestly when the adaptation changed the purpose", () => {
+    const result = evaluateRunFeedback({ run, planned: hills, feedback: answer(4, "none", { planned: hills, execution: "adapted", executed_text: "8x400m" }) });
+    expect(result.evidence.join(" ")).toContain("é outro tipo de treino");
+  });
+
+  it("records another workout without comparing it to the plan", () => {
+    const result = evaluateRunFeedback({ run, planned: hills, feedback: answer(3, "none", { planned: hills, execution: "other", executed_text: "trilha com amigos" }) });
+    expect(result.title).toBe("Outro treino registrado");
+    expect(result.evidence.join(" ")).toContain("Não comparamos com o previsto");
+  });
+
+  it("compares against the version agreed before the run", () => {
+    const adapted: WeeklyPlanDay = {
+      ...hills, label: "Tiros curtos 6×200 m", quality: "repetitions",
+      adaptation: { when: "before", at: "x", reason: "place", source: "option", preserves: "", changes: "", original: hills },
+    };
+    const result = evaluateRunFeedback({ run: { ...run, distance_km: 4 }, planned: adapted, feedback: answer(3, "none", { planned: adapted }) });
+    expect(result.evidence.join(" ")).toContain("Adaptado antes do treino: Subidas 6×45 s → Tiros curtos 6×200 m");
+  });
+
+  it("accepts only known execution answers", () => {
+    const base = { runId: "12345678-1234-1234-1234-123456789012", status: "answered", effort: 3, context: "none" };
+    expect(validFeedbackInput({ ...base, execution: "adapted", executedText: "8x400m" })).toBe(true);
+    expect(validFeedbackInput({ ...base, execution: "whatever" })).toBe(false);
+    expect(validFeedbackInput({ ...base, execution: "other", executedText: "x".repeat(301) })).toBe(false);
   });
 });

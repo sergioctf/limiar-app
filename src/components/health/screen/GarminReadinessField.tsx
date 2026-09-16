@@ -11,7 +11,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export function GarminReadinessField({ value }: { value: number | null }) {
+export function GarminReadinessField({ value, withoutGarmin }: { value: number | null; withoutGarmin: number | null }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value != null ? String(value) : "");
@@ -48,6 +48,11 @@ export function GarminReadinessField({ value }: { value: number | null }) {
         <span className="text-surface-300">
           Disposição do Garmin hoje: <strong className="tabular-nums text-surface-100">{value}</strong>
           <span className="text-surface-500"> · entra no score como mais um sinal</span>
+          {withoutGarmin != null && (
+            <span className="block text-xs text-surface-500">
+              Leitura do Limiar sem este número: <strong className="tabular-nums text-surface-300">{withoutGarmin}</strong>
+            </span>
+          )}
         </span>
         <span className="flex gap-3">
           <button type="button" className="min-h-[44px] text-brand-400" onClick={() => { setDraft(String(value)); setEditing(true); }}>Editar</button>

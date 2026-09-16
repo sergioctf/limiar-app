@@ -727,7 +727,7 @@ export async function ensureWeeklyPlan(
 
   // The athlete asked for lighter sessions (or said the plan was too big):
   // this week does not climb above the one they found too heavy.
-  const weeklyKm = reading?.reason === "too_much" && previous?.plannedKm
+  const weeklyKm = reading?.noRamp && previous?.plannedKm
     ? Math.min(ratchetedKm, previous.plannedKm)
     : ratchetedKm;
 

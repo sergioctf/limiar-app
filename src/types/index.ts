@@ -490,6 +490,10 @@ export interface WeeklyPlanDay {
   movedFrom?:  string;
   /** The distance before the athlete asked for lighter sessions after a too-heavy one. */
   lightenedFrom?: number;
+  /** Which quality session this is (intervals, hills…), when it is one. */
+  quality?: import("@/lib/mesocycle").QualityKind;
+  /** Set when the athlete adapted this session; the original stays inside. */
+  adaptation?: import("@/lib/session-adapt").SessionAdaptation;
 }
 
 export interface WeeklyPlanData {

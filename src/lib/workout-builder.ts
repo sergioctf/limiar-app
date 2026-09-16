@@ -71,6 +71,11 @@ function paceLookup(paces: TrainingPace[] | null): PaceLookup {
 // ─── Session builders ────────────────────────────────────────────────────────
 
 export interface WeekContext {
+  /**
+   * Build this kind of quality session instead of the rotation's pick. Used
+   * when the athlete adapts a session and needs a specific alternative.
+   */
+  forceQuality?: import("@/lib/mesocycle").QualityKind;
   /** Quality sessions the athlete opted out of; the rotation skips them. */
   excludedQuality?: import("@/lib/mesocycle").QualityKind[];
   /** Monday of the week being built (YYYY-MM-DD) — anchors the strength block. */
@@ -205,9 +210,9 @@ export function buildIntervalRun(ctx: WeekContext): { day: Partial<WeeklyPlanDay
    * Otherwise the mesocycle decides, so consecutive weeks differ even when the
    * volume does not.
    */
-  const kind = (ctx.phase === "taper" || ctx.phase === "peak")
+  const kind = ctx.forceQuality ?? ((ctx.phase === "taper" || ctx.phase === "peak")
     ? "threshold"
-    : qualityForWeek(ctx.cycleWeek ?? 1, ctx.cycleNumber ?? 1, ctx.excludedQuality ?? []);
+    : qualityForWeek(ctx.cycleWeek ?? 1, ctx.cycleNumber ?? 1, ctx.excludedQuality ?? []));
   const useThreshold = kind === "threshold";
   const dense  = kind === "intervals_dense";
   const easyWeek = kind === "strides";
@@ -472,6 +477,9 @@ export function buildIntervalRun(ctx: WeekContext): { day: Partial<WeeklyPlanDay
   return {
     day: {
       type: ctx.testDue ? "test" : useThreshold ? "tempo" : "intervals",
+      // Which session this is, so an adaptation knows what it is replacing
+      // without reading it back out of the label.
+      quality: ctx.testDue ? undefined : kind,
       label,
       distance_km: round05(totalKm),
       pace: useThreshold ? p.range("threshold") : p.range("interval"),
@@ -892,6 +900,7 @@ export function buildWeekPlan(
     pace: base.pace,
     description: base.description ?? "",
     structure,
+    ...(base.quality ? { quality: base.quality } : {}),
   });
 
   const strength = (focus: string): Partial<WeeklyPlanDay> => ({

@@ -14,6 +14,7 @@ import { WorkoutStepsView } from "@/components/coach/WorkoutStepsView";
 import { StrengthSessionView } from "@/components/coach/StrengthSessionView";
 import { localMondayStr, localNextMondayStr } from "@/lib/week";
 import { MoveSessionControl } from "@/components/coach/MoveSessionControl";
+import { AdaptSessionControl } from "@/components/today/AdaptSession";
 import { ShoeHint } from "@/components/coach/ShoeHint";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -569,6 +570,21 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
               onMoved={(p: WeeklyPlanData) => {
                 setPlans(prev => ({ ...prev, [activeWeek]: p }));
                 setSelectedDay(p.days.find(x => x.day === selectedDay.day) ?? null);
+              }}
+            />
+          )}
+
+          {/* Adapting is for the week being lived, today or later. */}
+          {isRunSession(selectedDay) && !isNextWeek
+            && ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(selectedDay.day)
+               >= ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(todayKey) && (
+            <AdaptSessionControl
+              day={selectedDay}
+              onChanged={(next: WeeklyPlanDay) => {
+                if (!plan) return;
+                const updated = { ...plan, days: plan.days.map(d => d.day === next.day ? next : d) };
+                setPlans(prev => ({ ...prev, [activeWeek]: updated }));
+                setSelectedDay(next);
               }}
             />
           )}

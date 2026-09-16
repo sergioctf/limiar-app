@@ -23,9 +23,18 @@ describe("how last week enters the next plan", () => {
     expect(r.detail).toContain("sem tentar compensar");
   });
 
-  it("lets the plan come down when the body asked, without a question", () => {
+  it("does not reduce a fatigue week on the check-ins alone: holds without climbing, and asks", () => {
+    // The individual feedback promised "os próximos treinos seguem como
+    // planejados"; the week must not quietly contradict it.
     const r = readWeek({ plannedKm: 19, actualKm: 11, contexts: ["fatigue"] });
     expect(r.reason).toBe("body");
+    expect(r.creditedKm).toBe(19);
+    expect(r.noRamp).toBe(true);
+    expect(r.ask).toBe("body_lighter");
+  });
+
+  it("lets the plan come down once the athlete asks for a lighter week", () => {
+    const r = readWeek({ plannedKm: 19, actualKm: 11, contexts: ["fatigue"], answer: "body" });
     expect(r.creditedKm).toBe(11);
     expect(r.ask).toBeNull();
   });
@@ -33,7 +42,12 @@ describe("how last week enters the next plan", () => {
   it("reads pain over a busy week when both were reported", () => {
     const r = readWeek({ plannedKm: 19, actualKm: 11, contexts: ["work", "pain"] });
     expect(r.reason).toBe("body");
-    expect(r.holding).toBe(false);
+    expect(r.ask).toBe("body_lighter");
+  });
+
+  it("offers two plain choices after a fatigue week", () => {
+    const q = weekQuestion("body_lighter");
+    expect(q.options.map(o => o.value)).toEqual(["life", "body"]);
   });
 
   it("holds an unexplained week once, and asks what happened", () => {

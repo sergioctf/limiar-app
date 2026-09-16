@@ -33,6 +33,12 @@ export interface Readiness {
   coverage?: { present: number; expected: number; missing: ReadinessComponent["key"][] };
   /** A night so short that no other signal is allowed to call the day "ready". */
   cap?: { limit: number; reason: string };
+  /**
+   * The Limiar score computed without the Garmin number the athlete typed. Only
+   * set when that number exists — it is the independent reading to compare
+   * against the Garmin.
+   */
+  withoutGarmin?: number;
 }
 
 const clamp = (v: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
@@ -151,9 +157,10 @@ export interface ReadinessInput {
   expectWatch?: boolean;
 }
 
-export function computeReadiness({
-  wellness, checkin, tsb, rhrBaseline, hrvBaselineMs, sleepHistoryHours = [], expectWatch = false,
-}: ReadinessInput): Readiness {
+export function computeReadiness(input: ReadinessInput): Readiness {
+  const {
+    wellness, checkin, tsb, rhrBaseline, hrvBaselineMs, sleepHistoryHours = [], expectWatch = false,
+  } = input;
   const c: ReadinessComponent[] = [];
   const w = wellness ?? null;
 
@@ -258,7 +265,14 @@ export function computeReadiness({
     ? { present: CORE.length - missing.length, expected: CORE.length, missing: missing.map(([key]) => key) }
     : undefined;
 
-  return { score, verdict, components: c, recommendation, source, coverage, cap };
+  // With the Garmin number typed in, the score partly *is* that number, so
+  // comparing it to the Garmin validates nothing. Keep the reading without it
+  // alongside, and compare that one.
+  const withoutGarmin = w?.garmin_readiness != null
+    ? computeReadiness({ ...input, wellness: { ...w, garmin_readiness: null } }).score
+    : undefined;
+
+  return { score, verdict, components: c, recommendation, source, coverage, cap, withoutGarmin };
 }
 
 /** Trailing average resting HR from recent wellness rows (baseline for RHR scoring). */
