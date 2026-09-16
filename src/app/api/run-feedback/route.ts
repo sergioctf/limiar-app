@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { athleteDateStr, athleteDaysAgoStr } from "@/lib/week";
 import { matchFeedbackPlan, validFeedbackInput } from "@/lib/run-feedback";
-import type { WeeklyPlanDay } from "@/types";
+import { lightenUpcomingRuns } from "@/lib/plan-edit";
+import { dayKeyOf } from "@/lib/session-swap";
+import { mondayOf } from "@/lib/weekly-plan";
+import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 
 export const dynamic = "force-dynamic";
 const json = (value: unknown, status = 200) => NextResponse.json(value, { status, headers: { "Cache-Control": "private, no-store" } });
 const UUID = /^[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/i;
+const FIELDS = "run_id,status,effort,context,note,planned,reduce_requested";
 
 async function planFor(db: ReturnType<typeof createClient>, userId: string, date: string) {
   const monday = new Date(`${date}T12:00:00Z`);
@@ -25,6 +29,32 @@ async function planFor(db: ReturnType<typeof createClient>, userId: string, date
   } catch { return null; }
 }
 
+/**
+ * The athlete said yes to "reduce the next sessions?".
+ *
+ * "Next" is counted from today, not from the run: a check-in answered two days
+ * after the session should not shorten a run that already happened. The week
+ * is edited in place — the athlete asked for this change — and next week's
+ * engine reads `reduce_requested` and holds the volume instead of ramping.
+ */
+async function lightenThisWeek(userId: string): Promise<string[]> {
+  const admin = createAdminClient();
+  const now = new Date();
+  const { data } = await admin.from("coach_reports").select("id, full_report")
+    .eq("user_id", userId).eq("period_type", "week").eq("period_start", mondayOf(now)).limit(1);
+  const row = data?.[0];
+  if (!row?.full_report) return [];
+  let plan: WeeklyPlanData;
+  try { plan = JSON.parse(row.full_report as string) as WeeklyPlanData; } catch { return []; }
+  if (!Array.isArray(plan.days)) return [];
+  const result = lightenUpcomingRuns(plan, dayKeyOf(athleteDateStr(now)));
+  if (result.changes.length === 0) return [];
+  const { error } = await admin.from("coach_reports")
+    .update({ full_report: JSON.stringify(result.plan) })
+    .eq("id", row.id).eq("user_id", userId);
+  return error ? [] : result.changes;
+}
+
 export async function GET(request: NextRequest) {
   const db = createClient();
   const { data: { user } } = await db.auth.getUser();
@@ -37,7 +67,7 @@ export async function GET(request: NextRequest) {
   const { data: runs, error } = await query;
   if (error) return json({ error: "Não foi possível carregar o treino." }, 500);
   if (!runs?.length) return json({ items: [] });
-  const saved = await db.from("run_feedback").select("run_id,status,effort,context,note,planned")
+  const saved = await db.from("run_feedback").select(FIELDS)
     .eq("user_id", user.id).in("run_id", runs.map(r => r.id));
   if (saved.error) return json({ error: "O check-in está indisponível no momento. Tente novamente mais tarde." }, 503);
   const items = await Promise.all(runs.map(async run => {
@@ -57,16 +87,25 @@ export async function PUT(request: NextRequest) {
     .eq("user_id", user.id).is("deleted_at", null).maybeSingle();
   if (runError) return json({ error: "Não foi possível consultar a corrida." }, 500);
   if (!run) return json({ error: "Corrida não encontrada." }, 404);
-  const previous = await db.from("run_feedback").select("planned").eq("run_id", run.id).eq("user_id", user.id).maybeSingle();
+  const previous = await db.from("run_feedback").select("planned,reduce_requested").eq("run_id", run.id).eq("user_id", user.id).maybeSingle();
   if (previous.error) return json({ error: "O check-in está indisponível. Suas respostas não foram salvas." }, 503);
   const planned = previous.data ? previous.data.planned : await planFor(db, user.id, run.date);
+  const answered = body.status === "answered";
+  const reduce = answered && body.context === "session_too_hard" ? body.reduce === true : null;
   const { data, error } = await db.from("run_feedback").upsert({
     run_id: run.id, user_id: user.id, status: body.status,
-    effort: body.status === "answered" ? body.effort : null,
-    context: body.status === "answered" ? body.context : null,
-    note: body.status === "answered" ? body.note?.trim() || null : null,
+    effort: answered ? body.effort : null,
+    context: answered ? body.context : null,
+    note: answered ? body.note?.trim() || null : null,
+    // Once asked for, a reduction stays recorded: editing the answer later
+    // neither undoes the lighter sessions nor applies them a second time.
+    reduce_requested: previous.data?.reduce_requested === true ? true : reduce,
     planned, updated_at: new Date().toISOString(),
-  }, { onConflict: "run_id" }).select("run_id,status,effort,context,note,planned").single();
+  }, { onConflict: "run_id" }).select(FIELDS).single();
   if (error) return json({ error: "Não foi possível salvar. Suas respostas continuam aqui para tentar novamente." }, 500);
-  return json({ feedback: data });
+
+  const lightened = reduce === true && previous.data?.reduce_requested !== true
+    ? await lightenThisWeek(user.id).catch(() => [] as string[])
+    : [];
+  return json({ feedback: data, lightened });
 }

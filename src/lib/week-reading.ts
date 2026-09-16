@@ -48,7 +48,8 @@ export interface WeekReading {
 /** Below this the week counts as met; ten per cent short is the week, done. */
 const MET = 0.9;
 
-const LIFE: RunContext[] = ["schedule", "work", "weather"];
+// Outside the training itself: a short week for these reasons is not a smaller athlete.
+const LIFE: RunContext[] = ["schedule", "work", "weather", "sleep", "stress", "personal"];
 const BODY: RunContext[] = ["fatigue", "pain"];
 
 const km = (n: number) => `${Number(n.toFixed(1)).toString().replace(".", ",")} km`;
@@ -68,6 +69,11 @@ export function readWeek(input: {
    * stopped a month ago is the app talking to itself.
    */
   inactive?: boolean;
+  /**
+   * After a session felt too heavy, the athlete said yes to lighter sessions.
+   * That is their call about the plan, so it outranks what the check-ins imply.
+   */
+  reductionRequested?: boolean;
 }): WeekReading {
   const plannedKm = Math.max(0, Math.round(input.plannedKm));
   const actualKm = Math.max(0, Math.round(input.actualKm));
@@ -85,6 +91,14 @@ export function readWeek(input: {
   }
 
   if (completion >= MET) {
+    if (input.reductionRequested) {
+      return {
+        plannedKm, actualKm, completion, status: "met", reason: "too_much",
+        creditedKm: actualKm, holding: false, ask: null,
+        headline: "Semana cumprida, sem aumento",
+        detail: `Você fez ${km(actualKm)} dos ${km(plannedKm)} previstos, mas achou um treino pesado demais e pediu para aliviar. Por isso a semana seguinte não aumenta o volume.`,
+      };
+    }
     return {
       plannedKm, actualKm, completion, status: "met", reason: null,
       creditedKm: actualKm, holding: false, ask: null,
@@ -108,7 +122,7 @@ export function readWeek(input: {
     contexts.some(c => BODY.includes(c)) ? "body"
       : contexts.some(c => LIFE.includes(c)) ? "life"
         : null;
-  const reason: ShortfallReason = input.answer ?? fromCheckins ?? "unknown";
+  const reason: ShortfallReason = input.answer ?? (input.reductionRequested ? "too_much" : null) ?? fromCheckins ?? "unknown";
   const missing = km(plannedKm - actualKm);
   const done = `Você fez ${km(actualKm)} dos ${km(plannedKm)} previstos`;
 

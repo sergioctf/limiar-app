@@ -2,18 +2,59 @@ import type { WeeklyPlanDay } from "@/types";
 import { parsePaceRange } from "@/lib/workout-execution";
 
 export const EFFORTS = ["Muito leve", "Leve", "Moderado", "Difícil", "Muito difícil"] as const;
+
+/**
+ * The one level that opens a follow-up.
+ *
+ * "Difícil" is not a warning: a threshold session that feels hard is the
+ * session working as designed, and treating it as an alarm teaches the athlete
+ * to under-report. Only "muito difícil" earns a question — and even then the
+ * first question is *why*, not a change to the plan (Sérgio, 16/09).
+ */
+export const VERY_HARD = 5;
+
+/** What to consider about any session. */
 export const CONTEXTS = {
   none: "Tudo certo", schedule: "Tempo/agenda", work: "Trabalho", weather: "Clima",
   fatigue: "Cansaço", pain: "Dor/incômodo", other: "Outro",
 } as const;
-export type RunContext = keyof typeof CONTEXTS;
+
+/**
+ * Why a session felt very hard. Everything except "o treino estava pesado
+ * demais" sits outside the session itself, and is recorded without touching
+ * the plan.
+ */
+export const HARD_REASONS = {
+  sleep: "Dormi pouco", stress: "Estresse", fatigue: "Cansaço acumulado", personal: "Questão pessoal",
+  pain: "Dor/incômodo", weather: "Clima", session_too_hard: "O treino estava pesado demais", other: "Outro",
+} as const;
+
+export type RunContext = keyof typeof CONTEXTS | keyof typeof HARD_REASONS;
+
+export function contextQuestion(effort: number | null): { title: string; options: Array<[RunContext, string]> } {
+  return effort === VERY_HARD
+    ? { title: "O que deixou o treino muito difícil?", options: Object.entries(HARD_REASONS) as Array<[RunContext, string]> }
+    : { title: "Teve algo que precisamos considerar?", options: Object.entries(CONTEXTS) as Array<[RunContext, string]> };
+}
+
+export function contextLabel(context: RunContext, effort: number | null): string {
+  const own = contextQuestion(effort).options.find(([key]) => key === context)?.[1];
+  return own
+    ?? (HARD_REASONS as Record<string, string>)[context]
+    ?? (CONTEXTS as Record<string, string>)[context]
+    ?? "Outro";
+}
+
 export interface RunFeedback {
   run_id: string;
+  /** `skipped` = the athlete chose to answer later, on the run's own page. */
   status: "answered" | "skipped";
   effort: number | null;
   context: RunContext | null;
   note: string | null;
   planned: WeeklyPlanDay | null;
+  /** The athlete's answer to "reduce the next sessions?" — null when it was never asked. */
+  reduce_requested?: boolean | null;
 }
 export interface FeedbackRun {
   id: string; name: string; date: string; distance_km: number;
@@ -23,17 +64,28 @@ export interface FeedbackItem {
   run: FeedbackRun; feedback: RunFeedback | null; planned: WeeklyPlanDay | null;
 }
 
-export function validFeedbackInput(body: unknown): body is {
-  runId: string; status: "answered" | "skipped"; effort?: number; context?: RunContext; note?: string;
-} {
+export interface FeedbackInput {
+  runId: string;
+  status: "answered" | "skipped";
+  effort?: number;
+  context?: RunContext;
+  note?: string;
+  reduce?: boolean;
+}
+
+export function validFeedbackInput(body: unknown): body is FeedbackInput {
   if (!body || typeof body !== "object") return false;
   const b = body as Record<string, unknown>;
   if (typeof b.runId !== "string" || !/^[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/i.test(b.runId)) return false;
   if (b.status === "skipped") return true;
-  return b.status === "answered" && typeof b.effort === "number" && Number.isInteger(b.effort)
-    && b.effort >= 1 && b.effort <= 5 && typeof b.context === "string"
-    && Object.prototype.hasOwnProperty.call(CONTEXTS, b.context)
-    && (b.note === undefined || (typeof b.note === "string" && b.note.length <= 300));
+  if (b.status !== "answered" || typeof b.effort !== "number" || !Number.isInteger(b.effort)
+    || b.effort < 1 || b.effort > 5 || typeof b.context !== "string") return false;
+  // The reason has to belong to the question that was actually asked.
+  if (!contextQuestion(b.effort).options.some(([key]) => key === b.context)) return false;
+  if (b.note !== undefined && (typeof b.note !== "string" || b.note.length > 300)) return false;
+  // "Reduce?" exists only after "the session itself was too heavy", and must be answered there.
+  if (b.context === "session_too_hard") return typeof b.reduce === "boolean";
+  return b.reduce === undefined || b.reduce === null;
 }
 
 /** Date-only matching is deliberately conservative: multiple runs require manual interpretation. */
@@ -45,7 +97,10 @@ export function matchFeedbackPlan(date: string, days: WeeklyPlanDay[], runsOnDat
   return matches.length === 1 ? matches[0] : null;
 }
 
-/** Evidence-limited feedback, never a prescription or a change to the plan. */
+const HARD_SESSIONS: WeeklyPlanDay["type"][] = ["intervals", "tempo", "test", "race", "long_run", "hiit"];
+const LIFE: RunContext[] = ["schedule", "work", "weather"];
+
+/** Evidence-limited feedback. Never changes the plan by itself. */
 export function evaluateRunFeedback({ run, feedback, planned }: FeedbackItem) {
   const p = feedback ? feedback.planned : planned;
   const target = p?.distance_km;
@@ -54,50 +109,80 @@ export function evaluateRunFeedback({ run, feedback, planned }: FeedbackItem) {
   const pace = run.avg_pace_seconds_per_km;
   const faster = range && pace && pace < range.fastSec - 8;
   const slower = range && pace && pace > range.slowSec + 8;
-  const evidence = [`${run.distance_km.toFixed(1)} km realizados${target ? ` de ${target.toFixed(1)} km previstos` : ""}.`];
+  const km = (n: number) => n.toFixed(1).replace(".", ",");
+  const evidence = [`${km(run.distance_km)} km realizados${target ? ` de ${km(target)} km previstos` : ""}.`];
   if (p) evidence.push(`Referência do dia: ${p.label}.`);
   else evidence.push("Sem uma correspondência única com o plano; não avaliamos cumprimento do objetivo.");
   if (faster) evidence.push("Ritmo médio mais rápido que a faixa prevista; mais rápido não significa melhor execução.");
   else if (slower) evidence.push("Ritmo médio abaixo da faixa prevista; o contexto ajuda a interpretar essa diferença.");
   else if (range && pace) evidence.push("Ritmo médio dentro da faixa prevista, com tolerância de 8 s/km.");
   if (feedback?.effort) evidence.push(`Esforço relatado: ${EFFORTS[feedback.effort - 1].toLowerCase()}.`);
-  let title = ratio !== null && ratio < .9 ? "Distância abaixo do previsto" : ratio !== null && ratio <= 1.1 ? "Distância prevista cumprida" : "Treino registrado";
-  let next = "Os próximos treinos não foram alterados. Um treino isolado não determina sua capacidade; progressões precisam de mais evidências e do seu aceite.";
-  if (!feedback || feedback.status === "skipped") next = "Sem sua percepção, não concluímos por que houve diferenças. Os próximos treinos não foram alterados.";
-  if (feedback?.context && ["schedule", "work", "weather"].includes(feedback.context)) {
-    title = "Treino com contexto registrado";
-    next = `${CONTEXTS[feedback.context]} fez parte deste treino. Isso, sozinho, não indica perda de condicionamento nem gera compensação de volume. Os próximos treinos não foram alterados.`;
+
+  const title = ratio !== null && ratio < .9 ? "Distância abaixo do previsto"
+    : ratio !== null && ratio <= 1.1 ? "Distância prevista cumprida" : "Treino registrado";
+
+  if (!feedback || feedback.status === "skipped") {
+    return { title, evidence, next: "Sem sua percepção, não concluímos por que houve diferenças. Os próximos treinos seguem como planejados." };
   }
-  if (feedback?.context === "fatigue" || (feedback?.effort ?? 0) >= 4) next = "Você relatou cansaço ou esforço alto. Vale entender se foi pontual antes de propor ajustes. Os próximos treinos não foram alterados.";
-  if (feedback?.context === "pain") {
-    title = "O incômodo merece atenção";
-    next = "Não use distância ou pace para ignorar o incômodo. Antes do próximo treino, avalie como está; se persistir ou piorar, procure orientação profissional. O plano não foi alterado automaticamente.";
+
+  const context = feedback.context;
+  const effort = feedback.effort ?? 0;
+
+  // Pain outranks everything: no distance or pace argument should talk past it.
+  if (context === "pain") {
+    return {
+      title: "O incômodo merece atenção",
+      evidence,
+      next: "Não use distância ou pace para ignorar o incômodo. Antes do próximo treino, avalie como está; se persistir ou piorar, procure orientação profissional. O plano não foi alterado automaticamente.",
+    };
   }
-  return { title, evidence, next };
+
+  if (effort === VERY_HARD) {
+    if (context === "session_too_hard") {
+      return feedback.reduce_requested
+        ? {
+          title: "Próximos treinos mais leves",
+          evidence,
+          next: "Você achou o treino pesado demais e pediu para aliviar: as próximas corridas leves e o longão desta semana ficaram um pouco mais curtos, e a semana seguinte não aumenta o volume.",
+        }
+        : {
+          title: "Treino pesado, plano mantido",
+          evidence,
+          next: "Você achou o treino pesado demais, mas preferiu manter. Os próximos treinos seguem como planejados.",
+        };
+    }
+    const why = context ? contextLabel(context, effort).toLowerCase() : "um fator externo";
+    return {
+      title: "Treino muito difícil, motivo registrado",
+      evidence,
+      next: `O que pesou foi: ${why}. Fica registrado e não muda o plano — um dia difícil por fatores de fora do treino não significa que o treino esteja pesado demais.`,
+    };
+  }
+
+  if (context && LIFE.includes(context)) {
+    return {
+      title: "Treino com contexto registrado",
+      evidence,
+      next: `${contextLabel(context, effort)} fez parte deste treino. Isso, sozinho, não indica perda de condicionamento nem gera compensação de volume. Os próximos treinos seguem como planejados.`,
+    };
+  }
+  if (context === "fatigue") {
+    return { title, evidence, next: "Cansaço registrado. Os próximos treinos seguem como planejados." };
+  }
+  if (effort === 4 && p && HARD_SESSIONS.includes(p.type)) {
+    // Hard on a hard day is the session doing its job.
+    return { title, evidence, next: "Difícil é o esperado para este tipo de sessão. Os próximos treinos seguem como planejados." };
+  }
+  return { title, evidence, next: "Os próximos treinos seguem como planejados." };
 }
 
 /**
- * Which check-in the athlete sees.
- *
- * On a run's own page there is nothing to choose: it is that run.
- *
- * On the Home the card sits above today's session, so it has to earn the spot
- * and then give it back. A pending check-in earns it. An assessment the athlete
- * has already read does not — it stayed on top for a week, repeating a verdict
- * about a run from last Tuesday while the hero of the screen is today. So an
- * answered check-in only survives while it is still news (the run is from today
- * or yesterday), or while it is the one just answered in this session.
+ * Which run the entry pop-up asks about: the most recent one with no answer at
+ * all, while it is still fresh. "Responder depois" is stored as `skipped`, so a
+ * postponed run never pops up again — its own page keeps the form.
  */
-export function pickFeedbackItem(
-  items: FeedbackItem[],
-  opts: { runId?: string; selectedId?: string | null; since: string },
-): FeedbackItem | null {
-  if (opts.runId) return items[0] ?? null;
-  if (opts.selectedId) {
-    const justAnswered = items.find(i => i.run.id === opts.selectedId);
-    if (justAnswered) return justAnswered;
-  }
-  const pending = items.find(i => !i.feedback);
-  if (pending) return pending;
-  return items.find(i => i.feedback?.status === "answered" && i.run.date >= opts.since) ?? null;
+export function promptCandidate(items: FeedbackItem[], since: string): FeedbackItem | null {
+  return items
+    .filter(i => !i.feedback && i.run.date >= since)
+    .sort((a, b) => b.run.date.localeCompare(a.run.date))[0] ?? null;
 }

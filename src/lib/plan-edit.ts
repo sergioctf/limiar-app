@@ -302,3 +302,42 @@ export function diffPlans(before: WeeklyPlanData, after: WeeklyPlanData): string
   }
   return out;
 }
+
+/** Sessions that can be shortened without rewriting what the session is. */
+const LIGHTENABLE: WeeklyPlanDay["type"][] = ["easy", "recovery", "long_run"];
+
+/**
+ * The athlete said a session was too heavy and asked for the next ones to be
+ * a little lighter.
+ *
+ * Only runs after `afterDay` change, and only the ones that can be shortened
+ * honestly: easy runs, recovery runs and the long run lose about 15 per cent
+ * (never below 3 km), with their structure and description rescaled together.
+ * Quality sessions keep their shape — scaling 800 m repeats by 0.85 produces
+ * 680 m repeats nobody would ever prescribe — and tests and races are never
+ * touched. A day already swapped or already lightened is left alone, so asking
+ * twice does not shrink the week twice.
+ */
+export function lightenUpcomingRuns(
+  plan: WeeklyPlanData,
+  afterDay: WeeklyPlanDay["day"],
+  factor = 0.85,
+): PlanEditResult {
+  const from = DAY_ORDER.indexOf(afterDay);
+  const changes: string[] = [];
+  const days = plan.days.map(d => {
+    if (DAY_ORDER.indexOf(d.day) <= from) return d;
+    if (!LIGHTENABLE.includes(d.type) || d.swap || d.lightenedFrom != null) return d;
+    const km = d.distance_km ?? 0;
+    if (km <= 3) return d;
+    const next = Math.max(3, round05(km * factor));
+    if (next >= km) return d;
+    changes.push(`${d.dayPt}: ${d.label} ${km} km → ${next} km`);
+    return { ...setDistance(d, next), lightenedFrom: km };
+  });
+  return {
+    plan: changes.length > 0 ? { ...plan, days } : plan,
+    changes,
+    rejected: changes.length > 0 ? [] : ["Não há corridas leves ou longão restantes nesta semana para aliviar."],
+  };
+}

@@ -48,8 +48,7 @@ import { buildToday } from "@/lib/today";
 import type { RecoveryToday } from "@/lib/recovery-today";
 import type { Run, Goal, SyncLog, Activity, Race, PerformanceTest, WellnessData, WeeklyPlanData } from "@/types";
 import { CycleSummaryCard } from "@/components/dashboard/CycleSummaryCard";
-import { RunFeedbackCard } from "@/components/runs/RunFeedbackCard";
-import { WeekQuestionCard } from "@/components/today/WeekQuestionCard";
+import { EntryPrompt } from "@/components/today/EntryPrompt";
 
 interface Props {
   userName?: string | null;
@@ -397,8 +396,8 @@ export function DashboardContent({
       </div>
 
       {/* ── The answer ──────────────────────────────────────────────────── */}
-      <RunFeedbackCard refreshKey={runs.map(r => r.id).join(",")} />
-      <WeekQuestionCard />
+      {/* The coach asks as a pop-up on entry, never as a card parked above the day. */}
+      <EntryPrompt refreshKey={runs.map(r => r.id).join(",")} />
       <TodayCard today={today} recovery={recovery} />
 
       {/*

@@ -340,7 +340,7 @@ Estão todas na seção 15, com a origem de cada uma.
 ## 3.5 Banco
 
 - Supabase Postgres, com RLS ativo em quase tudo. Tabelas e decisões na seção 5.
-- **Migrations manuais:** `supabase/schema.sql` (base de maio) + `supabase/migrations/002…029`, coladas no SQL Editor. **Não existe `001`**; `schema.sql` faz esse papel. Faltam DDLs de `activities`, `performance_tests`, `races` (ver alerta 3).
+- **Migrations manuais:** `supabase/schema.sql` (base de maio) + `supabase/migrations/002…030`, coladas no SQL Editor. **Não existe `001`**; `schema.sql` faz esse papel. Faltam DDLs de `activities`, `performance_tests`, `races` (ver alerta 3).
 - **Fora do repositório, só no Supabase:**
   - **extensões:** `pg_cron`, `pg_net`;
   - **job:** `limiar-morning`;
@@ -468,7 +468,7 @@ Limiar/                               ← pasta no OneDrive (NÃO é repo git)
     │   ├── lib/          ~100 módulos de domínio (o coração do app)
     │   ├── types/index.ts  todos os tipos compartilhados
     │   └── middleware.ts
-    ├── supabase/         schema.sql, seed.sql, migrations/002–029
+    ├── supabase/         schema.sql, seed.sql, migrations/002–030
     ├── tests/            64 arquivos, ~10.700 linhas, fixtures.ts, README.md
     ├── public/           manifest.json, sw.js, ícones
     ├── scripts/import-exercises.mjs   gera src/lib/exercise-catalog.ts
@@ -1126,7 +1126,9 @@ Fluxo OAuth completo (`whoop.ts`, `/api/whoop/*`, `WhoopCard`, migration 023). I
 - **Implementação:** `src/lib/run-feedback.ts` (funções puras: `validFeedbackInput`, `matchFeedbackPlan`, `evaluateRunFeedback`, `pickFeedbackItem`), `src/app/api/run-feedback/route.ts` (GET lista as corridas de 7 dias com o que já foi respondido; PUT grava), `src/components/runs/RunFeedbackCard.tsx`, montado em `DashboardContent` e `RunDetailContent`.
 - **Dados:** tabela `run_feedback` (migration 028). O vínculo com o plano é conservador: só há comparação com uma prescrição quando existe exatamente uma corrida no dia, um relatório da semana e o plano é anterior à corrida. O snapshot é guardado na resposta.
 - **Regras:** avaliação determinística, **sem LLM**. Não julga tiros pelo ritmo médio; não trata chuva/agenda/trabalho como perda de condicionamento; não manda compensar quilometragem; dor tem precedência no texto; nada no plano é alterado.
-- **Limitações:** só corrida; **não entra no motor semanal** (ver 14); a observação livre não é interpretada; sem proposta de progressão ainda.
+- **Segunda versão (16/09, após o primeiro uso real):** "Difícil" não gera alerta nenhum; só "Muito difícil" troca a segunda pergunta por *"O que deixou o treino muito difícil?"*. Motivos externos (sono, estresse, cansaço, questão pessoal, clima) só ficam registrados. *"O treino estava pesado demais"* abre *"Quer reduzir um pouco a carga dos próximos treinos?"* — com o sim, `lightenUpcomingRuns` (`plan-edit.ts`) encurta ~15% as corridas leves e o longão restantes da semana e a semana seguinte não aumenta. Migration 030.
+- **Formato:** pop-up na entrada (`EntryPrompt`), no máximo um por visita, com "Responder depois" (grava `skipped`; não volta a aparecer). A página da corrida sempre oferece o formulário. **Não há mais card fixo no topo do dashboard.** Detalhes em `docs/run-feedback.md`.
+- **Limitações:** só corrida; a observação livre não é interpretada; o atleta não consegue excluir tipos de sessão (ver 15.1).
 - **Melhorias:** alimentar `planWeeklyVolume`/`volumeWithRatchet` com o contexto, e propor (nunca aplicar sozinho) manutenção ou aumento quando a evidência se repetir.
 
 ## 6.26 Leitura da semana: o que segura e o que cai ✅ (novo, 16/09)
@@ -2042,7 +2044,10 @@ combustível em treino: > 75 min → 50 g/h (leve) | 75 g/h (prova); gel ≈ 25 
 8. **Sem emojis** (pelo menos no dashboard: corridas, kcal).
 9. **Nunca mudar uma semana no meio.**
 10. Apple Watch e balança Xiaomi S400 (investigados; sem caminho viável no PWA).
-11. Handoff para outra IA fazer revisão profunda e levar o produto ao próximo estágio (este documento).
+11. **Dashboard confuso e poluído** (16/09): *"tem o círculo relacionado aos treinos, outro indicador/círculo de disposição, além de várias outras informações [...] sem uma hierarquia ou conexão muito clara entre os elementos"*. Não é para agora: juntar com a análise da outra IA ("uma Home que encerra uma decisão", reorganizar significados antes da navegação) e repensar a estrutura em conjunto.
+12. **Disposição mais fiel ao corpo** (16/09): o Limiar mostrou ~60 enquanto o Garmin mostrou 20–40 depois de uma noite de 4 h e semana puxada, e o Garmin *"condiz muito mais com como estou me sentindo"*. Diagnóstico em `docs/readiness-garmin.md` — o intervals.icu não entrega a disposição do Garmin para esta conta.
+13. **"Não faço treino em ladeira"** (16/09, observação no check-in): o cardápio do mesociclo prescreveu subidas; falta um jeito de o atleta excluir tipos de sessão.
+14. Handoff para outra IA fazer revisão profunda e levar o produto ao próximo estágio (este documento).
 
 ## 15.2 Ideias sugeridas por Claude (não implementadas)
 
@@ -2283,7 +2288,7 @@ npx vercel deploy --prod --yes
 
 ## 18.4 Banco e migrations
 
-- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **029** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028 e 029).
+- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **030** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028, 029 e 030).
 - **O código tolera tabela ausente** (`try/catch` e sondas como `notification_log` em `morning-dispatch.ts`), então uma migration não aplicada **não quebra**: desliga a feature em silêncio.
 - **Fora do repositório:**
 
@@ -2328,7 +2333,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 
 ## 19.1 O que existe
 
-- **Vitest 2.1**, `npm test` (= `vitest run`). **65 arquivos, 1.200 testes, todos passando** (rodado em 16/09/2026, ~4,2 s).
+- **Vitest 2.1**, `npm test` (= `vitest run`). **65 arquivos, 1.218 testes, todos passando** (rodado em 16/09/2026, ~4,5 s).
 - **Só funções puras de `src/lib/`.** Sem banco, sem rede, sem DOM.
 - **Fixture central** (`tests/fixtures.ts`): atleta com teste de 3 km em 13:00 e FC média 178 → **VDOT ≈ 43,7, LTHR = 165**. Falhas se leem como "isso deu errado para um corredor de VDOT 43".
 - **`tests/README.md`:** tabela dos bugs reais que cada teste protege. Leitura obrigatória.

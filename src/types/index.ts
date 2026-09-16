@@ -486,6 +486,8 @@ export interface WeeklyPlanDay {
   swap?:       import("@/lib/session-swap").SwapRecord;
   /** Set on a session that was moved here from an earlier day ("Segunda"). */
   movedFrom?:  string;
+  /** The distance before the athlete asked for lighter sessions after a too-heavy one. */
+  lightenedFrom?: number;
 }
 
 export interface WeeklyPlanData {

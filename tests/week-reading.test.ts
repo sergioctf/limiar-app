@@ -91,3 +91,22 @@ describe("an athlete who stopped is not asked every week", () => {
     expect(r.ask).toBe("what_happened");
   });
 });
+
+describe("the athlete's own reasons and requests", () => {
+  it.each(["sleep", "stress", "personal"] as const)("treats %s as life, not a smaller athlete", context => {
+    const r = readWeek({ plannedKm: 19, actualKm: 12, contexts: [context] });
+    expect(r.reason).toBe("life");
+    expect(r.holding).toBe(true);
+  });
+  it("does not ramp after a completed week the athlete found too heavy", () => {
+    const r = readWeek({ plannedKm: 19, actualKm: 19, reductionRequested: true });
+    expect(r.status).toBe("met");
+    expect(r.reason).toBe("too_much");
+    expect(r.headline).toBe("Semana cumprida, sem aumento");
+  });
+  it("reads a short week with a reduction request as too much, not as life", () => {
+    const r = readWeek({ plannedKm: 19, actualKm: 12, contexts: ["work"], reductionRequested: true });
+    expect(r.reason).toBe("too_much");
+    expect(r.creditedKm).toBe(12);
+  });
+});

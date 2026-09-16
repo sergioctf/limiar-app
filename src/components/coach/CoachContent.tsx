@@ -19,6 +19,7 @@ import { PredictionsCard }      from "@/components/coach/PredictionsCard";
 import { TestHistoryCard }      from "@/components/coach/TestHistoryCard";
 import { TestForm }             from "@/components/coach/TestForm";
 import { WeeklyPlanCard }       from "@/components/coach/WeeklyPlanCard";
+import { WeekQuestionCard }     from "@/components/today/WeekQuestionCard";
 import { PlanFreshnessBanner } from "@/components/coach/PlanFreshnessBanner";
 import { SportSelector }        from "@/components/coach/SportSelector";
 import { ShoesCard }            from "@/components/coach/ShoesCard";
@@ -216,6 +217,9 @@ export function CoachContent({ reports, cycles, tests: initialTests, adherenceHi
           }} />
 
           <PlanFreshnessBanner />
+
+          {/* Where "Responder depois" on the week question leads: next to the plan it changes. */}
+          <WeekQuestionCard />
 
           <WeeklyPlanCard
             initialPlan={initialWeeklyPlan}

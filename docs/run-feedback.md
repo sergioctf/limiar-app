@@ -57,3 +57,49 @@ Três correções sobre a primeira implementação:
 **Suíte.** 1.187 testes em 64 arquivos, todos passando, e `tsc --noEmit` limpo. Cinco testes novos cobrem a regra de qual check-in aparece.
 
 **O que este recorte ainda não faz** (continua valendo a lista de limites acima): o check-in **não** entra no motor semanal. Hoje o volume da semana seguinte já é recalculado a partir do que foi executado (`planWeeklyVolume` + `volumeWithRatchet`), sem perguntar nada — então uma semana atrapalhada por trabalho ou chuva ainda pode reduzir o plano seguinte em silêncio. Fechar esse laço é o próximo passo.
+
+## Segunda versão, após o primeiro uso real (16/09/2026)
+
+Sérgio usou o check-in pela primeira vez depois de uma corrida e pediu duas mudanças.
+
+### 1. "Difícil" não é alerta; "muito difícil" pergunta o porquê
+
+> "Às vezes o treino foi difícil simplesmente porque ele deveria ser difícil. [...] Deixaria algum alerta ou investigação maior apenas quando a pessoa marcar como 'muito difícil'. [...] Se a pessoa indicar que o problema foi realmente o treino estar excessivamente pesado, aí sim [...] perguntar: 'Você gostaria de reduzir um pouco a carga dos próximos treinos?'. Não tomar nenhuma decisão automaticamente."
+
+Antes, esforço "Difícil" (ou contexto "Cansaço") gerava *"Você relatou cansaço ou esforço alto…"*. Agora:
+
+| Resposta | O que acontece |
+|---|---|
+| Muito leve a Difícil | Nenhum alerta. Em sessão dura (tiros, limiar, longão, teste, prova), "Difícil" recebe *"Difícil é o esperado para este tipo de sessão."* Cansaço vira apenas *"Cansaço registrado."* |
+| **Muito difícil** | A segunda pergunta muda para **"O que deixou o treino muito difícil?"**: Dormi pouco · Estresse · Cansaço acumulado · Questão pessoal · Dor/incômodo · Clima · O treino estava pesado demais · Outro |
+| Muito difícil + motivo externo | Registra e não muda nada: *"um dia difícil por fatores de fora do treino não significa que o treino esteja pesado demais."* |
+| Muito difícil + **o treino estava pesado demais** | Terceira pergunta: **"Quer reduzir um pouco a carga dos próximos treinos?"** — *Sim, reduzir um pouco* · *Não, manter como está*. "Ver feedback" só libera depois da resposta. |
+| … + **Sim** | As corridas leves, regenerativas e o longão **restantes da semana, contados a partir de hoje**, ficam ~15% mais curtos (nunca abaixo de 3 km), com estrutura e descrição recalculadas juntas (`lightenUpcomingRuns` em `plan-edit.ts`). Treinos de qualidade mantêm o formato (escalar 800 m por 0,85 daria tiros de 680 m), teste e prova nunca são tocados. A semana seguinte **não aumenta** o volume (`weekly-plan.ts` limita ao planejado da semana anterior). O card lista o que mudou. |
+| … + **Não** | *"Treino pesado, plano mantido."* Nada muda. |
+| Dor/incômodo (qualquer esforço) | Continua com precedência, com a orientação de avaliar antes do próximo treino. |
+
+Pedir redução uma segunda vez (editando a resposta) não reduz de novo; e mudar a resposta depois não desfaz a redução já aplicada.
+
+Na leitura da semana (`week-reading.ts`), dormir pouco, estresse e questão pessoal contam como **rotina** — uma semana curta por esses motivos segura o volume. O pedido de redução conta como "plano grande demais".
+
+### 2. Pop-up na entrada, não card fixo no dashboard
+
+> "Faria muito mais sentido como um pop-up. [...] A pessoa pode responder naquele momento ou clicar em 'Responder depois'. [...] O que eu não quero é esse feedback ficando permanentemente preso no topo do dashboard."
+
+- **`EntryPrompt`** (Home): ao abrir o app, se existe corrida de hoje, ontem ou anteontem **sem nenhuma resposta**, abre o pop-up (folha de baixo no celular, centralizado no desktop). No máximo **um pop-up por visita**: primeiro o check-in do treino; se não houver, a pergunta sobre a semana passada.
+- **"Responder depois"** grava `status = skipped` e o pop-up **nunca mais volta** para aquela corrida. Fechar tocando fora ou com Esc equivale a "Responder depois".
+- **Na página da corrida** (histórico) o card continua sempre disponível: formulário se não respondeu, avaliação com "Editar respostas" se respondeu.
+- A pergunta da semana, se adiada, espera no **Treinador**, ao lado do plano que ela muda (o adiamento fica no aparelho).
+- Os cards fixos do topo do dashboard foram **removidos**.
+
+### Registro de aplicação
+
+- **Migration 030** aplicada em produção: novos valores de `context` (`sleep`, `stress`, `personal`, `session_too_hard`) e coluna `reduce_requested`.
+- **Prévia visual** com dados fictícios numa página `/dev` temporária (removida antes do deploy): "Muito difícil" troca a segunda pergunta; "O treino estava pesado demais" abre a pergunta de redução; "Ver feedback" fica desabilitado até respondê-la; voltar para "Difícil" restaura a pergunta normal e limpa as respostas incompatíveis.
+- **Deploys** em produção (um deles perdeu a conexão da CLI com `ENOTFOUND`, mas `vercel inspect` confirmou `Ready`).
+- **Verificado em produção, sessão real:** nenhum card fixo no topo; a corrida de 16/09 (Difícil + Cansaço) mostra só *"Cansaço registrado. Os próximos treinos seguem como planejados."*; nenhum pop-up aberto porque as duas corridas da semana já estavam respondidas — ele aparece na próxima corrida.
+- **Suíte:** 1.218 testes em 65 arquivos, `tsc` limpo.
+
+### Achado no primeiro uso
+
+A observação de Sérgio na corrida de 16/09: *"Não faço treino em ladeira. Fiz OUTRO treino, 2 km de aquecimento, 8 tiros de 400 m e 1,25 km de desaquecimento."* O plano prescreveu "Subidas 6×45 s" (o cardápio do mesociclo inclui subidas) e não há hoje como o atleta excluir um tipo de sessão. Registrado como próximo ajuste; não implementado nesta entrega.

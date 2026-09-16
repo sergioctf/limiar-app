@@ -189,6 +189,22 @@ async function weekAnswer(db: DbClient, userId: string, monday: string): Promise
 }
 
 /**
+ * Did the athlete ask for lighter sessions during that week?
+ *
+ * Read by when the answer was given, not by the run's date: a Sunday run
+ * answered on Monday asks to lighten Monday's week, so the following one is the
+ * week that must not ramp.
+ */
+async function reductionRequestedIn(db: DbClient, userId: string, monday: string): Promise<boolean> {
+  // Monday 00:00 in São Paulo is 03:00 UTC.
+  const { data } = await db.from("run_feedback").select("run_id")
+    .eq("user_id", userId).eq("reduce_requested", true)
+    .gte("updated_at", `${monday}T03:00:00Z`).lt("updated_at", `${mondayMinus(monday, -1)}T03:00:00Z`)
+    .limit(1);
+  return (data?.length ?? 0) > 0;
+}
+
+/**
  * The reading of the week that just closed, with the one before it as context.
  *
  * Every lookup degrades to "nothing known": a missing table or a failed query
@@ -212,10 +228,11 @@ export async function readPreviousWeek(
 ): Promise<WeekReading> {
   const prev = mondayMinus(weekStart, 1);
   const earlier = mondayMinus(weekStart, 2);
-  const [contexts, answer, earlierVolumes] = await Promise.all([
+  const [contexts, answer, earlierVolumes, reductionRequested] = await Promise.all([
     weekCheckinContexts(db, userId, prev, runs).catch(() => [] as RunContext[]),
     weekAnswer(db, userId, prev).catch(() => null),
     weekVolumes(db, userId, earlier, runs).catch(() => null),
+    reductionRequestedIn(db, userId, prev).catch(() => false),
   ]);
   // Four quiet weeks is not a bad week; it is someone who stopped, and the
   // volume engine already knows how to bring them back.
@@ -228,7 +245,7 @@ export async function readPreviousWeek(
       answer: await weekAnswer(db, userId, earlier).catch(() => null),
     }).holding
     : false;
-  return readWeek({ plannedKm: previous.plannedKm, actualKm: previous.actualKm, contexts, answer, heldLastWeek, inactive });
+  return readWeek({ plannedKm: previous.plannedKm, actualKm: previous.actualKm, contexts, answer, heldLastWeek, inactive, reductionRequested });
 }
 
 export async function athleteFitness(
@@ -698,7 +715,7 @@ export async function ensureWeeklyPlan(
     ? await readPreviousWeek(db, userId, weekStart, runs, previous).catch(() => null)
     : null;
 
-  const weeklyKm = volumeWithRatchet(afterMacro, {
+  const ratchetedKm = volumeWithRatchet(afterMacro, {
     previousPlannedKm: previous?.plannedKm ?? null,
     previousActualKm:  reading?.creditedKm ?? previous?.actualKm ?? null,
     // The block's recovery week is supposed to go down; the ratchet must not
@@ -707,6 +724,12 @@ export async function ensureWeeklyPlan(
     raceAhead,
     alreadyPlannedThisWeekKm,
   });
+
+  // The athlete asked for lighter sessions (or said the plan was too big):
+  // this week does not climb above the one they found too heavy.
+  const weeklyKm = reading?.reason === "too_much" && previous?.plannedKm
+    ? Math.min(ratchetedKm, previous.plannedKm)
+    : ratchetedKm;
 
   const recentWeeks = weeklyVolumesBefore(runs, weekStart).filter(v => v > 0);
   const recentAverageKm = recentWeeks.length > 0

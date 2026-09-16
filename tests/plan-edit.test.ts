@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { normalizePlanEdits, applyPlanEdits, diffPlans } from "@/lib/plan-edit";
+import { normalizePlanEdits, applyPlanEdits, diffPlans, lightenUpcomingRuns } from "@/lib/plan-edit";
 import { buildWeekPlan } from "@/lib/workout-builder";
 import { weekContext, PREFS_3_DAYS } from "./fixtures";
 import { normalizeStrengthPrefs } from "@/lib/strength-prefs";
 import { normalizePrefs } from "@/lib/workout-builder";
 import { expandToKmSplits } from "@/lib/workout-builder";
-import type { WeeklyPlanData } from "@/types";
+import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 
 /**
  * The chat told the athlete *"Atualizado o longão de sábado para 8 km"* and
@@ -269,5 +269,45 @@ describe("diffPlans", () => {
   it("says nothing when nothing changed", () => {
     const p = plan();
     expect(diffPlans(p, p)).toEqual([]);
+  });
+});
+
+describe("lighter sessions after one felt too heavy", () => {
+  const day = (d: WeeklyPlanDay["day"], type: WeeklyPlanDay["type"], km?: number): WeeklyPlanDay =>
+    ({ day: d, dayPt: d, type, label: type, distance_km: km, description: km ? `Rodagem de ${km} km.` : "" });
+  const week: WeeklyPlanData = {
+    week_start: "2026-09-14", generated_at: "2026-09-13T03:00:00Z",
+    days: [
+      day("Mon", "easy", 6), day("Tue", "intervals", 5), day("Wed", "strength"),
+      day("Thu", "easy", 6), day("Fri", "rest"), day("Sat", "long_run", 10), day("Sun", "test", 5),
+    ],
+  };
+
+  it("shortens only the easy runs and the long run after today", () => {
+    const { plan, changes } = lightenUpcomingRuns(week, "Tue");
+    const km = (d: string) => plan.days.find(x => x.day === d)?.distance_km;
+    expect(km("Mon")).toBe(6);           // already behind the athlete
+    expect(km("Thu")).toBe(5);           // 6 × 0,85 → 5
+    expect(km("Sat")).toBe(8.5);         // 10 × 0,85
+    expect(km("Sun")).toBe(5);           // a test keeps its protocol
+    expect(changes).toHaveLength(2);
+  });
+
+  it("keeps the description in step with the new distance", () => {
+    const { plan } = lightenUpcomingRuns(week, "Tue");
+    expect(plan.days.find(x => x.day === "Thu")?.description).toContain("5 km");
+  });
+
+  it("does not shrink the week twice when asked twice", () => {
+    const once = lightenUpcomingRuns(week, "Tue").plan;
+    const twice = lightenUpcomingRuns(once, "Tue");
+    expect(twice.changes).toHaveLength(0);
+    expect(twice.plan.days.find(x => x.day === "Sat")?.distance_km).toBe(8.5);
+  });
+
+  it("never goes below 3 km and says so when there is nothing left to lighten", () => {
+    const short: WeeklyPlanData = { ...week, days: week.days.map(d => d.day === "Thu" ? { ...d, distance_km: 3 } : d) };
+    expect(lightenUpcomingRuns(short, "Fri").changes).toHaveLength(1);   // only Saturday
+    expect(lightenUpcomingRuns(week, "Sun").rejected[0]).toContain("Não há corridas");
   });
 });
