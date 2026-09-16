@@ -72,7 +72,7 @@ export default async function DashboardPage() {
       .select("id, date, name, sport_type, duration_seconds, calories, avg_hr, source")
       .eq("user_id", user.id).gte("date", thirtyAgoStr).is("deleted_at", null)
       .order("date", { ascending: false }).limit(10),
-    supabase.from("activities").select("date, sport_type")
+    supabase.from("activities").select("date, sport_type, duration_seconds, avg_hr")
       .eq("user_id", user.id).gte("date", ninetyAgoStr).is("deleted_at", null)
       .order("date", { ascending: false }),
     supabase.from("wellness_data").select("*")
@@ -136,7 +136,7 @@ export default async function DashboardPage() {
         lastSync={syncLogs?.[0] ?? null}
         weekActivities={(weekActivities ?? []) as import("@/types").Activity[]}
         recentActivities={(recentActivities ?? []) as import("@/types").Activity[]}
-        activitiesHistory={(activitiesHistory ?? []) as Array<{ date: string; sport_type: string }>}
+        activitiesHistory={(activitiesHistory ?? []) as Array<{ date: string; sport_type: string; duration_seconds: number | null; avg_hr: number | null }>}
         nextRace={nextRace}
         latestTest={latestTest}
         wellness={(wellness ?? []) as import("@/types").WellnessData[]}

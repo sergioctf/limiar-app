@@ -750,6 +750,7 @@ export async function ensureWeeklyPlan(
     minRunKm:     prefs.minRunKm ?? 5,
     minLongRunKm: prefs.minLongRunKm ?? null,
     provenLongRunKm: proven.longestRunKm,
+    excludedQuality: prefs.excludedQuality ?? [],
   };
 
   const days = buildWeekPlan(ctx, sports ?? [], prefs, strengthPrefs);

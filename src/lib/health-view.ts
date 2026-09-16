@@ -237,12 +237,24 @@ export function readinessOn(
 ): Readiness {
   const from = addDays(date, -BASELINE_DAYS);
   const prior = rows.filter(r => r.date >= from && r.date < date);
+  // The last three nights, most recent first. Sleep is dated on the morning the
+  // athlete woke up, so "date" is last night.
+  const sleepHistoryHours = [0, 1, 2]
+    .map(back => rows.find(r => r.date === addDays(date, -back))?.sleep_seconds)
+    .filter((sec): sec is number => sec != null && sec > 0)
+    .map(sec => sec / 3600);
+  // Someone whose watch has been sending anything this month has a watch: on
+  // their mornings, a missing signal is unknown rather than irrelevant.
+  const expectWatch = rows.some(r => r.date >= from && r.date <= date
+    && (r.hrv_ms != null || r.resting_hr != null || r.sleep_seconds != null));
   return computeReadiness({
     wellness: rows.find(r => r.date === date) ?? null,
     checkin,
     tsb: load[date]?.tsb ?? null,
     rhrBaseline: restingHrBaseline(prior),
     hrvBaselineMs: hrvBaseline(prior),
+    sleepHistoryHours,
+    expectWatch,
   });
 }
 

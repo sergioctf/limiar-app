@@ -13,7 +13,7 @@ import type { HealthCheckin, WellnessData } from "@/types";
 export type ReadinessVerdict = "alta" | "moderada" | "baixa";
 
 export interface ReadinessComponent {
-  key: "body_battery" | "sleep" | "hrv" | "rhr" | "tsb" | "soreness" | "rpe";
+  key: "body_battery" | "sleep" | "sleep_history" | "hrv" | "rhr" | "tsb" | "soreness" | "rpe";
   label: string;
   score: number;       // 0-100
   weight: number;
@@ -26,6 +26,13 @@ export interface Readiness {
   components: ReadinessComponent[];
   recommendation: string;
   source: "wearable" | "manual" | "mixed" | "none";
+  /**
+   * For an athlete with a watch: how many of the core signals reached the score
+   * today. A number built from half its inputs should say so.
+   */
+  coverage?: { present: number; expected: number; missing: ReadinessComponent["key"][] };
+  /** A night so short that no other signal is allowed to call the day "ready". */
+  cap?: { limit: number; reason: string };
 }
 
 const clamp = (v: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
@@ -51,6 +58,48 @@ function manualSleepScore(hours: number | null, quality: number | null): number 
   const qScore = quality != null ? ((quality - 1) / 4) * 100 : null;
   if (hScore != null && qScore != null) return clamp(hScore * 0.6 + qScore * 0.4);
   return clamp((hScore ?? qScore)!);
+}
+
+/**
+ * The last few nights, not just the last one.
+ *
+ * Garmin Training Readiness counts sleep twice — last night and the history of
+ * the last three nights — because a debt builds: 6 h then 4 h is a worse morning
+ * than a single 4 h night after a week of 8 h. Two nights are the minimum for a
+ * history to mean anything.
+ */
+export function sleepHistoryScore(hours: number[]): number | null {
+  const nights = hours.filter(h => h > 0);
+  if (nights.length < 2) return null;
+  const avg = nights.reduce((s, h) => s + h, 0) / nights.length;
+  const points: Array<[number, number]> = [[4.5, 15], [5, 30], [5.5, 40], [6, 55], [6.5, 70], [7, 85], [7.5, 100]];
+  if (avg <= points[0][0]) return points[0][1];
+  if (avg >= points[points.length - 1][0]) return 100;
+  for (let i = 1; i < points.length; i++) {
+    const [x1, y1] = points[i];
+    if (avg <= x1) {
+      const [x0, y0] = points[i - 1];
+      return Math.round(y0 + ((avg - x0) / (x1 - x0)) * (y1 - y0));
+    }
+  }
+  return 100;
+}
+
+/**
+ * A night this short caps the day, whatever the rest says.
+ *
+ * On 16/09 Sérgio slept 4 h 13 after a hard week; resting HR was fine, the load
+ * looked neutral, and the score came out 69 while the Garmin said 20–40 — and
+ * the body agreed with the Garmin. One good number must not argue a short night
+ * into "ready to train hard".
+ */
+export function shortNightCap(hours: number | null | undefined): { limit: number; reason: string } | undefined {
+  if (hours == null || !(hours > 0)) return undefined;
+  const whole = Math.floor(hours);
+  const label = `${whole}h${String(Math.round((hours - whole) * 60)).padStart(2, "0")}`;
+  if (hours < 4.5) return { limit: 40, reason: `Noite de ${label}: a disposição fica limitada, independentemente dos outros sinais.` };
+  if (hours < 5.5) return { limit: 60, reason: `Noite de ${label}: com pouco sono, o dia não conta como pronto para treinar forte.` };
+  return undefined;
 }
 
 const HRV_STATUS_SCORE: Record<string, number> = {
@@ -91,10 +140,19 @@ export interface ReadinessInput {
   rhrBaseline?: number | null;   // trailing avg resting HR (to judge "elevated")
   /** Trailing median HRV in ms — see `hrvBaseline`. */
   hrvBaselineMs?: number | null;
+  /** Hours slept on the last nights, most recent first (up to three). */
+  sleepHistoryHours?: number[];
+  /**
+   * The athlete has a watch sending data. Then a missing core signal is
+   * *unknown* and counts as neutral, instead of vanishing and handing its weight
+   * to whatever did arrive — which is how a fine resting HR and a neutral load
+   * produced a confident 69 on a four-hour night.
+   */
+  expectWatch?: boolean;
 }
 
 export function computeReadiness({
-  wellness, checkin, tsb, rhrBaseline, hrvBaselineMs,
+  wellness, checkin, tsb, rhrBaseline, hrvBaselineMs, sleepHistoryHours = [], expectWatch = false,
 }: ReadinessInput): Readiness {
   const c: ReadinessComponent[] = [];
   const w = wellness ?? null;
@@ -107,37 +165,45 @@ export function computeReadiness({
   // weight, and the label follows whichever one arrived — showing "Body
   // Battery" to a Whoop user would be putting one vendor's word on another
   // vendor's number.
-  const vendorRecovery = w?.body_battery ?? w?.recovery_score ?? null;
+  // Optional (Sérgio, 16/09): the athlete may type the Garmin's own number. It
+  // joins as one more signal — it does not replace the Limiar score.
+  const vendorRecovery = w?.garmin_readiness ?? w?.body_battery ?? w?.recovery_score ?? null;
   if (vendorRecovery != null) {
     c.push({
       key: "body_battery",
-      label: w?.body_battery != null ? "Body Battery" : "Recovery",
+      label: w?.garmin_readiness != null ? "Disposição do Garmin (informada)"
+        : w?.body_battery != null ? "Body Battery" : "Recovery",
       score: clamp(vendorRecovery),
-      weight: 0.30,
+      weight: 0.25,
       auto: true,
     });
   }
 
   // Sleep — wearable score > wearable duration > manual
   if (w?.sleep_score != null) {
-    c.push({ key: "sleep", label: "Sono", score: clamp(w.sleep_score), weight: 0.22, auto: true });
+    c.push({ key: "sleep", label: "Sono", score: clamp(w.sleep_score), weight: 0.25, auto: true });
   } else if (w?.sleep_seconds != null) {
-    c.push({ key: "sleep", label: "Sono", score: Math.round(sleepFromSeconds(w.sleep_seconds)), weight: 0.22, auto: true });
+    c.push({ key: "sleep", label: "Sono", score: Math.round(sleepFromSeconds(w.sleep_seconds)), weight: 0.25, auto: true });
   } else {
     const ms = manualSleepScore(checkin?.sleep_hours ?? null, checkin?.sleep_quality ?? null);
-    if (ms != null) c.push({ key: "sleep", label: "Sono", score: Math.round(ms), weight: 0.22, auto: false });
+    if (ms != null) c.push({ key: "sleep", label: "Sono", score: Math.round(ms), weight: 0.25, auto: false });
+  }
+
+  const history = sleepHistoryScore(sleepHistoryHours);
+  if (history != null) {
+    c.push({ key: "sleep_history", label: "Sono das últimas noites", score: history, weight: 0.10, auto: true });
   }
 
   // The watch's own verdict beats our arithmetic — Garmin did this analysis
   // with more nights and more signals than we have. Falling back to the raw
   // number is what lets an Apple Watch or a Whoop contribute at all.
   if (w?.hrv_status && HRV_STATUS_SCORE[w.hrv_status] != null) {
-    c.push({ key: "hrv", label: "HRV", score: HRV_STATUS_SCORE[w.hrv_status], weight: 0.18, auto: true });
+    c.push({ key: "hrv", label: "HRV", score: HRV_STATUS_SCORE[w.hrv_status], weight: 0.20, auto: true });
   } else if (w?.hrv_ms != null && hrvBaselineMs != null && hrvBaselineMs > 0) {
     c.push({
       key: "hrv", label: "HRV",
       score: Math.round(hrvScoreFromRatio(w.hrv_ms, hrvBaselineMs)),
-      weight: 0.18, auto: true,
+      weight: 0.20, auto: true,
     });
   }
 
@@ -155,11 +221,25 @@ export function computeReadiness({
     c.push({ key: "soreness", label: "Dor muscular", score: Math.round(clamp(((5 - checkin.soreness) / 4) * 100)), weight: 0.10, auto: false });
   }
   if (checkin?.rpe != null) {
-    c.push({ key: "rpe", label: "Esforço de ontem", score: Math.round(clamp(100 - Math.max(0, checkin.rpe - 3) * 8.5)), weight: 0.06, auto: false });
+    c.push({ key: "rpe", label: "Esforço de ontem", score: Math.round(clamp(100 - Math.max(0, checkin.rpe - 3) * 8.5)), weight: 0.05, auto: false });
   }
 
-  const totalW = c.reduce((s, x) => s + x.weight, 0) || 1;
-  const score = Math.round(c.reduce((s, x) => s + x.score * (x.weight / totalW), 0));
+  // With a watch, a core signal that did not arrive is unknown — neither good nor
+  // bad — so it keeps its weight at the neutral midpoint. Without a watch the
+  // score is built from the check-in and the load alone, and renormalizing over
+  // those is the design, not a gap.
+  const CORE: Array<[ReadinessComponent["key"], number]> = [["sleep", 0.25], ["sleep_history", 0.10], ["hrv", 0.20], ["rhr", 0.10]];
+  const missing = expectWatch ? CORE.filter(([key]) => !c.some(x => x.key === key)) : [];
+  const NEUTRAL = 50;
+  const missingW = missing.reduce((sum, [, weight]) => sum + weight, 0);
+  const totalW = (c.reduce((sum, x) => sum + x.weight, 0) + missingW) || 1;
+  const raw = (c.reduce((sum, x) => sum + x.score * x.weight, 0) + NEUTRAL * missingW) / totalW;
+
+  const lastNightHours = w?.sleep_seconds != null && w.sleep_seconds > 0
+    ? w.sleep_seconds / 3600
+    : checkin?.sleep_hours ?? null;
+  const cap = c.length > 0 ? shortNightCap(lastNightHours) : undefined;
+  const score = Math.round(cap ? Math.min(raw, cap.limit) : raw);
 
   const verdict: ReadinessVerdict = score >= 70 ? "alta" : score >= 45 ? "moderada" : "baixa";
   const recommendation =
@@ -174,14 +254,21 @@ export function computeReadiness({
   const source: Readiness["source"] = c.length === 0 ? "none"
     : hasAuto && hasManual ? "mixed" : hasAuto ? "wearable" : "manual";
 
-  return { score, verdict, components: c, recommendation, source };
+  const coverage = expectWatch
+    ? { present: CORE.length - missing.length, expected: CORE.length, missing: missing.map(([key]) => key) }
+    : undefined;
+
+  return { score, verdict, components: c, recommendation, source, coverage, cap };
 }
 
 /** Trailing average resting HR from recent wellness rows (baseline for RHR scoring). */
 export function restingHrBaseline(rows: WellnessData[]): number | null {
-  const vals = rows.map(r => r.resting_hr).filter((v): v is number => v != null);
+  // Median, like the vitals card: one feverish 62 among 50s dragged a mean up,
+  // and the tile and the score disagreed about the same morning.
+  const vals = rows.map(r => r.resting_hr).filter((v): v is number => v != null && v > 0).sort((a, b) => a - b);
   if (vals.length < 3) return null;
-  return Math.round(vals.reduce((s, v) => s + v, 0) / vals.length);
+  const mid = Math.floor(vals.length / 2);
+  return Math.round(vals.length % 2 === 0 ? (vals[mid - 1] + vals[mid]) / 2 : vals[mid]);
 }
 
 /**

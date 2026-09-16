@@ -91,6 +91,10 @@ export function planFingerprint(input: PlanInputs): PlanFingerprint {
       p.qualityPerWeek ?? null,
       p.minRunKm ?? null,
       p.minLongRunKm ?? null,
+      // Appended only when present: adding it unconditionally would change every
+      // stored hash and put the "plano desatualizado" banner in front of every
+      // athlete at once — the start of the 31/08 incident.
+      ...(p.excludedQuality?.length ? [[...p.excludedQuality].sort()] : []),
     ]),
     sports: hash([
       [...input.sports].sort(),

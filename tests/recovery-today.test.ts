@@ -31,12 +31,20 @@ const base = { date: HOJE, load: carga, checkin: null, plan: plano, doneKm: 0, s
 
 describe("recuperação de hoje", () => {
   it("com relógio calibrado, a base é o relógio", () => {
-    const rows = [...noites(10, { hrv_ms: 50, resting_hr: 50, sleep_score: 80 }), w(HOJE, { hrv_ms: 52, resting_hr: 49, sleep_score: 84 })];
+    const noite = { hrv_ms: 50, resting_hr: 50, sleep_score: 80, sleep_seconds: 7.5 * 3600 };
+    const rows = [...noites(10, noite), w(HOJE, { ...noite, hrv_ms: 52, resting_hr: 49, sleep_score: 84 })];
     const r = buildRecoveryToday({ ...base, rows });
     expect(r.basis).toBe("watch");
     expect(r.needsCheckin).toBe(false);
     expect(basisLabel(r)).toBe("Relógio + carga");
     expect(r.session?.label).toBe("Tiro 5×800");
+  });
+
+  it("diz quando o número foi montado sem parte dos sinais do relógio", () => {
+    // Nota de sono sem a duração: não há como ler as últimas noites.
+    const rows = [...noites(10, { hrv_ms: 50, resting_hr: 50, sleep_score: 80 }), w(HOJE, { hrv_ms: 52, resting_hr: 49, sleep_score: 84 })];
+    const r = buildRecoveryToday({ ...base, rows });
+    expect(basisLabel(r)).toBe("Relógio + carga · 3 de 4 sinais");
   });
 
   it("relógio chegando mas sem média ainda: calibrando, sem pedir check-in", () => {

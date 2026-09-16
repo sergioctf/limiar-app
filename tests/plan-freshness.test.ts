@@ -158,3 +158,24 @@ describe("planStaleness", () => {
     expect(s.reasons).not.toContain("engine");
   });
 });
+
+describe("excluding a session type", () => {
+  const base = { vdot: 43.7, lthr: 165, sports: ["corrida" as const], strengthPrefs: normalizeStrengthPrefs({}) };
+  const prefs = normalizePrefs({ runDays: ["Tue", "Thu", "Sat"], strengthDays: ["Mon"] });
+
+  it("does not mark every existing plan stale for athletes who excluded nothing", () => {
+    const before = planFingerprint({ ...base, prefs: { ...prefs, excludedQuality: undefined } });
+    const after = planFingerprint({ ...base, prefs: { ...prefs, excludedQuality: [] } });
+    expect(after.week).toBe(before.week);
+  });
+
+  it("marks the plan stale when the athlete opts out of hills", () => {
+    const before = planFingerprint({ ...base, prefs });
+    const after = planFingerprint({ ...base, prefs: { ...prefs, excludedQuality: ["hills"] } });
+    expect(after.week).not.toBe(before.week);
+  });
+
+  it("keeps only known, excludable kinds", () => {
+    expect(normalizePrefs({ runDays: ["Tue"], excludedQuality: ["hills", "intervals", "nonsense"] }).excludedQuality).toEqual(["hills"]);
+  });
+});

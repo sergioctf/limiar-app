@@ -65,7 +65,7 @@ interface Props {
   lastSync: SyncLog | null;
   weekActivities: Activity[];
   recentActivities: Activity[];
-  activitiesHistory: Array<{ date: string; sport_type: string }>;
+  activitiesHistory: Array<{ date: string; sport_type: string; duration_seconds?: number | null; avg_hr?: number | null }>;
   nextRace?: Race | null;
   latestTest?: PerformanceTest | null;
   wellness?: WellnessData[];
@@ -138,7 +138,8 @@ export function DashboardContent({
     : null;
   const lthr = testMetrics?.lthr ?? null;
   const thresholdPace = testMetrics?.paces.find(p => p.name === "threshold")?.pace_min_sec ?? null;
-  const fitnessData = computeTrainingLoad(runs, lthr, thresholdPace, 90);
+  // Same activities as the readiness score reads, so "forma" is one number everywhere.
+  const fitnessData = computeTrainingLoad(runs, lthr, thresholdPace, 90, activitiesHistory);
 
   // Days trained in a rolling month, across every sport. A streak punished the
   // rest days the rest of the app keeps prescribing.

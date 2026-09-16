@@ -1,6 +1,6 @@
 # Disposição do Limiar × Training Readiness do Garmin
 
-Investigação de 16/09/2026. **Nada foi alterado no cálculo** — este documento registra o diagnóstico para decidirmos o que fazer.
+Investigação e aplicação de 16/09/2026. Sérgio escolheu **A como padrão e B como opção** — ver "O que foi aplicado", no fim.
 
 ## O relato
 
@@ -56,3 +56,35 @@ Onde o nosso cálculo se afasta disso, em ordem de impacto:
 - **A + B (recomendado):** B por duas ou três semanas vira o gabarito para calibrar A com dados reais, em vez de ajustar pesos no palpite; depois o campo pode continuar opcional.
 
 Fonte dos fatores: [Forerunner 265 Series — Training Readiness](https://www8.garmin.com/manuals/webhelp/GUID-F41EAFB3-6CC9-42DE-9C6C-9E358DBB0671/EN-US/GUID-C21BE0C8-A08E-4DA1-B6C6-2E0E2DDDB372.html).
+
+## O que foi aplicado (16/09/2026)
+
+Decisão do Sérgio: *"sim para A + B [...] mas vamos considerar A como padrão, B só como opcionalidade"*.
+
+### A — o cálculo padrão (`src/lib/readiness.ts`)
+
+| Mudança | Antes | Agora |
+|---|---|---|
+| Pesos | recuperação do fabricante 0,30 · sono 0,22 · HRV 0,18 · FC repouso 0,10 · forma 0,20 · dor 0,10 · RPE 0,06 | recuperação do fabricante/Garmin 0,25 · sono 0,25 · **sono das últimas noites 0,10** · HRV 0,20 · FC repouso 0,10 · forma 0,20 · dor 0,10 · RPE 0,05 |
+| Sono das últimas noites | não existia | média de horas das últimas 2–3 noites: ≤4,5 h → 15 · 5 h → 30 · 5,5 h → 40 · 6 h → 55 · 6,5 h → 70 · 7 h → 85 · ≥7,5 h → 100 (interpolado) |
+| Noite curta | nenhuma regra | **teto:** menos de 4 h 30 → no máximo 40; menos de 5 h 30 → no máximo 60 (nunca "alta"). O motivo aparece na tela |
+| Sinal ausente (com relógio) | o peso sumia e os presentes eram renormalizados | sono, sono das últimas noites, HRV e FC de repouso ausentes **contam como neutro (50)** no peso deles. Sem relógio (só check-in) nada muda |
+| Cobertura | invisível | "Relógio + carga · 3 de 4 sinais" e "Sem leitura hoje, contando como neutro: HRV" |
+| Carga (forma) | só corridas | **musculação, HIIT, bike e natação entram** (`activityTSS` em `training-load.ts`): pela FC quando existe (limitada a 0,9 do limiar), senão por esporte (musculação 0,70, HIIT 0,85, bike 0,65, natação 0,70). Vale para a Saúde e para o card de Forma do dashboard |
+| Base da FC de repouso | média | mediana (igual ao card de vitais) |
+
+**Com os dados reais de 16/09:** score **40, baixa** (antes 69), com o aviso *"Noite de 4h13: a disposição fica limitada"*. Componentes: sono 52, sono das últimas noites 35, FC de repouso 92, forma 67 (TSB −5,5 com a academia, antes −2,9), HRV neutro por calibração. O Garmin marcou 20–40.
+
+### B — opcional (`GarminReadinessField`, `/api/health/garmin-readiness`)
+
+Na Saúde, abaixo do score, para quem tem relógio: *"Seu Garmin mostra outra disposição? Informe o número (opcional)"*. O número (1–100) é gravado em `wellness_data.garmin_readiness` do dia e entra no espaço de recuperação do fabricante (peso 0,25) como **mais um sinal** — não substitui o cálculo. Pode editar ou remover.
+
+**Pendente:** a migration `031_garmin_readiness.sql` não foi aplicada — a sessão do Supabase no navegador expirou e o login é do Sérgio. Até ela rodar, o campo fica **escondido** (a página só mostra quando a coluna existe) e nada quebra. Depois de aplicada, o campo aparece sozinho, sem novo deploy.
+
+### Testes
+
+`tests/readiness-model-a.test.ts` (19 casos, incluindo a manhã de 16/09 como caso real) e um caso novo em `recovery-today.test.ts` para o rótulo de cobertura. Suíte: 1.245 testes, `tsc` limpo.
+
+### Próximo passo de calibração
+
+Com o campo B preenchido por 2–3 semanas, comparar o score A de cada manhã com o número do Garmin e com o esforço relatado no check-in pós-treino, e só então ajustar pesos e tetos — com dados, não no palpite.

@@ -340,7 +340,7 @@ Estão todas na seção 15, com a origem de cada uma.
 ## 3.5 Banco
 
 - Supabase Postgres, com RLS ativo em quase tudo. Tabelas e decisões na seção 5.
-- **Migrations manuais:** `supabase/schema.sql` (base de maio) + `supabase/migrations/002…030`, coladas no SQL Editor. **Não existe `001`**; `schema.sql` faz esse papel. Faltam DDLs de `activities`, `performance_tests`, `races` (ver alerta 3).
+- **Migrations manuais:** `supabase/schema.sql` (base de maio) + `supabase/migrations/002…031`, coladas no SQL Editor. **Não existe `001`**; `schema.sql` faz esse papel. Faltam DDLs de `activities`, `performance_tests`, `races` (ver alerta 3).
 - **Fora do repositório, só no Supabase:**
   - **extensões:** `pg_cron`, `pg_net`;
   - **job:** `limiar-morning`;
@@ -468,7 +468,7 @@ Limiar/                               ← pasta no OneDrive (NÃO é repo git)
     │   ├── lib/          ~100 módulos de domínio (o coração do app)
     │   ├── types/index.ts  todos os tipos compartilhados
     │   └── middleware.ts
-    ├── supabase/         schema.sql, seed.sql, migrations/002–030
+    ├── supabase/         schema.sql, seed.sql, migrations/002–031
     ├── tests/            64 arquivos, ~10.700 linhas, fixtures.ts, README.md
     ├── public/           manifest.json, sw.js, ícones
     ├── scripts/import-exercises.mjs   gera src/lib/exercise-catalog.ts
@@ -1618,6 +1618,8 @@ teste devido e semana_bloco == 1 → teste substitui a qualidade
 
 ## 10.8 Recuperação (Limiar Score) — `src/lib/readiness.ts`
 
+> ⚠️ **Modelo revisto em 16/09/2026 (opção A, `docs/readiness-garmin.md`).** Mudou: pesos (fabricante/Garmin 0,25 · sono 0,25 · **sono das últimas noites 0,10** · HRV 0,20 · FC repouso 0,10 · forma 0,20 · dor 0,10 · RPE 0,05); **teto por noite curta** (< 4 h 30 → máx. 40; < 5 h 30 → máx. 60); com relógio, **sinal central ausente conta como neutro 50** em vez de renormalizar; cobertura exibida ("3 de 4 sinais"); base da FC de repouso passou a **mediana**; a forma inclui **musculação e outros esportes** (`activityTSS`). Opcional (B): número do Garmin informado pelo atleta entra no espaço do fabricante. A tabela abaixo descreve o modelo **anterior** e fica como histórico.
+
 **Componentes** (cada um de 0 a 100; entram só os disponíveis e **os pesos são renormalizados** pela soma dos presentes):
 
 | Componente | Peso | Fórmula |
@@ -1918,7 +1920,7 @@ combustível em treino: > 75 min → 50 g/h (leve) | 75 g/h (prova); gel ≈ 25 
 | A5 | **Sem observabilidade** | Sem Sentry; crons sem alerta; IA falha para `null`; logs só na Vercel (retenção curta no Hobby) | Falhas silenciosas (o resumo semanal morto passou meses sem ninguém notar) | Sentry (ou Axiom/Logtail); o cron grava resultado em tabela `job_runs`; alerta se um cron não roda |
 | A6 | **Dashboard carrega todas as corridas com `select("*")`** | `src/app/page.tsx:58` (`runs` com `*` inclui `strava_raw_json` e `map_polyline` de todas as corridas), serializado para o cliente | O payload cresce linearmente com o histórico; lentidão no celular | Selecionar colunas; agregar no servidor; paginar |
 | A7 | **Contexto de IA sem limite** | `analyzeRun`/`generateWeeklySummary` enviam todas as corridas | Custo e latência crescem com o histórico; risco de limite de taxa no sync em lote | Resumo estatístico + N corridas similares |
-| A8 | **Carga de treino só de corrida** | `training-load.ts` | TSB e recuperação subestimam fadiga de quem faz força 3×/semana (caso de Sérgio) | TSS por sRPE × duração para `activities`; calibrar com o atleta |
+| A8 | ~~**Carga de treino só de corrida**~~ **resolvida em 16/09** (`activityTSS`) | `training-load.ts` | TSB e recuperação subestimam fadiga de quem faz força 3×/semana (caso de Sérgio) | TSS por sRPE × duração para `activities`; calibrar com o atleta |
 | A9 | **Webhook do Strava aceita eventos forjados** | `strava/webhook/route.ts` não confere `subscription_id`; o delete marca `runs.deleted_at` só pelo `object_id` | Qualquer pessoa pode apagar (soft delete) corridas de usuários conhecendo o ID da atividade no Strava; eventos falsos geram custo de API/IA | Validar `subscription_id`; no delete, confirmar com a API do Strava (404) antes de marcar |
 | A10 | **Análise por IA síncrona no webhook do Strava** | `strava/webhook/route.ts` | Webhook lento → Strava reenvia; atividade só é salva se a função não estourar | Salvar e responder 200; análise em job posterior (fila simples em tabela) |
 
@@ -2045,8 +2047,8 @@ combustível em treino: > 75 min → 50 g/h (leve) | 75 g/h (prova); gel ≈ 25 
 9. **Nunca mudar uma semana no meio.**
 10. Apple Watch e balança Xiaomi S400 (investigados; sem caminho viável no PWA).
 11. **Dashboard confuso e poluído** (16/09): *"tem o círculo relacionado aos treinos, outro indicador/círculo de disposição, além de várias outras informações [...] sem uma hierarquia ou conexão muito clara entre os elementos"*. Não é para agora: juntar com a análise da outra IA ("uma Home que encerra uma decisão", reorganizar significados antes da navegação) e repensar a estrutura em conjunto.
-12. **Disposição mais fiel ao corpo** (16/09): o Limiar mostrou ~60 enquanto o Garmin mostrou 20–40 depois de uma noite de 4 h e semana puxada, e o Garmin *"condiz muito mais com como estou me sentindo"*. Diagnóstico em `docs/readiness-garmin.md` — o intervals.icu não entrega a disposição do Garmin para esta conta.
-13. **"Não faço treino em ladeira"** (16/09, observação no check-in): o cardápio do mesociclo prescreveu subidas; falta um jeito de o atleta excluir tipos de sessão.
+12. **Disposição mais fiel ao corpo** (16/09): o Limiar mostrou ~60 enquanto o Garmin mostrou 20–40 depois de uma noite de 4 h e semana puxada, e o Garmin *"condiz muito mais com como estou me sentindo"*. Diagnóstico em `docs/readiness-garmin.md` — o intervals.icu não entrega a disposição do Garmin para esta conta. **Aplicado em 16/09:** opção A como padrão e B (número do Garmin digitado) como opção.
+13. **"Não faço treino em ladeira"** (16/09, observação no check-in): o cardápio do mesociclo prescreveu subidas. **Aplicado em 16/09:** chave "Não faço treino em ladeira" (`training_prefs.excludedQuality`, `docs/excluir-tipos-de-treino.md`).
 14. Handoff para outra IA fazer revisão profunda e levar o produto ao próximo estágio (este documento).
 
 ## 15.2 Ideias sugeridas por Claude (não implementadas)
@@ -2288,7 +2290,7 @@ npx vercel deploy --prod --yes
 
 ## 18.4 Banco e migrations
 
-- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **030** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028, 029 e 030).
+- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **030** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028, 029 e 030). **A 031 (`garmin_readiness`) está pendente** — a sessão do Supabase expirou; o código esconde o campo até a coluna existir.
 - **O código tolera tabela ausente** (`try/catch` e sondas como `notification_log` em `morning-dispatch.ts`), então uma migration não aplicada **não quebra**: desliga a feature em silêncio.
 - **Fora do repositório:**
 
@@ -2333,7 +2335,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 
 ## 19.1 O que existe
 
-- **Vitest 2.1**, `npm test` (= `vitest run`). **65 arquivos, 1.218 testes, todos passando** (rodado em 16/09/2026, ~4,5 s).
+- **Vitest 2.1**, `npm test` (= `vitest run`). **66 arquivos, 1.245 testes, todos passando** (rodado em 16/09/2026, ~4,5 s).
 - **Só funções puras de `src/lib/`.** Sem banco, sem rede, sem DOM.
 - **Fixture central** (`tests/fixtures.ts`): atleta com teste de 3 km em 13:00 e FC média 178 → **VDOT ≈ 43,7, LTHR = 165**. Falhas se leem como "isso deu errado para um corredor de VDOT 43".
 - **`tests/README.md`:** tabela dos bugs reais que cada teste protege. Leitura obrigatória.

@@ -114,6 +114,10 @@ export default async function HealthPage() {
     checkin: inputs.checkin,
     checkins,
     nutrition,
+    garminReadiness: rows.find(r => r.date === today)?.garmin_readiness ?? null,
+    // `select("*")` only carries the key once migration 031 has run; before that
+    // the field stays hidden instead of offering a save that cannot succeed.
+    garminReadinessAvailable: rows.some(r => "garmin_readiness" in r),
     devices: {
       garmin: icu ? { connected: true, nights: garminNights, lastSyncAt: icu.last_sync_at, lastError: icu.last_error } : { connected: false, nights: 0 },
       energyDate: energyRow?.date ?? null,

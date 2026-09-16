@@ -83,6 +83,8 @@ export interface TrainingPrefs {
    * plan that pretends it isn't happening is planning someone else's week.
    */
   otherDays?: Partial<Record<import("@/lib/sports").SecondarySport, DayKey[]>>;
+  /** Quality sessions the athlete does not do ("Não faço treino em ladeira"). */
+  excludedQuality?: import("@/lib/mesocycle").QualityKind[];
 }
 
 export interface Profile {
@@ -604,6 +606,11 @@ export interface WellnessData {
   body_battery:   number | null;      // 0-100 — Garmin's estimate
   /** Whoop's 0-100 recovery percentage. Same kind of signal as body_battery. */
   recovery_score?: number | null;
+  /**
+   * Garmin's Training Readiness, typed in by the athlete. Optional: the Limiar
+   * score stands without it, and intervals.icu never delivers this number.
+   */
+  garmin_readiness?: number | null;
   /** The day's energy above basal, as the watch measured it (kcal). */
   active_kcal?:   number | null;
   /** The watch's basal estimate for the day (kcal). */

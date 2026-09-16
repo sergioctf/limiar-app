@@ -126,12 +126,27 @@ const MENU: QualityKind[] = [
  * starting over. The other three rotate through the menu, offset by the block
  * number, so consecutive blocks differ from each other and not just internally.
  */
-export function qualityForWeek(week: number, cycle = 1): QualityKind {
+export function qualityForWeek(week: number, cycle = 1, excluded: QualityKind[] = []): QualityKind {
   const w = ((week - 1) % CYCLE_WEEKS) + 1;
   if (w === CYCLE_WEEKS) return "strides";
+  // The rotation runs over what the athlete actually does. Filtering the menu
+  // (instead of stepping past a skipped entry) keeps consecutive weeks different:
+  // skipping "hills" by taking the next item would hand the athlete fartlek two
+  // weeks in a row whenever the block rolled onto it.
+  const menu = MENU.filter(kind => !excluded.includes(kind));
   const offset = (Math.max(1, cycle) - 1) * (CYCLE_WEEKS - 1);
-  return MENU[(offset + w - 1) % MENU.length];
+  return menu[(offset + w - 1) % menu.length];
 }
+
+/**
+ * Session types an athlete can opt out of.
+ *
+ * Intervals and threshold stay: they are the two Daniels says a runner cannot do
+ * without, and they guarantee the rotation never runs out. Everything here has
+ * a stand-in — someone with no hill nearby (or who simply won't run one, as
+ * Sérgio said on 16/09) still gets strength work from the rest of the menu.
+ */
+export const EXCLUDABLE_QUALITY: QualityKind[] = ["hills", "fartlek", "repetitions", "intervals_dense", "progression"];
 
 /**
  * Extra reps earned by blocks already completed.

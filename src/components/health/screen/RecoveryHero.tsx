@@ -61,6 +61,9 @@ export function RecoveryHero({ recovery, trend, checkedIn, onCheckin }: Props) {
 
         <h2 className="mt-4 text-2xl font-black tracking-tight text-surface-100 text-center">{recovery.advice.headline}</h2>
         <p className="mt-2 max-w-md text-center text-sm leading-relaxed text-surface-400">{recovery.advice.detail}</p>
+        {recovery.readiness.cap && (
+          <p className="mt-2 max-w-md text-center text-xs text-surface-500">{recovery.readiness.cap.reason}</p>
+        )}
       </div>
 
       {recovery.offer && (

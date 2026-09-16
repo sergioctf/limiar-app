@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  cyclePosition, qualityForWeek, repBonusForCycle, mondayOf, cutbackWeekIndex, CYCLE_WEEKS,
+  cyclePosition, qualityForWeek, repBonusForCycle, mondayOf, cutbackWeekIndex, CYCLE_WEEKS, EXCLUDABLE_QUALITY,
 } from "@/lib/mesocycle";
 import { planWeeklyVolume } from "@/lib/workout-builder";
 
@@ -192,5 +192,36 @@ describe("progressão entre ciclos", () => {
   it("mas para de crescer — o volume é outro botão", () => {
     expect(repBonusForCycle(10)).toBe(2);
     expect(repBonusForCycle(52)).toBe(2);
+  });
+});
+
+describe("sessions the athlete does not do", () => {
+  it("never prescribes hills to someone who opted out, across many blocks", () => {
+    for (let cycle = 1; cycle <= 12; cycle++) {
+      for (let week = 1; week <= 4; week++) {
+        expect(qualityForWeek(week, cycle, ["hills"])).not.toBe("hills");
+      }
+    }
+  });
+
+  it("keeps consecutive weeks different after the exclusion", () => {
+    for (let cycle = 1; cycle <= 12; cycle++) {
+      const kinds = [1, 2, 3].map(week => qualityForWeek(week, cycle, ["hills"]));
+      expect(new Set(kinds).size).toBe(3);
+    }
+  });
+
+  it("leaves everyone else's rotation exactly as it was", () => {
+    for (let cycle = 1; cycle <= 6; cycle++) {
+      for (let week = 1; week <= 4; week++) {
+        expect(qualityForWeek(week, cycle, [])).toBe(qualityForWeek(week, cycle));
+      }
+    }
+  });
+
+  it("only lets go of sessions that have a stand-in", () => {
+    expect(EXCLUDABLE_QUALITY).toContain("hills");
+    expect(EXCLUDABLE_QUALITY).not.toContain("intervals");
+    expect(EXCLUDABLE_QUALITY).not.toContain("threshold");
   });
 });

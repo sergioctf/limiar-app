@@ -7,6 +7,7 @@ import { haptic } from "@/lib/haptics";
 import { Section, Reveal } from "@/components/ui/Surface";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { RecoveryHero } from "./RecoveryHero";
+import { GarminReadinessField } from "./GarminReadinessField";
 import { VitalTiles } from "./VitalTiles";
 import { LoadRecoveryChart } from "./LoadRecoveryChart";
 import { SleepCard } from "./SleepCard";
@@ -41,6 +42,10 @@ export interface HealthScreenData {
   /** The last two weeks of check-ins, for the athlete without a watch. */
   checkins: HealthCheckin[];
   nutrition: NutritionSummary;
+  /** Optional: the Training Readiness the athlete typed from their Garmin today. */
+  garminReadiness: number | null;
+  /** False until the column exists (migration 031). */
+  garminReadinessAvailable: boolean;
   devices: {
     garmin: { connected: boolean; nights: number; lastSyncAt?: string | null; lastError?: string | null };
     energyDate: string | null;
@@ -144,6 +149,9 @@ export function HealthScreen({
           checkedIn={data.checkin != null}
           onCheckin={() => setCheckinOpen(true)}
         />
+
+        {/* Optional reference from the Garmin — only for athletes whose watch sends data. */}
+        {watchMode && data.garminReadinessAvailable && <GarminReadinessField value={data.garminReadiness} />}
 
         {!watchMode && (
           <CheckinPanel today={data.today} checkin={data.checkin} checkins={data.checkins} onOpen={() => setCheckinOpen(true)} />

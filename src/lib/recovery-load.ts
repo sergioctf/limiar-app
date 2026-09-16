@@ -7,7 +7,7 @@
  */
 import { buildRecoveryToday, type RecoveryToday } from "@/lib/recovery-today";
 import { addDays, type LoadDay } from "@/lib/health-view";
-import { computeTrainingLoad } from "@/lib/training-load";
+import { computeTrainingLoad, type LoadActivity } from "@/lib/training-load";
 import { computeMetrics } from "@/lib/performance";
 import { athleteDateStr } from "@/lib/week";
 import { getMondayStr, toBrt } from "@/lib/plan-notify";
@@ -43,7 +43,7 @@ export async function loadRecoveryInputs(db: Db, userId: string, now: Date = new
   const monday = getMondayStr(toBrt(now));
   const nextMonday = addDays(monday, 7);
 
-  const [wellnessRes, runsRes, testRes, checkinRes, plansRes, actsRes] = await Promise.all([
+  const [wellnessRes, runsRes, testRes, checkinRes, plansRes, actsRes, loadActsRes] = await Promise.all([
     // Sixty days: thirty on screen, and thirty before them to judge the first against.
     db.from("wellness_data").select("*").eq("user_id", userId)
       .gte("date", addDays(today, -60)).order("date", { ascending: false }),
@@ -55,6 +55,9 @@ export async function loadRecoveryInputs(db: Db, userId: string, now: Date = new
     db.from("coach_reports").select("id, full_report, period_start")
       .eq("user_id", userId).eq("period_type", "week").in("period_start", [monday, nextMonday]),
     db.from("activities").select("sport_type").eq("user_id", userId).eq("date", today).is("deleted_at", null),
+    // Gym, bike and swim sessions load the body too — see `activityTSS`.
+    db.from("activities").select("date, sport_type, duration_seconds, avg_hr")
+      .eq("user_id", userId).gte("date", addDays(today, -180)).is("deleted_at", null),
   ]);
 
   const rows = (wellnessRes.data ?? []) as WellnessData[];
@@ -69,7 +72,8 @@ export async function loadRecoveryInputs(db: Db, userId: string, now: Date = new
   const load: Record<string, LoadDay> = {};
   try {
     const threshold = metrics?.paces.find(p => p.name === "threshold")?.pace_min_sec ?? null;
-    for (const d of computeTrainingLoad(runs, metrics?.lthr ?? null, threshold, 45)) {
+    const loadActivities = (loadActsRes.data ?? []) as LoadActivity[];
+    for (const d of computeTrainingLoad(runs, metrics?.lthr ?? null, threshold, 45, loadActivities)) {
       load[d.date] = { tss: d.tss, tsb: d.tsb };
     }
   } catch { /* no runs yet — readiness simply goes without load */ }

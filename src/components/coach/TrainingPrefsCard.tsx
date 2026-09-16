@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CalendarRange, Loader2, Check, Info } from "lucide-react";
 import type { DayKey, TrainingPrefs } from "@/types";
+import { localNextMondayStr } from "@/lib/week";
 
 const DAYS: Array<{ key: DayKey; short: string }> = [
   { key: "Mon", short: "Seg" },
@@ -38,7 +39,7 @@ export function TrainingPrefsCard() {
     return () => { cancelled = true; };
   }, []);
 
-  async function save(next: TrainingPrefs) {
+  async function save(next: TrainingPrefs): Promise<boolean> {
     setPrefs(next);
     setSaving(true);
     setError(null);
@@ -54,6 +55,7 @@ export function TrainingPrefsCard() {
         setWarnings(d?.warnings ?? []);
         setSaved(true);
         setTimeout(() => setSaved(false), 2500);
+        return true;
       } else {
         setError(d?.error ?? "Não foi possível salvar.");
       }
@@ -62,6 +64,27 @@ export function TrainingPrefsCard() {
     } finally {
       setSaving(false);
     }
+    return false;
+  }
+
+  const [hillsNote, setHillsNote] = useState<string | null>(null);
+
+  /**
+   * "Não faço treino em ladeira" (Sérgio, 16/09). The week in progress is never
+   * rewritten, so the change lands on the next one — rebuilt right away, so the
+   * athlete does not open next Monday to the session they just opted out of.
+   */
+  async function toggleHills(exclude: boolean) {
+    const current = prefs?.excludedQuality ?? [];
+    const next = exclude
+      ? Array.from(new Set([...current, "hills" as const]))
+      : current.filter(kind => kind !== "hills");
+    if (!prefs || !(await save({ ...prefs, excludedQuality: next }))) return;
+    setHillsNote(exclude ? "Sem subidas a partir da próxima semana." : "Subidas de volta ao rodízio a partir da próxima semana.");
+    await fetch("/api/coach/weekly-plan", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ week: localNextMondayStr(), force: true }),
+    }).catch(() => {});
   }
 
   if (!prefs) {
@@ -163,6 +186,27 @@ export function TrainingPrefsCard() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Session types the athlete does not do */}
+      <div>
+        <p className="text-[10px] uppercase tracking-wide text-surface-500 font-semibold mb-1.5">
+          Tipos de treino
+        </p>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={(prefs.excludedQuality ?? []).includes("hills")}
+          onClick={() => toggleHills(!(prefs.excludedQuality ?? []).includes("hills"))}
+          disabled={saving}
+          className="w-full min-h-[44px] flex items-center justify-between gap-3 rounded-lg bg-surface-700/50 px-3 text-left text-xs text-surface-300 disabled:opacity-60"
+        >
+          <span>Não faço treino em ladeira</span>
+          <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${(prefs.excludedQuality ?? []).includes("hills") ? "bg-brand-500" : "bg-surface-600"}`}>
+            <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${(prefs.excludedQuality ?? []).includes("hills") ? "left-[18px]" : "left-0.5"}`} />
+          </span>
+        </button>
+        {hillsNote && <p className="text-[11px] text-surface-500 mt-1.5" aria-live="polite">{hillsNote}</p>}
       </div>
 
       {/* Strength days */}

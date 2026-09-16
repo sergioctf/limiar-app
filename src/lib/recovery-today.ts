@@ -109,8 +109,16 @@ function addDay(date: string): string {
 }
 
 /** The label a surface puts beside the number, naming what it stands on. */
-export function basisLabel(r: Pick<RecoveryToday, "basis" | "calibratingNights">): string {
-  if (r.basis === "watch") return "Relógio + carga";
+export function basisLabel(
+  r: Pick<RecoveryToday, "basis" | "calibratingNights"> & { readiness?: Pick<Readiness, "coverage"> },
+): string {
+  if (r.basis === "watch") {
+    // A score missing part of its inputs says so, next to where it says "relógio".
+    const cov = r.readiness?.coverage;
+    return cov && cov.present < cov.expected
+      ? "Relógio + carga · " + cov.present + " de " + cov.expected + " sinais"
+      : "Relógio + carga";
+  }
   if (r.calibratingNights) return `Relógio calibrando · faltam ${r.calibratingNights} noites`;
   if (r.basis === "checkin") return "Check-in + carga";
   if (r.basis === "load") return "Só carga de treino";

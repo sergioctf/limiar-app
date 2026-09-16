@@ -14,6 +14,7 @@
 import type { Run } from "@/types";
 import { localDateStr } from "@/lib/week";
 import { movingSeconds } from "@/lib/run-time";
+import { isStrengthActivity, toSportKey } from "@/lib/sports";
 
 // Intensity Factor by run type (fraction of threshold effort)
 const TYPE_IF: Record<string, number> = {
@@ -66,6 +67,47 @@ export function estimateTSS(
 const K_CTL = 1 - Math.exp(-1 / 42); // ≈ 0.0235
 const K_ATL = 1 - Math.exp(-1 / 7);  // ≈ 0.1335
 
+/** What the load model needs from a non-running session. */
+export interface LoadActivity {
+  date: string;
+  sport_type: string | null;
+  duration_seconds?: number | null;
+  avg_hr?: number | null;
+}
+
+/**
+ * Intensity factor by sport when there is no heart rate to go on.
+ *
+ * Deliberately modest. A lifting session does not load the body like a
+ * threshold run of the same length, but it is not free either: counting it as
+ * zero is how a week of three runs and four gym sessions read as "descansado"
+ * to the readiness score while the athlete felt wrecked (Sérgio, 16/09).
+ */
+const SPORT_IF: Record<string, number> = {
+  musculacao: 0.70,
+  ciclismo:   0.65,
+  natacao:    0.70,
+  corrida:    0.70,
+};
+
+/** TSS for gym, bike, swim and the rest — same scale as a run's, so they add. */
+export function activityTSS(activity: LoadActivity, lthr?: number | null): number {
+  const hours = Number(activity.duration_seconds ?? 0) / 3600;
+  if (!(hours > 0)) return 0;
+  // Heart rate relative to running threshold is a rough proxy off the road, but
+  // a measured proxy beats a guessed one. Capped: a lifting set spikes HR without
+  // the sustained cost that HR implies on a run.
+  if (lthr && lthr > 0 && activity.avg_hr && activity.avg_hr > 0) {
+    const hrIF = Math.min(activity.avg_hr / lthr, 0.9);
+    return Math.round(hours * hrIF * hrIF * 100 * 10) / 10;
+  }
+  const raw = (activity.sport_type ?? "").toLowerCase();
+  const hiit = raw.includes("hiit") || raw.includes("hitt") || raw.includes("crossfit");
+  const key = isStrengthActivity(activity.sport_type) ? "musculacao" : toSportKey(activity.sport_type);
+  const ifVal = hiit ? 0.85 : (key && SPORT_IF[key]) || 0.60;
+  return Math.round(hours * ifVal * ifVal * 100 * 10) / 10;
+}
+
 export interface DailyLoad {
   date: string;   // YYYY-MM-DD
   tss:  number;
@@ -83,14 +125,22 @@ export function computeTrainingLoad(
   lthr?: number | null,
   thresholdPaceSecKm?: number | null,
   daysBack = 90,
+  /** Gym, bike, swim… Without them the load only ever describes the running. */
+  activities: LoadActivity[] = [],
 ): DailyLoad[] {
-  if (runs.length === 0) return [];
+  if (runs.length === 0 && activities.length === 0) return [];
 
   // Build TSS map: date → total TSS that day
   const tssMap: Record<string, number> = {};
   for (const run of runs) {
     const tss = estimateTSS(run, lthr, thresholdPaceSecKm);
     tssMap[run.date] = (tssMap[run.date] ?? 0) + tss;
+  }
+  for (const activity of activities) {
+    // A run that also reached `activities` is counted once, from `runs`.
+    if (toSportKey(activity.sport_type) === "corrida" && !isStrengthActivity(activity.sport_type)) continue;
+    const tss = activityTSS(activity, lthr);
+    if (tss > 0) tssMap[activity.date] = (tssMap[activity.date] ?? 0) + tss;
   }
 
   // Everything below walks calendar dates in UTC.

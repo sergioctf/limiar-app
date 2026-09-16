@@ -20,7 +20,7 @@ import { strengthBlockFor, runningLoadFactor } from "@/lib/strength-cycle";
 import type { StrengthPrefs } from "@/lib/strength-prefs";
 import { MUSCLE_LABEL } from "@/lib/exercises";
 import { isSecondarySport, sessionMinutes, SPORTS, type SecondarySport } from "@/lib/sports";
-import { qualityForWeek, repBonusForCycle } from "@/lib/mesocycle";
+import { qualityForWeek, repBonusForCycle, EXCLUDABLE_QUALITY } from "@/lib/mesocycle";
 
 // ─── Heart-rate windows (Friel, % of LTHR) ───────────────────────────────────
 
@@ -71,6 +71,8 @@ function paceLookup(paces: TrainingPace[] | null): PaceLookup {
 // ─── Session builders ────────────────────────────────────────────────────────
 
 export interface WeekContext {
+  /** Quality sessions the athlete opted out of; the rotation skips them. */
+  excludedQuality?: import("@/lib/mesocycle").QualityKind[];
   /** Monday of the week being built (YYYY-MM-DD) — anchors the strength block. */
   weekStart?: string;
   /** The athlete's recent average running volume, for the load comparison. */
@@ -205,7 +207,7 @@ export function buildIntervalRun(ctx: WeekContext): { day: Partial<WeeklyPlanDay
    */
   const kind = (ctx.phase === "taper" || ctx.phase === "peak")
     ? "threshold"
-    : qualityForWeek(ctx.cycleWeek ?? 1, ctx.cycleNumber ?? 1);
+    : qualityForWeek(ctx.cycleWeek ?? 1, ctx.cycleNumber ?? 1, ctx.excludedQuality ?? []);
   const useThreshold = kind === "threshold";
   const dense  = kind === "intervals_dense";
   const easyWeek = kind === "strides";
@@ -580,7 +582,14 @@ export function normalizePrefs(raw: unknown): TrainingPrefs {
     minRunKm:     clampKm(p.minRunKm, 1, 15) ?? 5,
     minLongRunKm: clampKm(p.minLongRunKm, 3, 42),
     otherDays:    cleanOtherDays(p.otherDays),
+    excludedQuality: cleanExcludedQuality(p.excludedQuality),
   };
+}
+
+/** Only kinds that are safe to drop, each at most once. */
+function cleanExcludedQuality(input: unknown): NonNullable<TrainingPrefs["excludedQuality"]> {
+  if (!Array.isArray(input)) return [];
+  return EXCLUDABLE_QUALITY.filter(kind => input.includes(kind));
 }
 
 /**
