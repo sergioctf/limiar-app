@@ -246,7 +246,7 @@ Houve mudanças de direção, e várias foram **rejeitadas por Sérgio**. Isso i
 
 | Abandonado | Substituído por | Por quê |
 |---|---|---|
-| Plano semanal gerado por LLM (`generateStructuredWeeklyPlan`) | `workout-builder.ts` + `weekly-plan.ts` | Treinos vagos e inconsistentes, JSON malformado derrubando a tela, sem auditabilidade. **Resíduo:** o cron `weekly-report` ainda chama a versão de IA se a semana estiver sem plano (ver dívida técnica) |
+| Plano semanal gerado por LLM (`generateStructuredWeeklyPlan`) | `workout-builder.ts` + `weekly-plan.ts` | Treinos vagos e inconsistentes, JSON malformado derrubando a tela, sem auditabilidade. **Resíduo removido em 17/09:** o cron `weekly-report` passou a chamar `ensureWeeklyPlan` |
 | Chat que devolvia o plano inteiro reescrito | Chat que traduz o pedido em **edições estruturadas** (`plan-edit.ts`) | O modelo dizia "atualizei o longão" e não mudava nada |
 | GPT-4o-mini | Groq Llama 3.3 70B → `openai/gpt-oss-120b` | Custo zero; aposentadoria do Llama em 16/08/2026 |
 | Check-in diário manual como base da prontidão | Dados do relógio; check-in voltou como **centro da versão sem relógio** | O `ROADMAP.md` diz "check-in removido" em jun; em set voltou reduzido às 3 perguntas que mudam o score |
@@ -418,7 +418,7 @@ Pastas vazias restantes (lixo): `src/app/api/coach-reports`, `src/app/api/projec
 | `/api/cron/notify-morning` | 08:30 → 05:30 | Lembretes de prova (D-7/D-1/D-0) + **1ª passada** da notificação da manhã |
 | `/api/cron/strava-sync` | 09:30 → 06:30 | Garante a assinatura do webhook do Strava; recupera atividades dos últimos 3 dias; backfill de recordes (8 atividades/atleta) |
 | `/api/cron/race-strategy` | 09:00 → 06:00 | Gera/atualiza estratégia de prova em D-14 e D-3 |
-| `/api/cron/weekly-report` | seg 10:00 → 07:00 | Resumo da semana passada por IA; **se faltar plano da semana, gera um por IA (resíduo)**; detecção de padrões; adaptação do macro-plano |
+| `/api/cron/weekly-report` | seg 10:00 → 07:00 | Push avisando que a semana fechou (a devolutiva é determinística, na tela do Treinador); plano da semana pelo motor (`ensureWeeklyPlan`); detecção de padrões; adaptação do macro-plano |
 | `/api/cron/wellness-sync` | 11:00 → 08:00 | Sincroniza intervals.icu de todos os conectados + **passada final** da notificação da manhã |
 | `/api/cron/test-reminder` | seg 15:00 → 12:00 | Lembrete do teste de 3 km |
 | `/api/cron/notify-evening` | 01:00 → 22:00 (dia anterior) | Prévia do treino de amanhã |
@@ -787,7 +787,7 @@ Cada feature traz, nesta ordem: **objetivo, UX, implementação, arquivos, dados
   - volume da semana seguinte informado por HRV/sono (ideia 6 do brainstorm);
   - carga unificada com força;
   - tabela `weekly_plans` própria;
-  - remover o fallback de IA do cron `weekly-report`.
+  - ~~remover o fallback de IA do cron `weekly-report`~~ **feito em 17/09**.
 
 ## 6.2 Recuperação do dia + troca de sessão ✅ (novo, 14/09)
 
@@ -1023,7 +1023,7 @@ Cada feature traz, nesta ordem: **objetivo, UX, implementação, arquivos, dados
 | Conselheiro | Sex 21:00, achado mais grave | `/api/cron/notify-advisor` |
 | Treino de amigo | Na importação, 1 por amigo por dia, respeita mute | `friend-notify.ts` |
 | Pedido de amizade | Na solicitação | `/api/friends` |
-| Resumo semanal | Seg 07:00 (quase nunca dispara; ver 13) | `/api/cron/weekly-report` |
+| Semana fechou | Seg 07:00 | `/api/cron/weekly-report` |
 | Corrida importada | Webhook | `/api/strava/webhook` |
 
 - **Preferências:** `NotificationPrefsCard` (`dailyWorkout` "Treino e recuperação do dia", `tomorrowWorkout`, `friendWorkouts`, `friendRequests`).
@@ -1155,6 +1155,14 @@ Fluxo OAuth completo (`whoop.ts`, `/api/whoop/*`, `WhoopCard`, migration 023). I
   - **Planejado → combinado → realizado.** O check-in não escreve mais a distância corrida em `distance_km` do dia (isso contaminava o volume da semana, a catraca e a adesão). `recordExecuted()` mantém a prescrição e grava o realizado ao lado (`adaptation.doneLabel`, `doneKm`). A adesão ganhou o estado **"adaptado"**: 1 quando a troca manteve o objetivo, 0,5 quando não. **Dado corrigido em produção:** a quarta de 16/09 voltou a "Subidas 6×45 s, 3,5 km" (restaurada de `adaptation.original`, com backup da linha) e a semana de 14/09 caiu de 75% para 63% de adesão.
   - **"Mantém o objetivo" olha a dose.** `sessionWork()` mede km em intensidade forte, repetições e trote médio; volume fora da faixa 60–160% do previsto rebaixa "mantém o objetivo" para "mantém parte", com a diferença dita em números. A recuperação só é comparada quando o atleta a informou.
 - **Limitações:** só a semana atual e só corridas; texto livre fora dos formatos comuns vira "outro treino" sem estrutura; a comparação de dose exige estrutura dos dois lados (no check-in depois do treino, o texto é julgado só pela família). Detalhes em `docs/adaptar-treino.md`.
+
+## 6.28 Devolutiva semanal ✅ (novo, 17/09)
+
+- **Objetivo:** fechar a semana em três perguntas — *Como foi sua semana? · O que o treinador entendeu? · O que muda na próxima?* — curtas e úteis (pedido do Sérgio, 17/09).
+- **Onde:** card no **Treinador**, logo acima do plano da semana. Some sozinho quando não há semana fechada para explicar; não fica preso no dashboard.
+- **Como:** `src/lib/week-recap.ts` (determinístico, sem IA). Os fatos vêm da adesão (`plan-adherence`), a leitura vem de `plan.week_reading` (ou é recalculada com `weekReadingFor()` em planos antigos), os motivos vêm dos check-ins e a consequência vem do plano da semana que começa. Sessão adaptada é contada como adaptada; pergunta já respondida não aparece como pendente (mesma regra do pop-up).
+- **Substitui a dívida A1:** o cron de segunda não gera mais resumo por IA (nunca gerava, e teria sobrescrito o plano) e passou a chamar `ensureWeeklyPlan()` em vez de `generateStructuredWeeklyPlan()`. O push de segunda continua e leva para `/coach`.
+- **Limitações:** calculada na hora (não é gravada); fala de uma semana só; musculação entra apenas como contagem. Detalhes em `docs/devolutiva-semanal.md`.
 
 # 7. TELAS E NAVEGAÇÃO
 
@@ -1368,7 +1376,7 @@ Login e cadastro com código de convite, e reset de senha.
 
 **A IA não prescreve nada numérico.** Volume, sessões, ritmos, FC, recuperação, recordes, macro-plano, conselheiro e troca de treino são **código determinístico e testado**. A IA faz três coisas:
 
-1. **Narrar:** nota da semana, análise da corrida, resumo, análise pós-prova, dica de dieta.
+1. **Narrar:** nota da semana, análise da corrida, análise pós-prova, dica de dieta. *(O resumo semanal saiu da IA em 17/09: a devolutiva é determinística — ver 6.28.)*
 2. **Traduzir linguagem natural em estrutura validada:** edições do plano pelo chat, notas de memória.
 3. **Redigir documentos longos:** análise completa, estratégia de prova.
 
@@ -1400,8 +1408,8 @@ Essa regra nasceu da Fase B (ver seção 2): o plano gerado por LLM era inconsis
 | # | Função (arquivo) | Quem chama | Saída | max_tokens | Contexto enviado | Estado |
 |---|---|---|---|---|---|---|
 | 1 | `analyzeRun` (`ai.ts`) | Webhook do Strava (cada corrida nova), `/api/strava/sync` (3 mais recentes), `/api/runs/[id]/analyze` | Prosa, 3–5 parágrafos → `runs.coach_feedback` | 600 | Detalhes da corrida + **histórico completo** de corridas (1 linha por corrida) | ✅ |
-| 2 | `generateWeeklySummary` | Cron `weekly-report` | Prosa → `coach_reports` | 600 | Corridas da semana, histórico completo, academia da semana, meta | ⚠️ quase nunca roda (ver 13) |
-| 3 | `generateStructuredWeeklyPlan` | Cron `weekly-report` (fallback) | JSON do plano de 7 dias | 2400 | 10 corridas recentes, VDOT, prova, notas, esportes | ⚠️ resíduo, viola 9.1 |
+| 2 | ~~`generateWeeklySummary`~~ | — | — | — | — | ❌ removida em 17/09 (devolutiva determinística) |
+| 3 | ~~`generateStructuredWeeklyPlan`~~ | — | — | — | — | ❌ fora do cron em 17/09; o plano vem do motor |
 | 4 | `adjustWeeklyPlanProactive` | `/api/coach/weekly-plan/adjust` | JSON dos dias restantes + mensagem | 1000 | Plano, adesão por dia, TSB, dia de hoje | ⚠️ viola 9.1 e a trava de semana |
 | 5 | `processPlanFeedback` | `/api/coach/weekly-plan/chat` | JSON `{edits[], message}` → `applyPlanEdits` | 1500 | Plano (JSON enxuto), 5 corridas, notas, 6 últimas mensagens | ✅ |
 | 6 | `extractAthleteNotes` | Chat (após cada troca) | JSON `[{category, content}]` → `athlete_notes` | 300 | Mensagem do atleta + resposta | ✅ |
@@ -1927,7 +1935,7 @@ combustível em treino: > 75 min → 50 g/h (leve) | 75 g/h (prova); gel ≈ 25 
 
 | # | Dívida | Evidência | Impacto | Correção |
 |---|---|---|---|---|
-| A1 | **Cron `weekly-report` quebrado e contraditório** | `src/app/api/cron/weekly-report/route.ts` | (a) O resumo semanal procura `coach_reports` `week` da semana passada com `summary` não nulo, mas **a linha do plano sempre tem `summary`** (`weekly-plan.ts:669`), então o resumo **nunca é gerado para quem teve plano**. Se fosse gerado, **sobrescreveria o `full_report` do plano** da semana passada com texto. (b) Para quem não tem plano na semana (sem corridas em 60 d), **gera plano por LLM**, que `ensureWeeklyPlan` considera "usável" (tem `sport`) e **nunca substitui**, e a trava de semana congela | Separar resumos em `period_type='week_summary'` (ou tabela própria); remover `generateStructuredWeeklyPlan` e chamar `ensureWeeklyPlan`; checar produção por planos sem `fingerprint` |
+| A1 | ~~**Cron `weekly-report` quebrado e contraditório**~~ **resolvida em 17/09** (resumo por IA removido; plano pelo motor via `ensureWeeklyPlan`; devolutiva determinística em `week-recap.ts`) | `src/app/api/cron/weekly-report/route.ts` | (a) O resumo semanal procurava `coach_reports` `week` da semana passada com `summary` não nulo, mas **a linha do plano sempre tem `summary`** (`weekly-plan.ts:669`), então o resumo **nunca é gerado para quem teve plano**. Se fosse gerado, **sobrescreveria o `full_report` do plano** da semana passada com texto. (b) Para quem não tem plano na semana (sem corridas em 60 d), **gera plano por LLM**, que `ensureWeeklyPlan` considera "usável" (tem `sport`) e **nunca substitui**, e a trava de semana congela | Separar resumos em `period_type='week_summary'` (ou tabela própria); remover `generateStructuredWeeklyPlan` e chamar `ensureWeeklyPlan`; checar produção por planos sem `fingerprint` |
 | A2 | **Ajuste proativo por IA reescreve a semana em andamento** | `/api/coach/weekly-plan/adjust` + `adjustWeeklyPlanProactive` | Viola ADR-02 e ADR-05; os dias reescritos perdem `structure` com intensidade/FC e a sessão de `strength` | Substituir por regras determinísticas (reusar `session-swap`/`plan-edit`) ou remover o banner |
 | A3 | **Autorização por convenção** | Maioria das rotas usa `createAdminClient()` + `.eq("user_id", user.id)` | Um filtro esquecido = vazamento entre usuários; nenhum teste cobre rotas | Cliente com RLS nas rotas do próprio usuário; testes de autorização nas rotas sensíveis; revisar cada `createAdminClient` |
 | A4 | **Next.js 14.2.35 com vulnerabilidades** | `npm audit` (5 avisos no `next`; a correção pede Next 16) | Exposição a CVEs do framework | Planejar upgrade 14 → 15 → 16 (mudanças em cookies/headers assíncronos, cache) com smoke tests |
@@ -2351,7 +2359,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 
 ## 19.1 O que existe
 
-- **Vitest 2.1**, `npm test` (= `vitest run`). **69 arquivos, 1.309 testes, todos passando** (rodado em 17/09/2026, ~5 s).
+- **Vitest 2.1**, `npm test` (= `vitest run`). **70 arquivos, 1.332 testes, todos passando** (rodado em 17/09/2026, ~5 s).
 - **Só funções puras de `src/lib/`.** Sem banco, sem rede, sem DOM.
 - **Fixture central** (`tests/fixtures.ts`): atleta com teste de 3 km em 13:00 e FC média 178 → **VDOT ≈ 43,7, LTHR = 165**. Falhas se leem como "isso deu errado para um corredor de VDOT 43".
 - **`tests/README.md`:** tabela dos bugs reais que cada teste protege. Leitura obrigatória.

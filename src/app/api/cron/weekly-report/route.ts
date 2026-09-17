@@ -3,22 +3,19 @@
  *
  * Cron automático — executa toda segunda-feira às 10:00 UTC (07:00 BRT).
  * Para cada usuário:
- *   1. Gera resumo da SEMANA PASSADA com IA e salva em coach_reports
- *   2. Gera PLANO DA SEMANA ATUAL com IA (se ainda não existe) e salva em coach_reports
+ *   1. Avisa que a semana fechou (a devolutiva é determinística, na tela do Treinador)
+ *   2. Gera o PLANO DA SEMANA ATUAL pelo motor (ensureWeeklyPlan), se ainda não existe
  *
  * Protegido por CRON_SECRET (Vercel injeta o header automaticamente) ou ?secret=$CRON_SECRET
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import {
-  generateWeeklySummary,
-  generateStructuredWeeklyPlan,
-} from "@/lib/ai";
+import { ensureWeeklyPlan } from "@/lib/weekly-plan";
 import { detectPatterns } from "@/lib/patterns";
 import { sendPushToUser } from "@/lib/push";
 import { adaptMacroPlanForUser } from "@/lib/macro-plan";
-import type { Run, Activity } from "@/types";
+import type { Run } from "@/types";
 import { authorizeCron } from "@/lib/cron-auth";
 
 // 5 minutes — enough for multiple users + AI calls
@@ -51,238 +48,63 @@ async function processUser(
   const thisMondayStr = toDateStr(thisMonday);
   const lastMondayStr = toDateStr(lastMonday);
   const lastSundayStr = toDateStr(lastSunday);
-  const thisSundayStr = toDateStr(new Date(thisMonday.getTime() + 6 * 86400000));
 
-  // ── 1. Generate last week's summary ────────────────────────────────────────
-  let summaryStatus = "skipped";
+  // ── 1. Close last week ─────────────────────────────────────────────────────
+  /*
+   * Nothing is generated here any more.
+   *
+   * This asked a model for a summary of last week and saved it as the week
+   * report — the same row the plan lives in, so a summary would have
+   * overwritten the plan. It never did, because the guard always found the
+   * plan's own `summary` and skipped: the weekly summary was dead code that
+   * cost an LLM call's worth of risk and produced nothing (dívida A1).
+   *
+   * The recap is deterministic now and is computed on the Treinador screen
+   * (`weekRecap`): como foi a semana, o que o treinador entendeu, o que muda.
+   * The cron only points the athlete at it.
+   */
+  let summaryStatus = "recap-on-screen";
 
-  // Fetch last week's runs
   const { data: lastWeekRuns } = await admin
-    .from("runs")
-    .select("*")
+    .from("runs").select("distance_km")
     .eq("user_id", userId)
-    .gte("date", lastMondayStr)
-    .lte("date", lastSundayStr)
-    .is("deleted_at", null)
-    .order("date", { ascending: true });
+    .gte("date", lastMondayStr).lte("date", lastSundayStr)
+    .is("deleted_at", null);
 
   if (lastWeekRuns && lastWeekRuns.length > 0) {
-    // Check if summary already exists for last week
-    const { data: existingSummary } = await admin
-      .from("coach_reports")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("period_type", "week")
-      .eq("period_start", lastMondayStr)
-      .not("summary", "is", null)
-      .limit(1)
-      .single();
-
-    if (!existingSummary) {
-      // Fetch all runs for historical context
-      const { data: allRuns } = await admin
-        .from("runs")
-        .select("*")
-        .eq("user_id", userId)
-        .is("deleted_at", null)
-        .order("date", { ascending: false });
-
-      // Fetch last week's activities (gym etc.)
-      const { data: weekActivities } = await admin
-        .from("activities")
-        .select("id, date, name, sport_type, duration_seconds, calories, avg_hr, source")
-        .eq("user_id", userId)
-        .gte("date", lastMondayStr)
-        .lte("date", lastSundayStr)
-        .is("deleted_at", null);
-
-      // Active goal
-      const { data: goals } = await admin
-        .from("goals")
-        .select("race_name, race_date")
-        .eq("user_id", userId)
-        .in("status", ["active", "upcoming"])
-        .order("race_date", { ascending: true })
-        .limit(1);
-
-      const goal = goals?.[0];
-      const goalName = goal?.race_name as string | undefined;
-      const weeksToGoal = goal?.race_date
-        ? Math.ceil((new Date(goal.race_date as string).getTime() - now.getTime()) / (7 * 86400000))
-        : undefined;
-
-      const summary = await generateWeeklySummary(
-        lastWeekRuns as Run[],
-        allRuns as Run[] ?? [],
-        goalName,
-        weeksToGoal,
-        weekActivities as Activity[] | undefined,
-      );
-
-      if (summary) {
-        const totalKm = (lastWeekRuns as Run[]).reduce((s, r) => s + r.distance_km, 0);
-
-        // Upsert: update existing or insert new
-        const { data: existing } = await admin
-          .from("coach_reports")
-          .select("id")
-          .eq("user_id", userId)
-          .eq("period_type", "week")
-          .eq("period_start", lastMondayStr)
-          .limit(1)
-          .single();
-
-        const payload = {
-          user_id:      userId,
-          title:        `Resumo da semana — ${lastMondayStr}`,
-          report_date:  thisMondayStr,
-          period_type:  "week",
-          period_start: lastMondayStr,
-          period_end:   lastSundayStr,
-          summary,
-          full_report:  summary,
-          updated_at:   now.toISOString(),
-        };
-
-        if (existing?.id) {
-          await admin.from("coach_reports").update(payload).eq("id", existing.id);
-        } else {
-          await admin.from("coach_reports").insert(payload);
-        }
-        summaryStatus = `generated (${(lastWeekRuns as Run[]).length} runs, ${totalKm.toFixed(1)} km)`;
-
-        // Push: avisa que o resumo da semana está pronto
-        sendPushToUser(admin, userId, {
-          title: "Resumo da semana pronto 📊",
-          body:  `${(lastWeekRuns as Run[]).length} corridas, ${totalKm.toFixed(1)} km. Veja seu desempenho e o plano da nova semana.`,
-          url:   "/coach",
-          tag:   "limiar-weekly-summary",
-          icon:  "/limiar_icone_app.png",
-        }).catch(() => {});
-      } else {
-        summaryStatus = "ai-failed";
-      }
-    } else {
-      summaryStatus = "already-exists";
-    }
+    const totalKm = (lastWeekRuns as Array<{ distance_km: number | null }>)
+      .reduce((sum, r) => sum + Number(r.distance_km ?? 0), 0);
+    sendPushToUser(admin, userId, {
+      title: "Sua semana fechou 📊",
+      body:  `${lastWeekRuns.length} ${lastWeekRuns.length === 1 ? "corrida" : "corridas"}, ${totalKm.toFixed(1)} km. Veja o que o treinador entendeu e o que muda nesta semana.`,
+      url:   "/coach",
+      tag:   "limiar-weekly-summary",
+      icon:  "/limiar_icone_app.png",
+    }).catch(() => {});
   } else {
     summaryStatus = "no-runs-last-week";
   }
 
   // ── 2. Generate this week's plan ───────────────────────────────────────────
+  /*
+   * The engine writes the plan; the cron only asks for it (ADR-02).
+   *
+   * It used to call an LLM for a structured plan, which `ensureWeeklyPlan`
+   * then accepted as usable and never replaced — an athlete without runs in
+   * the last 60 days got a model-invented week, frozen for seven days. Going
+   * through `ensureWeeklyPlan` means the Monday cron, the freshness banner and
+   * the button all produce the same plan and respect the same freeze.
+   */
   let planStatus = "skipped";
-
-  // Check if plan already exists for this week
-  const { data: existingPlan } = await admin
-    .from("coach_reports")
-    .select("id, full_report")
-    .eq("user_id", userId)
-    .eq("period_type", "week")
-    .eq("period_start", thisMondayStr)
-    .limit(1)
-    .single();
-
-  // Only generate if no valid structured plan exists
-  const hasValidPlan = (() => {
-    if (!existingPlan?.full_report) return false;
-    try {
-      const parsed = JSON.parse(existingPlan.full_report);
-      return Array.isArray(parsed?.days) && parsed.days.length > 0;
-    } catch { return false; }
-  })();
-
-  if (!hasValidPlan) {
-    const { data: recentRuns } = await admin
-      .from("runs")
-      .select("*")
-      .eq("user_id", userId)
-      .is("deleted_at", null)
-      .order("date", { ascending: false })
-      .limit(30);
-
-    // VDOT
-    let vdot: number | null = null;
-    try {
-      const { data: tests } = await admin
-        .from("performance_tests")
-        .select("vdot")
-        .eq("user_id", userId)
-        .order("test_date", { ascending: false })
-        .limit(1);
-      vdot = (tests?.[0]?.vdot as number | null) ?? null;
-    } catch { /* table may not exist */ }
-
-    // Next race
-    let nextRace = null;
-    try {
-      const { data: races } = await admin
-        .from("races")
-        .select("name, race_date, distance_km")
-        .eq("user_id", userId)
-        .gt("race_date", thisMondayStr)
-        .is("time_seconds", null)
-        .order("race_date", { ascending: true })
-        .limit(1);
-      if (races?.[0]) {
-        nextRace = {
-          name:        races[0].name as string,
-          date:        races[0].race_date as string,
-          distance_km: races[0].distance_km as number,
-        };
-      }
-    } catch { /* table may not exist */ }
-
-    // Athlete profile
-    let athleteProfile: string | null = null;
-    try {
-      const { data: notes } = await admin
-        .from("athlete_notes")
-        .select("category, content")
-        .eq("user_id", userId)
-        .eq("active", true)
-        .order("created_at", { ascending: false })
-        .limit(30);
-      if (notes && notes.length > 0) {
-        athleteProfile = notes.map((n: { category: string; content: string }) =>
-          `[${n.category}] ${n.content}`
-        ).join("\n");
-      }
-    } catch { /* table may not exist */ }
-
-    const plan = await generateStructuredWeeklyPlan(
-      thisMondayStr,
-      recentRuns as Run[] ?? [],
-      null, // paces from UI not available here
-      nextRace,
-      vdot,
-      athleteProfile,
-    );
-
-    if (plan) {
-      const trainingDays = plan.days.filter(d => d.type !== "rest").length;
-      const planPayload = {
-        user_id:      userId,
-        title:        `Plano da semana — ${thisMondayStr}`,
-        report_date:  thisMondayStr,
-        period_type:  "week",
-        period_start: thisMondayStr,
-        period_end:   thisSundayStr,
-        summary:      plan.ai_message ?? `${trainingDays} treinos planejados`,
-        full_report:  JSON.stringify(plan),
-        updated_at:   now.toISOString(),
-      };
-
-      if (existingPlan?.id) {
-        await admin.from("coach_reports").update(planPayload).eq("id", existingPlan.id);
-      } else {
-        await admin.from("coach_reports").insert(planPayload);
-      }
-      planStatus = `generated (${trainingDays} training days)`;
-    } else {
-      planStatus = "ai-failed";
-    }
-  } else {
-    planStatus = "already-exists";
+  try {
+    const result = await ensureWeeklyPlan(admin, userId, thisMondayStr);
+    const trainingDays = result.plan?.days.filter(d => d.type !== "rest").length ?? 0;
+    planStatus = result.frozen ? "frozen"
+      : result.cached ? "already-exists"
+        : result.plan ? `generated (${trainingDays} training days)`
+          : `failed: ${result.error ?? "sem plano"}`;
+  } catch (err) {
+    planStatus = `failed: ${err instanceof Error ? err.message : "erro"}`;
   }
 
   // ── 3. Detect patterns & save as athlete_notes ───────────────────────────
