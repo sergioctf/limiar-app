@@ -7,7 +7,7 @@ import { localDateStr } from "@/lib/week";
 import { movingSeconds } from "@/lib/run-time";
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 
-export type DayStatus = "done" | "partial" | "missed" | "rest_ok" | "extra" | "upcoming";
+export type DayStatus = "done" | "partial" | "adapted" | "missed" | "rest_ok" | "extra" | "upcoming";
 
 export interface DayAdherence {
   day: WeeklyPlanDay["day"];
@@ -22,10 +22,16 @@ export interface DayAdherence {
 export interface WeekAdherence {
   weekStart: string;        // Monday YYYY-MM-DD
   days: DayAdherence[];
-  /** 0–100 across past planned workout days (done=1, partial=0.5) */
+  /**
+   * 0–100 across past planned workout days: done = 1, partial = 0.5,
+   * adapted = 1 when the swap kept the purpose of the session and 0.5 when it
+   * did not. A session the athlete replaced is not a session he skipped — and
+   * it is not a plan he followed either.
+   */
   score: number | null;     // null when nothing was scheduled in the past yet
   doneCount: number;
   partialCount: number;
+  adaptedCount: number;
   missedCount: number;
 }
 
@@ -110,6 +116,14 @@ export function computeWeekAdherence(
 
       // Today without a run yet: still pending, not missed
       if (status === "missed" && date === today) status = "upcoming";
+
+      /*
+       * A session declared different after the fact is neither a miss nor the
+       * plan carried out: the day keeps its prescription and the run is shown
+       * as what it was. Adaptations agreed *before* the run are the day's
+       * prescription already, so they are compared normally.
+       */
+      if (planned.adaptation?.when === "after" && actualKm > 0) status = "adapted";
     }
 
     days.push({
@@ -125,17 +139,20 @@ export function computeWeekAdherence(
 
   const doneCount    = days.filter(d => d.status === "done").length;
   const partialCount = days.filter(d => d.status === "partial").length;
+  const adapted      = days.filter(d => d.status === "adapted");
   const missedCount  = days.filter(d => d.status === "missed").length;
-  const scoredTotal  = doneCount + partialCount + missedCount;
+  const adaptedCredit = adapted.reduce((s, d) => s + (d.planned.adaptation?.verdict === "equivalent" ? 1 : 0.5), 0);
+  const scoredTotal  = doneCount + partialCount + adapted.length + missedCount;
 
   return {
     weekStart,
     days,
     score: scoredTotal > 0
-      ? Math.round(((doneCount + partialCount * 0.5) / scoredTotal) * 100)
+      ? Math.round(((doneCount + partialCount * 0.5 + adaptedCredit) / scoredTotal) * 100)
       : null,
     doneCount,
     partialCount,
+    adaptedCount: adapted.length,
     missedCount,
   };
 }

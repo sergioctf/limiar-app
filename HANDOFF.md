@@ -1147,10 +1147,14 @@ Fluxo OAuth completo (`whoop.ts`, `/api/whoop/*`, `WhoopCard`, migration 023). I
 
 - **Objetivo:** o atleta que troca um treino quase sempre tenta preservar o objetivo, e decide antes de sair. O treinador participa dessa decisão e avalia a execução contra o que foi combinado — não contra a prescrição original.
 - **Antes:** botão "Adaptar este treino" no card Hoje e no detalhe das corridas da semana. Motivo (tempo, local, GPS, formato, outro) → até 3 alternativas, uma recomendada, com *preserva / muda / por quê* → ou proposta própria em texto ("8 × 400 m"), lida por um analisador determinístico e avaliada: *mantém o objetivo / mantém parte / muda o objetivo*, com sugestão ajustada quando passa do teto da semana. O dia é substituído e o original fica em `adaptation.original`; desfazer devolve.
-- **Depois:** quando a corrida ficou claramente diferente do previsto, o check-in pergunta "Fiz como previsto · Adaptei mantendo o objetivo · Fiz outro treino" e registra no dia do plano o que foi feito (`adaptation.when = "after"`), para a adesão não contar a substituição como falta.
-- **Implementação:** `src/lib/session-adapt.ts` (famílias de estímulo, alternativas, `parseProposal`, `evaluateProposal`, `compareSessions`, `applyAdaptation`, `executionDiffers`), `src/app/api/coach/adapt/route.ts`, `src/components/today/AdaptSession.tsx`; o construtor passou a marcar `WeeklyPlanDay.quality` e aceita `forceQuality`.
+- **Depois:** quando a corrida ficou claramente diferente do previsto, o check-in pergunta "Fiz como previsto · Adaptei mantendo o objetivo · Fiz outro treino" e **marca** o dia do plano (`adaptation.when = "after"`), para a adesão não contar a substituição como falta.
+- **Implementação:** `src/lib/session-adapt.ts` (famílias de estímulo, alternativas, `parseProposal`, `evaluateProposal`, `compareSessions`, `sessionWork`, `applyAdaptation`, `recordExecuted`, `executionDiffers`), `src/app/api/coach/adapt/route.ts`, `src/components/today/AdaptSession.tsx`; o construtor passou a marcar `WeeklyPlanDay.quality` e aceita `forceQuality`.
 - **Dados:** JSON do plano (`adaptation`); `run_feedback.execution` e `executed_text` (migration 032).
-- **Limitações:** só a semana atual e só corridas; texto livre fora dos formatos comuns vira "outro treino" sem estrutura. Detalhes em `docs/adaptar-treino.md`.
+- **Coerência do que o treinador entende ✅ (17/09, "ponto 1"):**
+  - **Fase real.** O plano grava a fase em que foi construído (`WeeklyPlanData.phase`) e a rota de adaptação a usa; planos antigos recalculam com `phaseForRace()`. Antes era `"base"` fixo.
+  - **Planejado → combinado → realizado.** O check-in não escreve mais a distância corrida em `distance_km` do dia (isso contaminava o volume da semana, a catraca e a adesão). `recordExecuted()` mantém a prescrição e grava o realizado ao lado (`adaptation.doneLabel`, `doneKm`). A adesão ganhou o estado **"adaptado"**: 1 quando a troca manteve o objetivo, 0,5 quando não. **Dado corrigido em produção:** a quarta de 16/09 voltou a "Subidas 6×45 s, 3,5 km" (restaurada de `adaptation.original`, com backup da linha) e a semana de 14/09 caiu de 75% para 63% de adesão.
+  - **"Mantém o objetivo" olha a dose.** `sessionWork()` mede km em intensidade forte, repetições e trote médio; volume fora da faixa 60–160% do previsto rebaixa "mantém o objetivo" para "mantém parte", com a diferença dita em números. A recuperação só é comparada quando o atleta a informou.
+- **Limitações:** só a semana atual e só corridas; texto livre fora dos formatos comuns vira "outro treino" sem estrutura; a comparação de dose exige estrutura dos dois lados (no check-in depois do treino, o texto é julgado só pela família). Detalhes em `docs/adaptar-treino.md`.
 
 # 7. TELAS E NAVEGAÇÃO
 
@@ -1933,6 +1937,8 @@ combustível em treino: > 75 min → 50 g/h (leve) | 75 g/h (prova); gel ≈ 25 
 | A8 | ~~**Carga de treino só de corrida**~~ **resolvida em 16/09** (`activityTSS`) | `training-load.ts` | TSB e recuperação subestimam fadiga de quem faz força 3×/semana (caso de Sérgio) | TSS por sRPE × duração para `activities`; calibrar com o atleta |
 | A9 | **Webhook do Strava aceita eventos forjados** | `strava/webhook/route.ts` não confere `subscription_id`; o delete marca `runs.deleted_at` só pelo `object_id` | Qualquer pessoa pode apagar (soft delete) corridas de usuários conhecendo o ID da atividade no Strava; eventos falsos geram custo de API/IA | Validar `subscription_id`; no delete, confirmar com a API do Strava (404) antes de marcar |
 | A10 | **Análise por IA síncrona no webhook do Strava** | `strava/webhook/route.ts` | Webhook lento → Strava reenvia; atividade só é salva se a função não estourar | Salvar e responder 200; análise em job posterior (fila simples em tabela) |
+| A11 | **Card de adesão mostra a semana seguinte como "esta semana"** | `plan-adherence.ts` (`computeAdherenceHistory`) + `PlanAdherenceCard` | Ordena por `period_start` e chama de atual o relatório mais recente; com o plano da próxima semana já gerado, o card mostra sete dias "a fazer" enquanto o topo da página fala da semana corrente (visto em produção, 17/09) | Escolher a semana pela data de hoje, não pelo relatório mais recente |
+| A12 | **Musculação do dia conta como perdida antes de o dia acabar** | `plan-adherence.ts`, ramo `type === "strength"` | A regra "hoje ainda está pendente" só vale para corrida; um dia de força sem registro aparece "Perdido" já pela manhã (a quinta de 17/09 entrou assim no cálculo dos 63%) | Aplicar a mesma regra de `upcoming` para força |
 
 ## 🟡 MÉDIA — atrito, inconsistência ou custo de manutenção
 
@@ -2345,7 +2351,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 
 ## 19.1 O que existe
 
-- **Vitest 2.1**, `npm test` (= `vitest run`). **68 arquivos, 1.295 testes, todos passando** (rodado em 16/09/2026, ~5 s).
+- **Vitest 2.1**, `npm test` (= `vitest run`). **69 arquivos, 1.309 testes, todos passando** (rodado em 17/09/2026, ~5 s).
 - **Só funções puras de `src/lib/`.** Sem banco, sem rede, sem DOM.
 - **Fixture central** (`tests/fixtures.ts`): atleta com teste de 3 km em 13:00 e FC média 178 → **VDOT ≈ 43,7, LTHR = 165**. Falhas se leem como "isso deu errado para um corredor de VDOT 43".
 - **`tests/README.md`:** tabela dos bugs reais que cada teste protege. Leitura obrigatória.

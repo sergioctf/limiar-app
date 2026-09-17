@@ -265,7 +265,17 @@ export function AdaptSessionControl({ day, onChanged }: { day: WeeklyPlanDay; on
 
   return (
     <div className="space-y-1">
-      {day.adaptation ? (
+      {day.adaptation?.when === "after" ? (
+        <div className="rounded-xl bg-surface-700/40 px-3 py-2 text-xs text-surface-400">
+          Previsto: <span className="text-surface-200">{day.label}</span>. Você registrou no check-in:{" "}
+          {/* The parsed name when the coach understood the session; the athlete's own words otherwise. */}
+          <span className="text-surface-200">
+            {day.adaptation.doneLabel?.includes(":") ? day.adaptation.doneLabel
+              : day.adaptation.text ?? day.adaptation.doneLabel ?? "outro treino"}
+          </span>
+          {day.adaptation.doneKm ? ` — ${String(day.adaptation.doneKm).replace(".", ",")} km` : ""}.
+        </div>
+      ) : day.adaptation ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface-700/40 px-3 py-2 text-xs text-surface-400">
           <span>Adaptado de <span className="text-surface-200">{day.adaptation.original.label}</span></span>
           <span className="flex gap-3">

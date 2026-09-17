@@ -3,7 +3,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { athleteDateStr, athleteDaysAgoStr } from "@/lib/week";
 import { matchFeedbackPlan, validFeedbackInput } from "@/lib/run-feedback";
 import { lightenUpcomingRuns } from "@/lib/plan-edit";
-import { applyAdaptation, compareSessions, parseProposal, parsedLabel, undoAdaptation } from "@/lib/session-adapt";
+import { compareSessions, parseProposal, parsedLabel, recordExecuted, undoAdaptation } from "@/lib/session-adapt";
 import type { Execution } from "@/lib/run-feedback";
 import { dayKeyOf } from "@/lib/session-swap";
 import { mondayOf } from "@/lib/weekly-plan";
@@ -112,16 +112,9 @@ async function recordExecution(
     const parsed = text?.trim() ? parseProposal(text) : null;
     const label = parsed ? parsedLabel(parsed) : null;
     const compared = execution === "adapted" && parsed?.kind && label ? compareSessions(base, parsed.kind, label) : null;
-    const done: WeeklyPlanDay = {
-      day: base.day, dayPt: base.dayPt, sport: base.sport ?? "corrida", type: base.type,
-      label: execution === "other" ? `Outro treino${label ? `: ${label}` : ""}` : `Adaptado${label ? `: ${label}` : ""}`,
-      distance_km: Math.round(Number(run.distance_km ?? 0) * 10) / 10,
-      description: text?.trim() ? `Feito: ${text.trim()}` : "Treino diferente do previsto, informado no check-in.",
-      ...(base.strength ? { strength: base.strength } : {}),
-    };
-    const applied = applyAdaptation(plan, key, done, {
-      when: "after", reason: null, source: execution === "other" ? "other_workout" : "custom",
-      text: text?.trim() || null, preserves: compared?.preserves ?? "", changes: compared?.changes ?? "", verdict: compared?.verdict,
+    // The prescription stays on the day; what was done is recorded beside it.
+    const applied = recordExecuted(plan, key, {
+      execution, label, text: text ?? null, km: Number(run.distance_km ?? 0), compared,
     });
     if ("plan" in applied) next = applied.plan;
   }

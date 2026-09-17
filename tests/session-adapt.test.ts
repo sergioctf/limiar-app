@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import {
   adaptOptions, applyAdaptation, evaluateProposal, executionDiffers, isAdaptable,
-  parseProposal, sessionKindOf, toTimeBased, undoAdaptation,
+  parseProposal, recordExecuted, sessionKindOf, sessionWork, toTimeBased, undoAdaptation,
 } from "@/lib/session-adapt";
 import { buildIntervalRun, buildEasyRun, buildLongRun } from "@/lib/workout-builder";
 import { weekContext } from "./fixtures";
@@ -131,9 +131,10 @@ describe("judging the proposal", () => {
     expect(evaluation.changes).toContain("VO₂máx");
   });
 
-  it("agrees when the swap keeps the purpose", () => {
-    const evaluation = evaluateProposal("5x800m", intervals, ctx);
+  it("agrees when the swap keeps the purpose in a comparable dose", () => {
+    const evaluation = evaluateProposal("4x400m", intervals, ctx);
     expect(evaluation.verdict).toBe("equivalent");
+    expect(evaluation.message).toContain("mantém o objetivo");
   });
 
   it("proposes a smaller version when the idea is sound but too big for the week", () => {
@@ -202,5 +203,80 @@ describe("after the session: asking only when it looks different", () => {
   it("does not ask again about a session adapted beforehand", () => {
     const adapted = { ...hills, adaptation: { when: "before", at: "x", reason: "place", source: "option", preserves: "", changes: "", original: hills } } as WeeklyPlanDay;
     expect(executionDiffers(adapted, { distance_km: 8, avg_pace_seconds_per_km: 330 })).toBe(false);
+  });
+});
+
+describe("the same stimulus is not the same session in any dose", () => {
+  it("measures the hard work, not the whole session", () => {
+    const work = sessionWork(intervals, ctx.paces);
+    expect(work.reps).toBe(3);
+    expect(work.workKm).toBeCloseTo(1.2, 2);          // 3 × 400 m — warm-up and cool-down do not count
+    expect(work.workKm).toBeLessThan(intervals.distance_km!);
+    expect(work.recoveryMinPerRep).toBeGreaterThan(0);
+  });
+
+  it("does not call a much bigger dose the same session", () => {
+    const evaluation = evaluateProposal("5x800m", intervals, ctx);   // 4 km against 1,2 km prescribed
+    expect(evaluation.verdict).toBe("partial");
+    expect(evaluation.preserves).toContain("VO₂máx");                // the stimulus is the same
+    expect(evaluation.changes).toContain("Volume forte");
+    expect(evaluation.message).toContain("dose bem maior");
+  });
+
+  it("does not call a much smaller dose the session of the week", () => {
+    const big = weekContext({ weeklyKm: 60 });
+    const planned = planDay("Wed", buildIntervalRun({ ...big, forceQuality: "intervals" }));
+    const evaluation = evaluateProposal("2x400m", planned, big);
+    expect(evaluation.verdict).toBe("partial");
+    expect(evaluation.changes).toContain("Volume forte");
+    expect(evaluation.message).toContain("dose bem menor");
+  });
+
+  it("says when the athlete asked for much less jog between repetitions", () => {
+    const evaluation = evaluateProposal("4x400m com 20s de trote", intervals, ctx);
+    expect(evaluation.changes).toContain("Recuperação entre repetições");
+    expect(evaluation.changes).toContain("20 s");
+  });
+
+  it("never argues with a recovery it assumed itself", () => {
+    const evaluation = evaluateProposal("4x400m", intervals, ctx);
+    expect(evaluation.assumptions.join(" ")).toContain("trote entre as repetições");
+    expect(evaluation.changes).not.toContain("Recuperação entre repetições");
+  });
+});
+
+describe("planned, agreed and executed stay three different things", () => {
+  const plan: WeeklyPlanData = { week_start: "2026-09-14", generated_at: "x", days: [easy, hills, long] };
+
+  it("does not write what was done over what was asked for", () => {
+    const result = recordExecuted(plan, "Wed", { execution: "adapted", label: "8×400 m", text: "8x400m", km: 8.01 });
+    const day = ("plan" in result ? result.plan : plan).days.find(d => d.day === "Wed")!;
+    expect(day.label).toBe(hills.label);
+    expect(day.distance_km).toBe(hills.distance_km);                  // the week's volume is not rewritten
+    expect(day.adaptation?.doneKm).toBe(8);
+    expect(day.adaptation?.doneLabel).toBe("Adaptado: 8×400 m");
+    expect(day.adaptation?.when).toBe("after");
+    expect(day.adaptation?.original.label).toBe(hills.label);
+  });
+
+  it("marks another workout as another workout", () => {
+    const result = recordExecuted(plan, "Wed", { execution: "other", text: "trilha com amigos", km: 12 });
+    const day = ("plan" in result ? result.plan : plan).days.find(d => d.day === "Wed")!;
+    expect(day.adaptation?.source).toBe("other_workout");
+    expect(day.adaptation?.doneLabel).toBe("Outro treino");
+    expect(day.distance_km).toBe(hills.distance_km);
+  });
+
+  it("leaves a session agreed before the run alone", () => {
+    const agreed = applyAdaptation(plan, "Wed", adaptOptions(hills, "place", ctx).options[0].day,
+      { when: "before", reason: "place", source: "option", preserves: "p", changes: "c" });
+    const result = recordExecuted("plan" in agreed ? agreed.plan : plan, "Wed", { execution: "adapted", km: 8 });
+    expect("error" in result).toBe(true);
+  });
+
+  it("puts the prescription back when the athlete says it was done as planned", () => {
+    const recorded = recordExecuted(plan, "Wed", { execution: "adapted", label: "8×400 m", km: 8 });
+    const undone = undoAdaptation("plan" in recorded ? recorded.plan : plan, "Wed");
+    expect(("plan" in undone ? undone.plan : plan).days.find(d => d.day === "Wed")).toEqual(hills);
   });
 });

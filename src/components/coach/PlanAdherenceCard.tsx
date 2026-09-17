@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, XCircle, CircleDot, Moon, Clock, ClipboardCheck, Plus } from "lucide-react";
+import { CheckCircle2, XCircle, CircleDot, Moon, Clock, ClipboardCheck, Plus, Shuffle } from "lucide-react";
 import type { WeekAdherence, DayStatus } from "@/lib/plan-adherence";
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
 const STATUS_UI: Record<DayStatus, { icon: React.ReactNode; label: string; color: string }> = {
   done:     { icon: <CheckCircle2 className="w-4 h-4" />, label: "Feito",     color: "text-green-400" },
   partial:  { icon: <CircleDot className="w-4 h-4" />,    label: "Parcial",   color: "text-yellow-400" },
+  adapted:  { icon: <Shuffle className="w-4 h-4" />,      label: "Adaptado",  color: "text-brand-400" },
   missed:   { icon: <XCircle className="w-4 h-4" />,      label: "Perdido",   color: "text-red-400" },
   rest_ok:  { icon: <Moon className="w-4 h-4" />,         label: "Descanso",  color: "text-surface-500" },
   extra:    { icon: <Plus className="w-4 h-4" />,         label: "Extra",     color: "text-blue-400" },
@@ -52,7 +53,11 @@ export function PlanAdherenceCard({ history }: Props) {
           return (
             <div
               key={d.day}
-              title={`${d.dayPt ?? ""}: ${d.planned?.label ?? ""}${d.actualKm > 0 ? ` — ${d.actualKm}km feitos` : ""}`}
+              title={[
+                `${d.dayPt ?? ""}: ${d.planned?.label ?? ""}`,
+                d.actualKm > 0 ? ` — ${d.actualKm}km feitos` : "",
+                d.status === "adapted" ? ` (adaptado${d.planned?.adaptation?.text ? `: ${d.planned.adaptation.text}` : ""})` : "",
+              ].join("")}
               className="flex flex-col items-center gap-1 rounded-lg bg-surface-700/30 py-2"
             >
               <span className="text-[10px] text-surface-500 uppercase">{(d.dayPt ?? "").slice(0, 3)}</span>
@@ -67,7 +72,7 @@ export function PlanAdherenceCard({ history }: Props) {
 
       {/* Legend */}
       <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3">
-        {(["done", "partial", "missed", "extra"] as DayStatus[]).map(s => (
+        {(["done", "partial", "adapted", "missed", "extra"] as DayStatus[]).map(s => (
           <span key={s} className="flex items-center gap-1 text-[10px] text-surface-500">
             <span className={STATUS_UI[s].color}>{STATUS_UI[s].icon}</span>
             {STATUS_UI[s].label}

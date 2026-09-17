@@ -510,6 +510,14 @@ export interface WeeklyPlanData {
   fingerprint?: import("@/lib/plan-freshness").PlanFingerprint;
   /** How the week before this one was read: held, eased off, or asked about. */
   week_reading?: import("@/lib/week-reading").WeekReading;
+  /**
+   * The training phase this week was built in.
+   *
+   * Written down so that anything reading the plan later — adapting a session,
+   * explaining a choice — judges it by the same phase that produced it, instead
+   * of assuming "base". Absent on plans made before this was recorded.
+   */
+  phase?: import("@/lib/workout-builder").WeekContext["phase"];
 }
 
 export interface PlanChatMessage {

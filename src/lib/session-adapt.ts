@@ -592,30 +592,126 @@ export interface ProposalEvaluation {
   adjusted?: { day: WeeklyPlanDay; why: string };
 }
 
+export interface SessionWork {
+  /** Kilometres at threshold, interval or repetition intensity. */
+  workKm: number;
+  reps: number | null;
+  /** Average jog between repetitions, in minutes. */
+  recoveryMinPerRep: number | null;
+}
+
+const HARD_INTENSITY: Intensity[] = ["T", "I", "R"];
+
+/**
+ * How much hard work a session actually contains, and how much rest between it.
+ *
+ * Belonging to the same family is not enough to call two sessions equivalent:
+ * 3 × 400 m and 10 × 400 m are both VO₂máx work and are not the same session,
+ * and the same reps with half the jog is a harder session than the one written.
+ */
+export function sessionWork(day: WeeklyPlanDay, paces: TrainingPace[] | null): SessionWork {
+  if (!day.structure) return { workKm: 0, reps: null, recoveryMinPerRep: null };
+  let workKm = 0;
+  let reps: number | null = null;
+  let recoveryMin = 0;
+  let recoveryCount = 0;
+  const asKm = (step: WorkoutStep) => step.distance_km
+    ?? ((step.duration_min ?? 0) * 60) / paceSec(paces, step.intensity ?? "E");
+  for (const block of day.structure.blocks) {
+    if (isRepeatBlock(block)) {
+      reps = (reps ?? 0) + block.repeat;
+      for (const step of block.steps) {
+        if (step.kind === "recovery") {
+          const minutes = step.duration_min ?? ((step.distance_km ?? 0) * paceSec(paces, "E")) / 60;
+          recoveryMin += minutes * block.repeat;
+          recoveryCount += block.repeat;
+        } else if (HARD_INTENSITY.includes(step.intensity ?? "E")) {
+          workKm += asKm(step) * block.repeat;
+        }
+      }
+    } else if (HARD_INTENSITY.includes(block.intensity ?? "E")) {
+      workKm += asKm(block);
+    }
+  }
+  return {
+    workKm: Math.round(workKm * 100) / 100,
+    reps,
+    recoveryMinPerRep: recoveryCount > 0 ? Math.round((recoveryMin / recoveryCount) * 100) / 100 : null,
+  };
+}
+
+const fmtKm = (n: number) => `${Number(n.toFixed(1)).toString().replace(".", ",")} km`;
+const fmtMin = (n: number) => n < 1
+  ? `${Math.round(n * 60)} s`
+  : `${Number(n.toFixed(1)).toString().replace(".", ",")} min`;
+
+/** How far the dose may drift before the same stimulus stops being the same session. */
+const DOSE_LOW = 0.6;
+const DOSE_HIGH = 1.6;
+/** Half the jog is a harder session; half again is an easier one. Both are worth saying. */
+const RECOVERY_LOW = 0.6;
+const RECOVERY_HIGH = 1.5;
+
 /**
  * Does another session keep the purpose of the planned one?
  *
  * Same family keeps it; a neighbouring family keeps part of it; anything else
- * changes it. Shared by the adaptation before a run and by the check-in after
- * one, so the coach judges a swap the same way on both sides of the session.
+ * changes it. When the work volume of both is known, family is not the last
+ * word: the same stimulus at half or double the hard kilometres is a different
+ * session, and says so.
+ *
+ * Shared by the adaptation before a run and by the check-in after one, so the
+ * coach judges a swap the same way on both sides of the session.
  */
-export function compareSessions(planned: WeeklyPlanDay, kind: SessionKind, label: string): {
+export function compareSessions(
+  planned: WeeklyPlanDay, kind: SessionKind, label: string,
+  work?: { planned: SessionWork; proposal: SessionWork },
+): {
   verdict: Verdict; preserves: string; changes: string; message: string;
 } {
   const base = planned.adaptation?.original ?? planned;
   const plannedKind = sessionKindOf(base);
   const pf = plannedKind ? familyOf(plannedKind) : "aerobic";
   const qf = familyOf(kind);
-  const verdict: Verdict = pf === qf ? "equivalent" : (NEIGHBORS[pf] ?? []).includes(qf) ? "partial" : "different";
+  const sameFamily = pf === qf;
+  let verdict: Verdict = sameFamily ? "equivalent" : (NEIGHBORS[pf] ?? []).includes(qf) ? "partial" : "different";
+
+  // Same stimulus in a very different dose is not the same session: 3 × 400 m
+  // and 10 × 400 m are both VO₂máx and only one of them is the training week.
+  const plannedKm = work?.planned.workKm ?? 0;
+  const proposalKm = work?.proposal.workKm ?? 0;
+  const ratio = plannedKm > 0.3 && proposalKm > 0.3 ? proposalKm / plannedKm : null;
+  const bigger = ratio != null && ratio > 1;
+  const dose = ratio != null && (ratio < DOSE_LOW || ratio > DOSE_HIGH)
+    ? `Volume forte: ${fmtKm(plannedKm)} previstos contra ${fmtKm(proposalKm)} — ${bigger ? "bem mais" : "bem menos"} trabalho.`
+    : null;
+  if (dose && verdict === "equivalent") verdict = "partial";
+
+  const plannedRec = work?.planned.recoveryMinPerRep ?? null;
+  const proposalRec = work?.proposal.recoveryMinPerRep ?? null;
+  const recRatio = plannedRec != null && proposalRec != null && plannedRec > 0 ? proposalRec / plannedRec : null;
+  const recovery = recRatio != null && plannedRec != null && proposalRec != null
+    && (recRatio <= RECOVERY_LOW || recRatio >= RECOVERY_HIGH)
+    ? `Recuperação entre repetições: ${fmtMin(plannedRec)} previstos contra ${fmtMin(proposalRec)} — ${proposalRec < plannedRec ? "menos" : "mais"} pausa muda o esforço.`
+    : null;
+
+  const changes = [
+    sameFamily ? `Estrutura diferente: ${base.label} → ${label}.` : `De ${FAMILY_LABEL[pf]} para ${FAMILY_LABEL[qf]}.`,
+    dose, recovery,
+  ].filter(Boolean).join(" ");
+
   return {
     verdict,
-    preserves: verdict === "equivalent" ? `Mantém ${FAMILY_LABEL[pf]}.`
+    preserves: sameFamily ? `Mantém ${FAMILY_LABEL[pf]}.`
       : verdict === "partial" ? "Mantém um treino de qualidade, mas desloca o foco."
         : "Nada do estímulo original — é outro tipo de treino.",
-    changes: verdict === "equivalent"
-      ? `Estrutura diferente: ${base.label} → ${label}.`
-      : `De ${FAMILY_LABEL[pf]} para ${FAMILY_LABEL[qf]}.`,
-    message: verdict === "equivalent" ? "Boa troca: mantém o objetivo da sessão."
+    changes,
+    message: sameFamily
+      ? (dose
+        ? (bigger
+          ? "Mesmo estímulo, dose bem maior: o objetivo se mantém, mas o treino fica mais duro do que o previsto."
+          : "Mesmo estímulo em dose bem menor: serve como sessão, mas não entrega o treino desta semana.")
+        : "Boa troca: mantém o objetivo da sessão.")
       : verdict === "partial" ? "Serve, mas muda parte do objetivo desta sessão."
         : pf === "aerobic" || pf === "endurance"
           ? "Não é um substituto equivalente: trocaria um dia leve por um treino forte. Você pode usar mesmo assim, mas a carga da semana muda."
@@ -651,7 +747,14 @@ export function evaluateProposal(text: string, planned: WeeklyPlanDay, ctx: Adap
   if (!built) return { understood: false, missing: ["o formato do treino"], summary: "", assumptions: [] };
   const day = built.day;
 
-  const { verdict, preserves, changes, message } = compareSessions(planned, parsed.kind, day.label);
+  const proposalWork = sessionWork(day, ctx.paces);
+  const { verdict, preserves, changes, message } = compareSessions(planned, parsed.kind, day.label, {
+    planned: sessionWork(planned.adaptation?.original ?? planned, ctx.paces),
+    // The jog between repetitions only counts when the athlete said what it is.
+    // Comparing the plan against our own default would be arguing with an
+    // assumption we just made on their behalf.
+    proposal: parsed.recoveryMin == null ? { ...proposalWork, recoveryMinPerRep: null } : proposalWork,
+  });
   const qf = familyOf(parsed.kind);
 
   const result: ProposalEvaluation = {
@@ -693,11 +796,62 @@ export interface SessionAdaptation {
   preserves: string;
   changes: string;
   verdict?: Verdict;
+  /**
+   * Declared after the session: what was actually done, kept *beside* the
+   * prescription and never written over it. The day goes on saying what was
+   * asked for; these two say what happened.
+   */
+  doneLabel?: string | null;
+  doneKm?: number | null;
   /** The prescription as it was, kept for history. */
   original: WeeklyPlanDay;
 }
 
 const DAY_ORDER: WeeklyPlanDay["day"][] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/**
+ * Record, after the fact, that the session was not the one prescribed.
+ *
+ * Planned, agreed and executed are three different things, and only the first
+ * two belong in the plan. What was planned stays on the day; what was done is
+ * written beside it. Writing the executed distance over `distance_km` — as this
+ * did at first — rewrites the prescription after the fact: the week's volume,
+ * the ratchet that carries it into next week and the adherence all read that
+ * field, so a substitution recorded there would make the plan look like
+ * whatever happened and count as the plan followed.
+ */
+export function recordExecuted(
+  plan: WeeklyPlanData,
+  dayKey: WeeklyPlanDay["day"],
+  input: {
+    execution: "adapted" | "other";
+    label?: string | null;
+    text?: string | null;
+    km: number;
+    compared?: { preserves: string; changes: string; verdict?: Verdict } | null;
+  },
+  now: Date = new Date(),
+): { plan: WeeklyPlanData } | { error: string } {
+  const current = plan.days?.find(d => d.day === dayKey);
+  if (!current) return { error: "Não há sessão neste dia." };
+  // What was agreed before the run already describes the session.
+  if (current.adaptation?.when === "before") return { error: "Este treino já foi adaptado antes da sessão." };
+  const base = current.adaptation?.original ?? current;
+  const label = input.label?.trim() || null;
+  return applyAdaptation(plan, dayKey, base, {
+    when: "after",
+    reason: null,
+    source: input.execution === "other" ? "other_workout" : "custom",
+    text: input.text?.trim() || null,
+    preserves: input.compared?.preserves ?? "",
+    changes: input.compared?.changes ?? "",
+    verdict: input.compared?.verdict,
+    doneLabel: input.execution === "other"
+      ? `Outro treino${label ? `: ${label}` : ""}`
+      : `Adaptado${label ? `: ${label}` : ""}`,
+    doneKm: Math.round(Number(input.km || 0) * 10) / 10,
+  }, now);
+}
 
 export function applyAdaptation(
   plan: WeeklyPlanData,

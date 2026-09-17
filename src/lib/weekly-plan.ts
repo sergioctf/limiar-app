@@ -772,6 +772,7 @@ export async function ensureWeeklyPlan(
     }),
     // How the previous week entered this one, in the athlete's language.
     week_reading: reading ?? undefined,
+    phase: ctx.phase,
   };
 
   // ── Upsert the week's report ───────────────────────────────────────────────

@@ -17,7 +17,7 @@ import {
   ADAPT_REASONS, adaptOptions, applyAdaptation, evaluateProposal, isAdaptable, undoAdaptation,
   type AdaptContext, type AdaptReason,
 } from "@/lib/session-adapt";
-import { mondayOf } from "@/lib/weekly-plan";
+import { mondayOf, phaseForRace } from "@/lib/weekly-plan";
 import { computeMetrics } from "@/lib/performance";
 import { cyclePosition } from "@/lib/mesocycle";
 import { normalizePrefs } from "@/lib/workout-builder";
@@ -36,7 +36,7 @@ async function loadContext(userId: string) {
   const admin = createAdminClient();
   const now = new Date();
   const monday = mondayOf(now);
-  const [reports, tests, profile, first] = await Promise.all([
+  const [reports, tests, profile, first, races] = await Promise.all([
     admin.from("coach_reports").select("id, full_report")
       .eq("user_id", userId).eq("period_type", "week").eq("period_start", monday).limit(1),
     admin.from("performance_tests").select("distance_km, time_seconds, avg_hr, max_hr")
@@ -44,6 +44,9 @@ async function loadContext(userId: string) {
     admin.from("profiles").select("training_prefs").eq("id", userId).maybeSingle(),
     admin.from("runs").select("date").eq("user_id", userId).is("deleted_at", null)
       .order("date", { ascending: true }).limit(1),
+    admin.from("races").select("race_date").eq("user_id", userId)
+      .gt("race_date", monday).is("time_seconds", null)
+      .order("race_date", { ascending: true }).limit(1),
   ]);
   const row = reports.data?.[0];
   if (!row?.full_report) return null;
@@ -70,7 +73,9 @@ async function loadContext(userId: string) {
     cycleNumber: cycle.cycle,
     excludedQuality: prefs.excludedQuality ?? [],
     minRunKm: prefs.minRunKm ?? 5,
-    phase: "base",
+    // The phase the week was built in — not an assumed "base". Older plans
+    // carry no phase, so it is recomputed from the next race, as the plan did.
+    phase: plan.phase ?? phaseForRace((races.data?.[0]?.race_date as string | undefined) ?? null, monday),
   };
   return { admin, reportId: row.id as string, plan, ctx, todayKey: dayKeyOf(athleteDateStr(now)) };
 }
