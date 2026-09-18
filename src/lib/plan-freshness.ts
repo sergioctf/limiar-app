@@ -95,6 +95,8 @@ export function planFingerprint(input: PlanInputs): PlanFingerprint {
       // stored hash and put the "plano desatualizado" banner in front of every
       // athlete at once — the start of the 31/08 incident.
       ...(p.excludedQuality?.length ? [[...p.excludedQuality].sort()] : []),
+      // Same rule: only when set, so nobody else's plan turns stale because the field exists.
+      ...(p.lightDays?.length ? [["light", [...p.lightDays].sort()]] : []),
     ]),
     sports: hash([
       [...input.sports].sort(),

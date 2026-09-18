@@ -17,6 +17,7 @@
  */
 import { GOAL_PARAMS, type StrengthPrefs, type CardioAddon } from "@/lib/strength-prefs";
 import { MUSCLE_LABEL, exerciseById, type MuscleGroup } from "@/lib/exercises";
+import { allocateRunSessions } from "@/lib/workout-builder";
 import type { DayKey, TrainingPrefs, WeeklyPlanDay, Race } from "@/types";
 import { isRunSession } from "@/lib/sports";
 
@@ -43,6 +44,7 @@ export type AdvisorPatch =
   | { kind: "prefs_quality"; qualityPerWeek: number }
   | { kind: "prefs_long_run_day"; day: DayKey }
   | { kind: "prefs_run_days"; runDays: DayKey[] }
+  | { kind: "prefs_light_day"; day: DayKey }
   | null;
 
 export interface AdvisorFinding {
@@ -93,6 +95,11 @@ export interface AdvisorInput {
    * One fast start is a bad day; four in a row is something to talk about.
    */
   executionHabit?: { key: string; count: number; total: number } | null;
+  /**
+   * Weekdays whose hard session keeps needing to bend — shortened, adapted for
+   * time or tiredness, swapped or not run (see `troubledDays`).
+   */
+  troubledDays?: import("@/lib/day-patterns").DayTrouble[];
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -618,6 +625,52 @@ export function analyzeTraining(input: AdvisorInput): AdvisorFinding[] {
     }
   }
 
+  // AGENDA: a weekday that keeps needing to bend is a fact about the week, not a failing.
+  const trouble = (input.troubledDays ?? []).find(t =>
+    prefs.runDays.includes(t.day) && !(prefs.lightDays ?? []).includes(t.day)
+    // Somewhere else has to be able to take the session.
+    && prefs.runDays.filter(d => d !== t.day).length >= 2);
+  if (trouble) {
+    const what = trouble.role === "long" ? "o longão" : "o treino forte";
+    const how = Array.from(new Set(trouble.kinds)).join(", ");
+    // Only offer a light day the plan can honour without breaking leve → tiro → longão.
+    const after = allocateRunSessions(prefs.runDays, {
+      longRunDay: prefs.longRunDay ?? null, qualityPerWeek: prefs.qualityPerWeek,
+      lightDays: [...(prefs.lightDays ?? []), trouble.day],
+    });
+    const honoured = after.get(trouble.day) === "easy";
+    const days = prefs.runDays.map(dayPt);
+    const dayList = days.length > 1 ? `${days.slice(0, -1).join(", ")} e ${days[days.length - 1]}` : days.join("");
+    if (!honoured) out.push({
+      key: `dia_pesado_${trouble.day}`,
+      area: "corrida",
+      severity: "media",
+      title: `Você costuma precisar ajustar o treino ${onDay(trouble.day)}`,
+      evidence: `Nas últimas semanas, ${what} ${onDay(trouble.day)} precisou de ajuste em ${trouble.troubled} de ${trouble.total} vezes (${how}).`,
+      proposal: trouble.role === "long"
+        ? `O longão fecha a semana e fica no dia que você escolheu. Se ${dayPt(trouble.day)} costuma apertar, escolha outro dia para o longão em "Minha semana" — ou, na semana em que apertar, use "Minha agenda desta semana".`
+        : `Com corrida ${dayList}, não há outro dia para ${what} sem abrir a semana com ele ou colá-lo no longão. ` +
+          `Se ${dayPt(trouble.day)} costuma apertar, troque esse dia de corrida em "Minha semana" — ou, na semana em que apertar, use "Minha agenda desta semana" ou "Adaptar este treino".`,
+      rationale:
+        "Um treino forte que costuma ser cortado entrega menos do que o mesmo treino num dia que você consegue cumprir. " +
+        "Mas a ordem leve → tiro → longão é sua, e o plano não a quebra para aliviar um dia.",
+      patch: null,
+    });
+    else out.push({
+      key: `dia_pesado_${trouble.day}`,
+      area: "corrida",
+      severity: "media",
+      title: `Você costuma precisar ajustar o treino ${onDay(trouble.day)}`,
+      evidence: `Nas últimas semanas, ${what} ${onDay(trouble.day)} precisou de ajuste em ${trouble.troubled} de ${trouble.total} vezes (${how}).`,
+      proposal: `Deixar ${dayPt(trouble.day)} mais leve no planejamento: ${what} passa para outro dia de corrida, e ${dayPt(trouble.day)} fica com uma rodagem leve.`,
+      rationale:
+        "Um treino forte que costuma ser cortado entrega menos do que o mesmo treino num dia que você consegue cumprir. " +
+        "A agenda da semana é um dado do planejamento, não uma desculpa depois que algo não aconteceu.",
+      patch: { kind: "prefs_light_day", day: trouble.day },
+      actionLabel: `Deixar ${dayPt(trouble.day)} mais leve`,
+    });
+  }
+
   // 15. The plan is more than the athlete is actually doing.
   if (input.adherence != null && input.adherence < 0.6 && prefs.runDays.length >= 4) {
     const trimmed = prefs.runDays.slice(0, prefs.runDays.length - 1);
@@ -725,6 +778,15 @@ export function applyAdvisorPatch(
     case "prefs_long_run_day": {
       if (nextPrefs.longRunDay === patch.day) break;
       nextPrefs.longRunDay = patch.day;
+      return { prefs: nextPrefs, strengthPrefs: nextStrength, changed: true };
+    }
+
+    case "prefs_light_day": {
+      const light = nextPrefs.lightDays ?? [];
+      if (light.includes(patch.day)) break;
+      nextPrefs.lightDays = [...light, patch.day].sort((a, b) => idx(a) - idx(b));
+      // A light day cannot be the long-run day the athlete no longer wants heavy.
+      if (nextPrefs.longRunDay === patch.day) nextPrefs.longRunDay = null;
       return { prefs: nextPrefs, strengthPrefs: nextStrength, changed: true };
     }
 

@@ -85,6 +85,12 @@ export interface TrainingPrefs {
   otherDays?: Partial<Record<import("@/lib/sports").SecondarySport, DayKey[]>>;
   /** Quality sessions the athlete does not do ("Não faço treino em ladeira"). */
   excludedQuality?: import("@/lib/mesocycle").QualityKind[];
+  /**
+   * Running days the athlete wants kept light: no quality session and no long
+   * run there while another day can take them. Learned from the agenda ("você
+   * costuma precisar encurtar o treino de quarta") and set only by the athlete.
+   */
+  lightDays?: DayKey[];
 }
 
 export interface Profile {
@@ -518,6 +524,13 @@ export interface WeeklyPlanData {
    * of assuming "base". Absent on plans made before this was recorded.
    */
   phase?: import("@/lib/workout-builder").WeekContext["phase"];
+  /**
+   * The week was reorganised around the athlete's agenda ("só consigo terça,
+   * quinta e sábado"). Keeps the days as they were, for "desfazer".
+   */
+  rearrangement?: import("@/lib/week-fit").WeekRearrangement;
+  /** Built on the running days the athlete gave for this week, before it was generated. */
+  agenda?: WeeklyPlanDay["day"][];
 }
 
 export interface PlanChatMessage {

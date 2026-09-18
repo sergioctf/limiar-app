@@ -14,10 +14,11 @@ import {
   buildWeekPlan, planWeeklyVolume, provenCapacity, volumeWithRatchet, normalizePrefs, isLegacyPlanShape, type WeekContext,
 } from "@/lib/workout-builder";
 import { normalizeStrengthPrefs, type StrengthPrefs } from "@/lib/strength-prefs";
+import { prefsForAgenda } from "@/lib/week-fit";
 import { planFingerprint, planStaleness, type Staleness } from "@/lib/plan-freshness";
 import { readWeek, type ShortfallReason, type WeekReading } from "@/lib/week-reading";
 import type { RunContext } from "@/lib/run-feedback";
-import type { WeeklyPlanData, Run, TrainingPrefs } from "@/types";
+import type { WeeklyPlanData, WeeklyPlanDay, Run, TrainingPrefs } from "@/types";
 
 /** Supabase client shape we rely on (service-role or user-scoped). */
 type DbClient = ReturnType<typeof import("@/lib/supabase/server").createAdminClient>;
@@ -504,6 +505,17 @@ export interface EnsurePlanResult {
  * Return the plan for `weekStart`, generating it when missing (or when forced).
  * Used on-demand by the coach UI and ahead-of-time by the Monday cron.
  */
+/** The running days the athlete said they have for a given week, if they said. */
+async function fetchAgenda(db: DbClient, userId: string, weekStart: string): Promise<WeeklyPlanDay["day"][] | null> {
+  try {
+    const { data, error } = await db.from("week_availability").select("run_days")
+      .eq("user_id", userId).eq("week_start", weekStart).limit(1);
+    if (error) return null;
+    const days = (data as Array<{ run_days: string[] | null }> | null)?.[0]?.run_days;
+    return Array.isArray(days) && days.length > 0 ? days as WeeklyPlanDay["day"][] : null;
+  } catch { return null; }
+}
+
 export async function ensureWeeklyPlan(
   db: DbClient,
   userId: string,
@@ -753,7 +765,16 @@ export async function ensureWeeklyPlan(
     excludedQuality: prefs.excludedQuality ?? [],
   };
 
-  const days = buildWeekPlan(ctx, sports ?? [], prefs, strengthPrefs);
+  /*
+   * The agenda the athlete gave for this week ("só consigo terça, quinta e
+   * sábado"), when they gave one before the week was built. It is planning
+   * data, not an excuse after the fact: the sessions are laid on those days.
+   * The fingerprint below keeps the profile's own days, so a one-week agenda
+   * never makes the plan look out of date.
+   */
+  const agenda = await fetchAgenda(db, userId, weekStart);
+  const weekPrefs = prefsForAgenda(prefs, agenda);
+  const days = buildWeekPlan(ctx, sports ?? [], weekPrefs, strengthPrefs);
 
   // Coach's note is best-effort — the plan stands on its own without it.
   const aiMessage = await coachNoteFor({
@@ -773,6 +794,7 @@ export async function ensureWeeklyPlan(
     // How the previous week entered this one, in the athlete's language.
     week_reading: reading ?? undefined,
     phase: ctx.phase,
+    agenda: agenda ?? undefined,
   };
 
   // ── Upsert the week's report ───────────────────────────────────────────────

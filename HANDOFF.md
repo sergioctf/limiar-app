@@ -340,7 +340,7 @@ Estão todas na seção 15, com a origem de cada uma.
 ## 3.5 Banco
 
 - Supabase Postgres, com RLS ativo em quase tudo. Tabelas e decisões na seção 5.
-- **Migrations manuais:** `supabase/schema.sql` (base de maio) + `supabase/migrations/002…033`, coladas no SQL Editor. **Não existe `001`**; `schema.sql` faz esse papel. Faltam DDLs de `activities`, `performance_tests`, `races` (ver alerta 3).
+- **Migrations manuais:** `supabase/schema.sql` (base de maio) + `supabase/migrations/002…034`, coladas no SQL Editor. **Não existe `001`**; `schema.sql` faz esse papel. Faltam DDLs de `activities`, `performance_tests`, `races` (ver alerta 3).
 - **Fora do repositório, só no Supabase:**
   - **extensões:** `pg_cron`, `pg_net`;
   - **job:** `limiar-morning`;
@@ -468,7 +468,7 @@ Limiar/                               ← pasta no OneDrive (NÃO é repo git)
     │   ├── lib/          ~100 módulos de domínio (o coração do app)
     │   ├── types/index.ts  todos os tipos compartilhados
     │   └── middleware.ts
-    ├── supabase/         schema.sql, seed.sql, migrations/002–033
+    ├── supabase/         schema.sql, seed.sql, migrations/002–034
     ├── tests/            64 arquivos, ~10.700 linhas, fixtures.ts, README.md
     ├── public/           manifest.json, sw.js, ícones
     ├── scripts/import-exercises.mjs   gera src/lib/exercise-catalog.ts
@@ -1180,6 +1180,15 @@ Fluxo OAuth completo (`whoop.ts`, `/api/whoop/*`, `WhoopCard`, migration 023). I
 - **Respostas:** manter · versão mais curta (via Adaptar, motivo novo "Estou cansado") · rodagem leve (troca existente) · amanhã (quando cabe). Nada muda sozinho; a pergunta substitui os botões antigos de recuperação baixa no card.
 - **Implementação:** `src/lib/today-check.ts`, `/api/coach/today-check`, `src/lib/adapt-context.ts` (extraído da rota de adaptação), `TodayCheck.tsx`, `EntryPrompt.tsx` (primeira prioridade), `TodayCard.tsx`. **Migration 033** `today_checks`, aplicada em 18/09.
 - **Limitações:** a notificação da manhã ainda não pergunta; limiares iniciais conservadores, a calibrar com as respostas gravadas. Detalhes em `docs/saude-no-treinador.md`.
+
+## 6.31 A semana cabendo na agenda ✅ (novo, 18/09)
+
+- **Objetivo:** "Esta semana só consigo treinar terça, quinta e sábado" — o Treinador reorganiza, explica o que priorizou e pede confirmação; a agenda vira dado do planejamento; e o padrão "você costuma precisar ajustar o treino de quarta" vira sugestão ("ponto 5").
+- **Reorganizar:** "Minha agenda desta semana / da próxima semana" no card do plano. `fitWeek` testa todas as distribuições e pontua: longão 100, teste 90, tiro 40, rodagem 10; −50 para dois dias fortes seguidos; −8 longão fora do dia; −5 se a semana não abre com leve; −0,5 por dia movido. A rodagem sai primeiro, o tiro que ficaria na véspera do longão sai, não compensa km; musculação fica no lugar. Prévia → Confirmar → Desfazer (`rearrangement` no plano).
+- **Agenda como dado:** para semana ainda não montada, fica em `week_availability` e `ensureWeeklyPlan` monta nesses dias (`prefsForAgenda`), sem alterar a impressão digital. **Migration 034**, aplicada em 18/09.
+- **Padrão:** `troubledDays` (≥ 3 ajustes e ≥ 50% no mesmo dia, por tempo/cansaço/troca/não feito — local e formato não contam) → observação do Conselheiro com o patch `prefs_light_day` (preferência nova `lightDays`, respeitada por `allocateRunSessions`) **só quando** o tiro pode ir para um dia que não abre a semana nem fica na véspera do longão; senão, observação sem botão explicando por quê (é o caso de seg/qua/sáb). Longão não usa dia leve.
+- **Implementação:** `src/lib/week-fit.ts`, `src/lib/day-patterns.ts`, `/api/coach/week-fit`, `WeekFitControl.tsx`, `advisor.ts` (achado `dia_pesado_*`), `workout-builder.ts` (`lightDays`), `plan-freshness.ts` (entra na impressão digital só quando definida), `weekly-plan.ts` (`fetchAgenda`), `session-adapt.ts` (desfazer uma adaptação mantém o dia atual depois de mover).
+- **Limitações:** só esta semana e a próxima; move sessões inteiras, sem redistribuir volume. Detalhes em `docs/semana-na-agenda.md`.
 
 # 7. TELAS E NAVEGAÇÃO
 
@@ -2331,7 +2340,7 @@ npx vercel deploy --prod --yes
 
 ## 18.4 Banco e migrations
 
-- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **033** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028 a 032; em 18/09 para 033).
+- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **034** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028 a 032; em 18/09 para 033 e 034).
 - **O código tolera tabela ausente** (`try/catch` e sondas como `notification_log` em `morning-dispatch.ts`), então uma migration não aplicada **não quebra**: desliga a feature em silêncio.
 - **Fora do repositório:**
 
@@ -2376,7 +2385,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 
 ## 19.1 O que existe
 
-- **Vitest 2.1**, `npm test` (= `vitest run`). **72 arquivos, 1.369 testes, todos passando** (rodado em 18/09/2026, ~5 s).
+- **Vitest 2.1**, `npm test` (= `vitest run`). **74 arquivos, 1.391 testes, todos passando** (rodado em 18/09/2026, ~5 s).
 - **Só funções puras de `src/lib/`.** Sem banco, sem rede, sem DOM.
 - **Fixture central** (`tests/fixtures.ts`): atleta com teste de 3 km em 13:00 e FC média 178 → **VDOT ≈ 43,7, LTHR = 165**. Falhas se leem como "isso deu errado para um corredor de VDOT 43".
 - **`tests/README.md`:** tabela dos bugs reais que cada teste protege. Leitura obrigatória.

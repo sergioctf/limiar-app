@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { WeekFitControl } from "@/components/coach/WeekFitControl";
 import {
   CalendarDays, Sparkles, Loader2, Send, RotateCcw,
   MessageCircle, ChevronDown, ChevronUp, X, WifiOff,
@@ -358,6 +359,15 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
 
         {weekTabs}
         {daysShortcut}
+        {/* The agenda is planning data: given before the week exists, the week is built on it. */}
+        <WeekFitControl
+          key={`fit-empty-${activeWeek}`}
+          week={activeWeek}
+          plan={null}
+          isNextWeek={isNextWeek}
+          todayKey={getTodayDayKey()}
+          onChanged={() => {}}
+        />
 
         {genError && (
           <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3">
@@ -434,6 +444,20 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
       {weekTabs}
 
       {daysShortcut}
+
+      {/* "Esta semana só consigo terça, quinta e sábado" — the week reorganised, explained, confirmed. */}
+      <WeekFitControl
+        key={`fit-${activeWeek}-${plan.rearrangement?.at ?? "none"}`}
+        week={activeWeek}
+        plan={plan}
+        isNextWeek={isNextWeek}
+        todayKey={todayKey}
+        onChanged={(next) => {
+          if (!next) return;
+          setPlans(prev => ({ ...prev, [activeWeek]: next }));
+          setSelectedDay(null);
+        }}
+      />
 
       {offlineWeek === activeWeek && (
         <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-3 py-2 flex items-center gap-2">

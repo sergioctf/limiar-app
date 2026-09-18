@@ -883,7 +883,9 @@ export function applyAdaptation(
 export function undoAdaptation(plan: WeeklyPlanData, dayKey: WeeklyPlanDay["day"]): { plan: WeeklyPlanData } | { error: string } {
   const current = plan.days.find(d => d.day === dayKey);
   if (!current?.adaptation) return { error: "Este treino não foi adaptado." };
-  const restored = current.adaptation.original;
+  // The session goes back to the slot it is in now: a week reorganised around the
+  // athlete's agenda may have moved it since it was adapted.
+  const restored = { ...current.adaptation.original, day: current.day, dayPt: current.dayPt };
   return { plan: { ...plan, days: plan.days.map(d => d.day === dayKey ? restored : d) } };
 }
 

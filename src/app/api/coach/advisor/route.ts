@@ -17,6 +17,7 @@ import {
   analyzeTraining, applyAdvisorPatch, setsPerMuscleFromLogs,
   type AdvisorFinding, type AdvisorPatch, type AdvisorInput,
 } from "@/lib/advisor";
+import { troubledDays } from "@/lib/day-patterns";
 import { nextTarget } from "@/lib/strength-progression";
 import { normalizePrefs } from "@/lib/workout-builder";
 import { normalizeStrengthPrefs } from "@/lib/strength-prefs";
@@ -227,11 +228,18 @@ export async function GET() {
     }
   })();
 
+  // Which weekday keeps needing to bend, over the last eight weeks.
+  const dayTrouble = troubledDays(
+    computeAdherenceHistory(reports, runs as never, activities, 8),
+    new Date().toISOString().slice(0, 10),
+  );
+
   const findings = analyzeTraining({
     prefs,
     strengthPrefs,
     planDays,
     executionHabit,
+    troubledDays: dayTrouble,
     weeklyKm: weeklyVolumesBefore(runs, weekStart),
     loggedSetsPerMuscle,
     liftProgress,

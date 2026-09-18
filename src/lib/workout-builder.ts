@@ -591,6 +591,7 @@ export function normalizePrefs(raw: unknown): TrainingPrefs {
     minLongRunKm: clampKm(p.minLongRunKm, 3, 42),
     otherDays:    cleanOtherDays(p.otherDays),
     excludedQuality: cleanExcludedQuality(p.excludedQuality),
+    lightDays:    cleanDays(p.lightDays),
   };
 }
 
@@ -655,11 +656,15 @@ export function isDefaultRunWeek(prefs: TrainingPrefs): boolean {
  */
 export function allocateRunSessions(
   runDays: WeeklyPlanDay["day"][],
-  opts: { longRunDay?: WeeklyPlanDay["day"] | null; qualityPerWeek?: number } = {},
+  opts: { longRunDay?: WeeklyPlanDay["day"] | null; qualityPerWeek?: number; lightDays?: WeeklyPlanDay["day"][] } = {},
 ): Map<WeeklyPlanDay["day"], "easy" | "quality" | "long"> {
   const days = [...runDays].sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b));
   const out = new Map<WeeklyPlanDay["day"], "easy" | "quality" | "long">();
   if (days.length === 0) return out;
+  // Days the athlete asked to keep light do not carry the quality session while
+  // another day can (see below). The long run never moves for it: it closes the
+  // week, and choosing its day is what "Minha semana" is for.
+  const light = new Set(opts.lightDays ?? []);
 
   // Long run: the athlete's choice if it's a running day, else the last one.
   const longDay = opts.longRunDay && days.includes(opts.longRunDay)
@@ -699,6 +704,16 @@ export function allocateRunSessions(
 
   let candidates = rest.filter(d => !adjacentBeforeLong(d));
   if (candidates.length < qualityCount) candidates = [...rest];
+  /*
+   * A light day moves the quality session only to a day that keeps the week's
+   * order — not the first run (easy opens the week) and not the eve of the long
+   * run. When no such day exists the light preference yields: the athlete's
+   * leve → tiro → longão is a rule, a lighter Wednesday is a wish.
+   */
+  if (light.size > 0) {
+    const clean = rest.filter(d => !adjacentBeforeLong(d) && !light.has(d) && d !== rest[0]);
+    if (clean.length >= qualityCount) candidates = clean;
+  }
 
   // The first run of the week absorbs the previous long run — keep it easy when
   // there are other days available.
@@ -864,6 +879,7 @@ export function buildWeekPlan(
   const allocation = allocateRunSessions(runDays, {
     longRunDay: prefs.longRunDay ?? null,
     qualityPerWeek: prefs.qualityPerWeek,
+    lightDays: prefs.lightDays ?? [],
   });
 
   // The quality session sets its own size (its caps are physiological), then
