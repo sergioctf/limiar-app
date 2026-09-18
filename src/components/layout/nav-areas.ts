@@ -36,7 +36,7 @@ export const NAV_AREAS: NavArea[] = [
     tabs: [{ href: "/coach", label: "Plano" }, { href: "/races", label: "Provas" }, { href: "/goals", label: "Metas" }],
   },
   {
-    key: "historico", href: "/runs", label: "Histórico", icon: History, paths: ["/runs", "/calendar", "/analytics"], width: "max-w-4xl",
+    key: "historico", href: "/runs", label: "Histórico", icon: History, paths: ["/runs", "/calendar", "/analytics", "/activities"], width: "max-w-4xl",
     tabs: [{ href: "/runs", label: "Atividades" }, { href: "/calendar", label: "Calendário" }, { href: "/analytics", label: "Gráficos" }],
   },
   { key: "saude", href: "/health", label: "Saúde", icon: HeartPulse, paths: ["/health"] },

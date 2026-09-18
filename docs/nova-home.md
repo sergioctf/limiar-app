@@ -108,7 +108,7 @@ A outra IA apontou três problemas; os três foram conferidos no código, e havi
 - **Blocos grandes** de novo: Corrida (sessões + km), Musculação (sessões + tempo), cada outro esporte feito, e **Calorias** (toque = detalhe por treino). Corrida e musculação aparecem sempre que fazem parte do plano, mesmo com zero.
 - **Recuperação com o anel de 0 a 100**, colorido pelo veredito, levando a Saúde. Voltaram também o convite ao check-in da manhã quando não há relógio, o aviso de teste de calibração e a nota "Trocado hoje · era …", que o protótipo tinha deixado de fora.
 - **Alerta de sobrecarga só com sinal de carga.** Em produção ele aparecia em vermelho ("sinais de sobrecarga") com forma +1 e ACWR 0,97, porque o único sinal era sono de 5,5 h — assunto que o anel e a pergunta antes do treino já tratam. Agora só ocupa "Merece atenção" com um sinal de carga (TSB, ACWR, sequência sem descanso, salto de volume).
-- **Contagem animada corrigida:** o primeiro quadro podia ter tempo negativo e mostrava "-0" / "-87" (bug antigo do `CountUp`, também do dashboard anterior).
+- **Contagem animada corrigida:** o primeiro quadro podia ter tempo negativo e mostrava "-0" / "-87" (bug antigo do `CountUp`, também do dashboard anterior). Agora o número começa já no valor real e só anima quando o navegador anima; sem quadros de animação (aba em segundo plano, economia de bateria), o número certo fica na tela.
 
 ### Calendário no celular
 - Cabeçalho que cabe: título encolhe, setas com área de toque de 44 px, "Registrar treino" vira só o ícone.
@@ -135,3 +135,10 @@ A outra IA apontou três problemas; os três foram conferidos no código, e havi
 ### O que ainda fica
 - Revisão visual mais profunda do Treinador (duas camadas de abas: área e "Zonas & Plano · Testes · Perfil IA · Relatórios").
 - O alerta de sobrecarga ainda considera só corridas na carga (`detectOvertraining`), enquanto Saúde e a recuperação já somam academia.
+
+### Verificação em produção (18/09, noite)
+- Home: anel de recuperação 60 · "Treine com margem"; semana 3/6 dias · 3h21 · 4 sessões; quarta com a corrida feita e a musculação do dia não feita (tracejado), quinta com a musculação não feita, sábado e domingo previstos; blocos Corrida 2 (14 km), Musculação 2 (1h51), Calorias 1.590 kcal · treinos; o alerta de sobrecarga (só sono) não aparece mais.
+- Histórico → Atividades: "133 atividades · 552,3 km de corrida", filtros Tudo · Corrida · Musculação · Ciclismo;  abre em Musculação (63 atividades); a página de uma musculação mostra 59 min, 322 kcal, FC 116, "Ver no calendário" e "Excluir"; o menu acende Histórico também nela.
+- Calendário em 390 px: sem rolagem lateral, semana começando na segunda, ícones nos dias, "+" compacto, "29,9 km".
+- Saúde: "O que compõe o score" fechado, com o resumo "5 sinais".
+- Deploy: a fila da Vercel travou duas vezes num deploy "Queued"; os presos foram **cancelados** pela API (o mesmo botão do painel, nada apagado) e o seguinte subiu normalmente.
