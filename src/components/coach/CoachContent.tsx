@@ -36,6 +36,8 @@ import { VdotEvolutionChart }   from "@/components/coach/VdotEvolutionChart";
 import { AthleteProfileCard }   from "@/components/coach/AthleteProfileCard";
 import { PlanAdherenceCard }    from "@/components/coach/PlanAdherenceCard";
 import { WeekRecapCard }        from "@/components/coach/WeekRecapCard";
+import { CycleSummaryCard }     from "@/components/dashboard/CycleSummaryCard";
+import { TestCalibrationCard }  from "@/components/dashboard/TestCalibrationCard";
 import type { WeekRecap }       from "@/lib/week-recap";
 import { AerobicEfficiencyCard } from "@/components/coach/AerobicEfficiencyCard";
 import { ProactiveAdjustBanner } from "@/components/coach/ProactiveAdjustBanner";
@@ -49,6 +51,9 @@ type Tab = "zonas" | "testes" | "relatorios" | "perfil";
 interface Props {
   /** The week that just closed, in three questions. Null while none has. */
   recap?: WeekRecap | null;
+  /** For where the block sits in its four-week cycle (moved from the Home, 18/09). */
+  cycleRuns?: import("@/types").Run[];
+  cycleActivities?: Array<{ date: string; sport_type: string }>;
   reports: CoachReport[];
   cycles:  TrainingCycle[];
   tests:   PerformanceTest[];
@@ -58,7 +63,7 @@ interface Props {
   weeklyActualKm?: Record<string, number>;
 }
 
-export function CoachContent({ recap = null, reports, cycles, tests: initialTests, adherenceHistory = [], efficiencyTrend = null, macroPlan = null, weeklyActualKm = {} }: Props) {
+export function CoachContent({ recap = null, cycleRuns = [], cycleActivities = [], reports, cycles, tests: initialTests, adherenceHistory = [], efficiencyTrend = null, macroPlan = null, weeklyActualKm = {} }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("zonas");
   const [expanded,  setExpanded]  = useState<string | null>(reports[0]?.id ?? null);
 
@@ -182,7 +187,7 @@ export function CoachContent({ recap = null, reports, cycles, tests: initialTest
             onClick={() => setActiveTab(tab.key)}
             className={`flex items-center justify-center gap-1.5 py-2.5 sm:py-2 px-2 sm:px-3 rounded-lg text-[11px] sm:text-xs font-semibold transition-colors duration-100 active:opacity-70 sm:flex-1 ${
               activeTab === tab.key
-                ? "bg-brand-500 text-white"
+                ? "bg-surface-600 text-surface-100 shadow-sm"
                 : "text-surface-400 hover:text-surface-200"
             }`}
           >
@@ -233,6 +238,12 @@ export function CoachContent({ recap = null, reports, cycles, tests: initialTest
             initialReportId={latestWeekReport?.id ?? null}
             paces={pacesForPlan}
           />
+
+          {/* Where this week sits in the four-week block, beside the week itself. */}
+          <CycleSummaryCard runs={cycleRuns} tests={tests} activities={cycleActivities} />
+
+          {/* Speaks only when the test is due; the no-test case has its own card below. */}
+          {tests.length > 0 && <TestCalibrationCard tests={tests} />}
 
           {/* The advisor reads everything above and proposes; it never edits. */}
           <AdvisorCard onGoToTests={() => { setShowTestForm(true); setActiveTab("testes"); }} />

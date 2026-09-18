@@ -2,39 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  ListOrdered,
-  Target,
-  BarChart3,
-  FileText,
-  Settings,
-  LogOut,
-  TrendingUp,
-  CalendarDays,
-  Trophy,
-  Users,
-  HeartPulse,
-} from "lucide-react";
+import { LogOut, TrendingUp } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { LimiarMark } from "@/components/LimiarMark";
+import { NAV_AREAS, areaOf } from "@/components/layout/nav-areas";
 
-const navItems = [
-  { href: "/",           icon: LayoutDashboard, label: "Dashboard" },
-  { href: "/runs",       icon: ListOrdered,     label: "Corridas"  },
-  { href: "/races",      icon: Trophy,          label: "Provas"    },
-  { href: "/calendar",   icon: CalendarDays,    label: "Calendário"},
-  { href: "/analytics",  icon: BarChart3,       label: "Gráficos"  },
-  { href: "/goals",      icon: Target,          label: "Metas"     },
-  { href: "/health",     icon: HeartPulse,      label: "Saúde"     },
-  { href: "/friends",    icon: Users,           label: "Amigos"    },
-  { href: "/coach",      icon: FileText,        label: "Treinador" },
-  { href: "/settings",   icon: Settings,        label: "Config."   },
-];
-
+/**
+ * Six areas instead of ten entries (18/09). Provas and Metas are part of the
+ * Treinador; Corridas, Calendário and Gráficos are the Histórico — each reached
+ * through the area's own tabs.
+ */
 export function Sidebar() {
   const pathname = usePathname();
+  const current = areaOf(pathname);
   const supabase = createClient();
 
   async function handleLogout() {
@@ -55,14 +36,16 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex flex-col gap-1 flex-1">
-        {navItems.map(({ href, icon: Icon, label }) => {
-          const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+        {NAV_AREAS.map(({ key, href, icon: Icon, label }) => {
+          const active = current?.key === key;
           return (
             <Link
-              key={href}
+              key={key}
               href={href}
+              aria-current={active ? "page" : undefined}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
+                key === "config" && "mt-4",
                 active
                   ? "bg-brand-500/15 text-brand-400 border border-brand-500/20"
                   : "text-surface-400 hover:text-surface-200 hover:bg-surface-700/60"

@@ -1,23 +1,34 @@
 "use client";
 
 /**
- * The new Home — a prototype living beside the current one until Sérgio approves.
+ * Hoje — the Home (approved by Sérgio on 18/09, replacing the dashboard).
  *
- * Hierarchy agreed on 18/09: what I do today → what I did this week → what
- * deserves attention. One main action. The recovery is context inside the
- * session, not a second card. The week counts every sport and never turns into
- * a productivity score.
+ * Hierarchy: what I do today → what I did this week → what deserves attention.
+ * One main action. The recovery is context inside the session, not a second
+ * card. The week counts every sport and never turns into a productivity score.
+ * Everything that used to live here and is not about today or this week moved
+ * to its own area: charts, records and totals to Histórico, load and form to
+ * Saúde, the cycle and calibration to Treinador.
  */
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Flame, HeartPulse } from "lucide-react";
+import { ArrowRight, Check, Flame, HeartPulse, Plus } from "lucide-react";
 import { Card, Section } from "@/components/ui/Surface";
 import { TodayCheckPanel } from "@/components/today/TodayCheck";
 import { AdaptSessionControl } from "@/components/today/AdaptSession";
 import { SwapActions } from "@/components/today/SwapActions";
 import { EntryPrompt } from "@/components/today/EntryPrompt";
+import { OnboardingGate } from "@/components/onboarding/OnboardingGate";
+import { SetupChecklist } from "@/components/onboarding/SetupChecklist";
+import { AutoStravaSync } from "@/components/dashboard/AutoStravaSync";
+import { AutoWellnessSync } from "@/components/dashboard/AutoWellnessSync";
+import { OvertrainingAlert } from "@/components/dashboard/OvertrainingAlert";
+import { NotificationNudge } from "@/components/dashboard/NotificationNudge";
+import { CalorieDetailModal } from "@/components/dashboard/CalorieDetailModal";
 import { SPORTS } from "@/lib/sports";
 import { formatMinutes, type WeekMovement } from "@/lib/week-movement";
+import type { CalorieDay } from "@/lib/calorie-breakdown";
+import type { OvertrainingAssessment } from "@/lib/overtraining";
 import type { Today } from "@/lib/today";
 import type { RecoveryToday } from "@/lib/recovery-today";
 import type { WeeklyPlanDay } from "@/types";
@@ -25,10 +36,16 @@ import type { WeeklyPlanDay } from "@/types";
 const num = (n: number) => Number(n.toFixed(1)).toString().replace(".", ",");
 const emojiOf = (sport: string | null) => (sport && sport in SPORTS ? SPORTS[sport as keyof typeof SPORTS].emoji : "•");
 
+function greeting(): string {
+  const h = new Date().getHours();
+  return h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+}
+
 export interface HomeAttention { text: string; href: string; action: string }
 
-export function HomePreview({
+export function HomeContent({
   dateLabel, today, recovery, week, tomorrow, attention, refreshKey,
+  firstName, userName, username, isNewUser, overtraining, calorieDay, lastSyncAt,
 }: {
   dateLabel: string;
   today: Today;
@@ -37,15 +54,26 @@ export function HomePreview({
   tomorrow: WeeklyPlanDay | null;
   attention: HomeAttention | null;
   refreshKey: string;
+  firstName: string | null;
+  userName: string | null;
+  username: string | null;
+  isNewUser: boolean;
+  overtraining: OvertrainingAssessment | null;
+  /** The week's workouts, measured and estimated, for "Calorias" on tap. */
+  calorieDay: CalorieDay | null;
+  lastSyncAt: string | null;
 }) {
   const todayIndex = Math.max(0, week.days.findIndex(d => d.isToday));
   const [selected, setSelected] = useState(todayIndex);
+  const [calorieDetail, setCalorieDetail] = useState(false);
   const day = week.days[selected];
   const status = today.status;
   const mainPending = today.state === "planned" && !!status && !status.sessions[0]?.done;
   const runPending = mainPending && today.session != null && (today.session.sport ?? "corrida") === "corrida"
     && today.session.type !== "strength";
   const doneRun = status?.done.find(d => d.kind === "run" && d.id);
+  // The one alert that costs something if ignored takes the attention slot first.
+  const overtrained = !!overtraining && overtraining.level !== "ok" && overtraining.signals.length > 0;
 
   const offer = (
     <>
@@ -61,14 +89,29 @@ export function HomePreview({
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto pb-6 animate-fade-in">
-      <p className="rounded-xl bg-brand-500/10 border border-brand-500/20 px-3 py-2 text-xs text-brand-200">
-        Prévia da nova Home. A atual continua em <Link href="/" className="underline">Início</Link>.
-      </p>
+      <OnboardingGate isNewUser={isNewUser} />
+      <AutoStravaSync />
+      <AutoWellnessSync />
+      <SetupChecklist name={userName} username={username} />
+      {calorieDetail && calorieDay && (
+        <CalorieDetailModal day={calorieDay} label="Esta semana" onClose={() => setCalorieDetail(false)} />
+      )}
+
+      {/* Quiet header: the greeting is not the information. */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xl font-bold text-surface-100">{greeting()}{firstName ? `, ${firstName}` : ""}</p>
+          <p className="text-xs text-surface-500 mt-0.5 first-letter:uppercase">{dateLabel}</p>
+        </div>
+        <Link href="/runs/new" className="btn-secondary shrink-0" aria-label="Registrar treino">
+          <Plus className="w-4 h-4" />
+        </Link>
+      </div>
 
       <EntryPrompt refreshKey={refreshKey} />
 
       {/* ── 1. Hoje — the protagonist ─────────────────────────────────────── */}
-      <Section title="Hoje" subtitle={dateLabel}>
+      <Section title="Hoje">
         <Card density="roomy">
           <div className="space-y-4">
             {today.state === "no_plan" ? (
@@ -107,7 +150,7 @@ export function HomePreview({
 
             {/* Health as context of the session, one line — the depth lives in Saúde. */}
             {recovery && recovery.score != null && (
-              <Link href="/health" className="flex items-center gap-2 text-xs text-surface-400 hover:text-surface-200">
+              <Link href="/health" className="flex items-center gap-2 min-h-[32px] text-xs text-surface-400 hover:text-surface-200">
                 <HeartPulse className="w-3.5 h-3.5 text-brand-400" />
                 <span>Recuperação {recovery.score} · {recovery.short}</span>
                 <ArrowRight className="w-3 h-3 ml-auto" />
@@ -155,7 +198,7 @@ export function HomePreview({
       <Section
         title="Sua semana"
         subtitle={week.sessions > 0 ? `${formatMinutes(week.minutes)} em atividades · ${week.sessions} ${week.sessions === 1 ? "sessão" : "sessões"}` : "Nenhuma atividade registrada ainda"}
-        action={<Link href="/calendar" className="text-xs text-surface-500 hover:text-surface-300">Histórico</Link>}
+        action={<Link href="/runs" className="text-xs text-surface-500 hover:text-surface-300">Histórico</Link>}
       >
         <Card>
           <div className="space-y-4">
@@ -211,14 +254,22 @@ export function HomePreview({
                   </li>
                 ))}
                 {week.calories && (
-                  <li className="flex items-baseline justify-between gap-2 text-sm border-t border-surface-700/60 pt-1.5">
-                    <span className="text-surface-200 inline-flex items-center gap-1.5"><Flame className="w-3.5 h-3.5 text-orange-400" /> Calorias</span>
-                    <span className="text-surface-400 tabular-nums">
-                      {week.calories.kcal.toLocaleString("pt-BR")} kcal
-                      <span className="text-surface-500 text-xs">
-                        {week.calories.source === "relogio" ? " · ativas, do relógio" : week.calories.source === "misto" ? " · relógio + treinos" : " · nos treinos (Strava)"}
+                  <li className="border-t border-surface-700/60 pt-1">
+                    {/* Details on demand: what each workout burned, measured or estimated. */}
+                    <button
+                      type="button"
+                      onClick={() => setCalorieDetail(true)}
+                      disabled={!calorieDay}
+                      className="w-full min-h-[44px] flex items-center justify-between gap-2 text-sm text-left"
+                    >
+                      <span className="text-surface-200 inline-flex items-center gap-1.5"><Flame className="w-3.5 h-3.5 text-orange-400" /> Calorias</span>
+                      <span className="text-surface-400 tabular-nums">
+                        {week.calories.kcal.toLocaleString("pt-BR")} kcal
+                        <span className="text-surface-500 text-xs">
+                          {week.calories.source === "relogio" ? " · ativas, do relógio" : week.calories.source === "misto" ? " · relógio + treinos" : " · nos treinos (Strava)"}
+                        </span>
                       </span>
-                    </span>
+                    </button>
                   </li>
                 )}
               </ul>
@@ -228,13 +279,25 @@ export function HomePreview({
       </Section>
 
       {/* ── 3. At most one thing that deserves attention ─────────────────── */}
-      {attention && (
+      {overtrained ? (
+        <Section title="Merece atenção">
+          <OvertrainingAlert assessment={overtraining!} />
+        </Section>
+      ) : attention && (
         <Section title="Merece atenção">
           <Link href={attention.href} className="flex items-center justify-between gap-3 rounded-2xl border border-surface-700 px-4 py-3 min-h-[56px] hover:border-surface-600">
             <span className="text-sm text-surface-200">{attention.text}</span>
             <span className="shrink-0 inline-flex items-center gap-1 text-sm text-brand-400">{attention.action} <ArrowRight className="w-4 h-4" /></span>
           </Link>
         </Section>
+      )}
+
+      <NotificationNudge />
+
+      {lastSyncAt && (
+        <p className="text-center text-[11px] text-surface-600">
+          Strava sincronizado em {new Date(lastSyncAt).toLocaleDateString("pt-BR")}
+        </p>
       )}
     </div>
   );

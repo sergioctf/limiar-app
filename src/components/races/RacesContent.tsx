@@ -143,7 +143,7 @@ export function RacesContent({ initialRaces }: Props) {
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto animate-fade-in">
+    <div className="space-y-6 max-w-3xl mx-auto animate-fade-in">
 
       {/* Header */}
       <div className="flex items-center justify-between">

@@ -1190,12 +1190,12 @@ Fluxo OAuth completo (`whoop.ts`, `/api/whoop/*`, `WhoopCard`, migration 023). I
 - **Implementação:** `src/lib/week-fit.ts`, `src/lib/day-patterns.ts`, `/api/coach/week-fit`, `WeekFitControl.tsx`, `advisor.ts` (achado `dia_pesado_*`), `workout-builder.ts` (`lightDays`), `plan-freshness.ts` (entra na impressão digital só quando definida), `weekly-plan.ts` (`fetchAgenda`), `session-adapt.ts` (desfazer uma adaptação mantém o dia atual depois de mover).
 - **Limitações:** só esta semana e a próxima; move sessões inteiras, sem redistribuir volume. Detalhes em `docs/semana-na-agenda.md`.
 
-## 6.32 Nova Home (protótipo em /hoje) e status único do dia 🟡 (novo, 18/09)
+## 6.32 Nova Home, seis áreas e status único do dia ✅ (novo, 18/09)
 
 - **Decisão:** Home = "Hoje": treino do dia protagonista → semana com todas as atividades registradas (tempo comum, distância por esporte, calorias do relógio ou dos treinos) → no máximo um item de atenção. Sem % na Home. Mapa de navegação decidido por Sérgio: Hoje · Treinador (+ Provas e Metas) · Histórico (Corridas + Calendário + Gráficos + recordes/conquistas) · Saúde (+ carga e forma) · Amigos · Configurações — as três últimas com mais destaque.
 - **Status único do dia ✅:** `src/lib/day-status.ts` define "feito" sessão por sessão (corrida, musculação, pedal…) e é usado pelo card Hoje, pela recuperação do dia, pela adesão e pela nova Home. Corrigiu: dia só de musculação nunca terminava; dia de corrida + musculação terminava após a corrida; três definições diferentes de "feito".
-- **Protótipo 🟡:** `/hoje` (`HomePreview.tsx`, `week-movement.ts`), com dados reais, fora do menu, até Sérgio aprovar. A Home atual continua em `/`.
-- **Próximo:** aprovar → `/hoje` vira a Home, blocos migram para as áreas do mapa, nova navegação, linguagem visual. Detalhes em `docs/nova-home.md`.
+- **Aplicado após aprovação:** `/` é a nova Home (`HomeContent.tsx`, `week-movement.ts`); `/hoje` redireciona. Carga e forma → Saúde; ciclo e calibração → Treinador; recordes, conquistas, meta e totais → Histórico/Gráficos (`HistoryHighlights.tsx`). Navegação de seis áreas numa definição só (`nav-areas.ts`): barra lateral, barra de baixo sem "Mais", Configurações fixa no topo do celular (`MobileTopBar`) e abas das áreas (`AreaTabs`: Plano · Provas · Metas; Corridas · Calendário · Gráficos). Abas de página em cinza neutro (laranja = ação). Removidos `DashboardContent.tsx`, `TodayCard.tsx`, `WeeklyPlanSummaryCard.tsx`. A Home não carrega mais todo o histórico com o JSON do Strava (A6 parcialmente resolvida).
+- **Próximo:** lista única de atividades no Histórico; revisão visual das telas internas. Detalhes em `docs/nova-home.md`.
 
 # 7. TELAS E NAVEGAÇÃO
 

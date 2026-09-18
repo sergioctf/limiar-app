@@ -113,6 +113,7 @@ export default async function HealthPage() {
     monitor: buildMonitor(rows, today),
     checkin: inputs.checkin,
     checkins,
+    fitness: inputs.fitness,
     nutrition,
     garminReadiness: rows.find(r => r.date === today)?.garmin_readiness ?? null,
     // `select("*")` only carries the key once migration 031 has run; before that

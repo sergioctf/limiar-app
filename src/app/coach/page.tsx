@@ -164,6 +164,8 @@ export default async function CoachPage() {
     <AppShell>
       <CoachContent
         recap={recap}
+        cycleRuns={runRows as unknown as import("@/types").Run[]}
+        cycleActivities={(recentActivities ?? []) as Array<{ date: string; sport_type: string }>}
         reports={reports ?? []}
         cycles={cycles ?? []}
         tests={tests}

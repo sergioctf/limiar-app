@@ -14,9 +14,13 @@ import type { Run } from "@/types";
 
 type Tab = "volume" | "pace" | "heart" | "longrun" | "evolution";
 
-interface Props { runs: Run[] }
+interface Props {
+  runs: Run[];
+  /** Records, achievements and totals — moved here from the Home (18/09). */
+  highlights?: React.ReactNode;
+}
 
-export function AnalyticsContent({ runs }: Props) {
+export function AnalyticsContent({ runs, highlights }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("volume");
   const [showReport, setShowReport] = useState(false);
 
@@ -55,6 +59,8 @@ export function AnalyticsContent({ runs }: Props) {
 
       {showReport && <MonthlyReportModal runs={runs} onClose={() => setShowReport(false)} />}
 
+      {highlights}
+
       {/* Tabs */}
       <div className="flex gap-1 bg-surface-700 rounded-xl p-1 overflow-x-auto">
         {tabs.map(({ key, label, icon: Icon }) => (
@@ -63,7 +69,7 @@ export function AnalyticsContent({ runs }: Props) {
             onClick={() => setActiveTab(key)}
             className={`flex-1 min-w-[70px] flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition-all ${
               activeTab === key
-                ? "bg-brand-500 text-white shadow"
+                ? "bg-surface-600 text-surface-100 shadow-sm"
                 : "text-surface-400 hover:text-surface-200"
             }`}
           >

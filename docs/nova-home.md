@@ -1,6 +1,6 @@
 # Nova Home e mapa de navegação
 
-Registro de 18/09/2026. Direção discutida por Sérgio com a outra IA e revisada aqui contra o código. **Estado: protótipo no ar em `/hoje`, ao lado da Home atual; nada no menu mudou ainda.**
+Registro de 18/09/2026. Direção discutida por Sérgio com a outra IA e revisada aqui contra o código. **Estado: aprovada e aplicada em 18/09 — a nova Home é a Início, a navegação tem seis áreas e os blocos antigos foram para as áreas do mapa (ver "Aplicado", no fim).**
 
 ## O que foi decidido
 
@@ -52,3 +52,47 @@ A outra IA apontou três problemas; os três foram conferidos no código, e havi
 1. `/hoje` substitui a Home atual; os blocos que saem (carga, volume de 12 semanas, recordes, conquistas, totais, ciclo, teste de calibração) vão para Histórico, Saúde e Treinador conforme o mapa.
 2. Nova navegação (barra inferior e lateral) com as seis áreas.
 3. Linguagem visual: uma ação principal por tela, menos caixas dentro de caixas, cores com significado, detalhes sob demanda, estados vazios e carregamentos.
+
+## Aplicado (18/09/2026, depois do "perfeito, prossiga")
+
+### A Home
+- `/` é a nova Home (`HomeContent.tsx`); `/hoje` redireciona para `/`.
+- Mantém o que a antiga fazia sem aparecer: sincronização automática do Strava e do relógio, boas-vindas e checklist de quem está começando, puxar para atualizar, lembrete de notificações e "Strava sincronizado em…".
+- **Calorias** ficam na Home e agora abrem o detalhe por treino (medido × estimado) ao tocar.
+- O **alerta de sobrecarga** ocupa o espaço "Merece atenção" com prioridade sobre tudo.
+- A Home deixou de carregar **todas** as corridas com o JSON bruto do Strava (dívida A6): carrega a semana e seis meses de corridas com as colunas necessárias.
+- Removidos por ficarem sem uso: `DashboardContent.tsx`, `TodayCard.tsx`, `WeeklyPlanSummaryCard.tsx`.
+
+### Para onde foi cada bloco
+| Bloco da Home antiga | Agora |
+|---|---|
+| Carga de treino (condicionamento, fadiga e forma) | **Saúde** → "Forma e carga" (90 dias, corrida e academia; calculada no mesmo carregador da recuperação) |
+| Ciclo de 4 semanas e teste de calibração | **Treinador**, logo abaixo do plano da semana (o aviso de calibração só aparece quando há teste e ele venceu) |
+| Recordes, conquistas, meta de prova, "Seus números" | **Histórico → Gráficos**, no topo (`HistoryHighlights.tsx`) |
+| Volume das últimas 12 semanas | Já existia em Gráficos — retirado da Home sem perda |
+| Atividade recente | Substituída pela faixa da semana na Home e pela lista do Histórico |
+| Resumo do plano da semana | Substituído pela faixa da semana (planejado apagado) e pelo Treinador |
+
+### Navegação
+- `nav-areas.ts`: **uma definição** das seis áreas, lida pela barra lateral, pela barra de baixo e pelas abas das áreas.
+- **Computador:** Hoje · Treinador · Histórico · Saúde · Amigos · Configurações.
+- **Celular:** barra de baixo com Hoje · Treinador · Histórico · Saúde · Amigos (acabou o "Mais", onde Saúde e Amigos ficavam escondidos) e **Configurações sempre no topo** (`MobileTopBar`).
+- **Abas das áreas** (`AreaTabs`): Treinador = Plano · Provas · Metas; Histórico = Corridas · Calendário · Gráficos. Aparecem só nas páginas da área (não no detalhe de uma corrida). Cada área tem uma largura única, para as abas alinharem com o conteúdo (Provas passou de 4xl para 3xl, como Plano e Metas).
+
+### Linguagem visual (primeira passada)
+- **Laranja é ação.** As abas de navegação de página (Treinador, Gráficos, Metas, "Esta semana / Próxima") passaram a marcar a aba ativa em cinza neutro, como as abas de área; escolhas em formulários (dias, experiência…) continuam em laranja, porque ali a cor marca a opção escolhida.
+- Menos caixas dentro de caixas na Home; uma ação principal ("Ver treino"); detalhes sob demanda (dia da semana, calorias, recuperação → Saúde).
+
+### Verificação em produção (18/09)
+- Home em `/`: "Boa tarde, Sérgio · Sexta, 18 de setembro", Descanso, Recuperação 60, semana 3h21 em 4 sessões, calorias 1.590 kcal nos treinos.
+- Menu lateral com as seis áreas; a área certa acesa em cada página.
+- Treinador: abas Plano · Provas · Metas, alinhadas ao conteúdo (768 px) nas três páginas. Histórico: Corridas · Calendário · Gráficos, alinhadas (896 px) nas três.
+- Gráficos: "Seus números" (69 corridas, 552 km, 16 dias treinados em 30) e recordes pessoais.
+- Saúde: "Forma e carga" (condicionamento 29, fadiga 27, forma +2).
+- Celular (390 px, com a sessão do Sérgio): barra de baixo Hoje · Treinador · Histórico · Saúde · Amigos, engrenagem de Configurações no topo, sem rolagem lateral.
+- Suíte: 76 arquivos, 1.407 testes, `tsc` limpo.
+
+### O que fica para a próxima passada
+- **Uma lista única de atividades no Histórico.** "Corridas" ainda lista só corridas; outros esportes aparecem no Calendário. O caminho único por esporte já existe na Home; falta no Histórico.
+- **Revisão visual das telas internas** (Treinador, Saúde, Gráficos) com as mesmas regras: uma ação principal, menos cartões competindo, estados vazios e carregamentos.
+- Os cabeçalhos de página ainda variam ("19 relatório(s) · 5 ciclo(s)…" no Treinador), e a distância total em Gráficos usa ponto em vez de vírgula.

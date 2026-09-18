@@ -303,7 +303,7 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
           key={w.key}
           onClick={() => setActiveWeek(w.key)}
           className={`flex-1 min-h-[44px] py-1.5 px-3 rounded-lg text-[11px] font-semibold transition-colors duration-100 ${
-            activeWeek === w.key ? "bg-brand-500 text-white" : "text-surface-400 hover:text-surface-200"
+            activeWeek === w.key ? "bg-surface-600 text-surface-100 shadow-sm" : "text-surface-400 hover:text-surface-200"
           }`}
         >
           {w.label}

@@ -151,7 +151,7 @@ export function GoalsContent({ goals, projections, strategies, latestTest = null
             onClick={() => setActiveTab(tab)}
             className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
               activeTab === tab
-                ? "bg-brand-500 text-white shadow"
+                ? "bg-surface-600 text-surface-100 shadow-sm"
                 : "text-surface-400 hover:text-surface-200"
             }`}
           >

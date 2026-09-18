@@ -3,6 +3,7 @@ import { IdentityGate } from "@/components/profile/IdentityGate";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
+import { AreaTabs, MobileTopBar } from "./AreaChrome";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -13,6 +14,7 @@ export function AppShell({ children }: AppShellProps) {
     <div className="flex min-h-screen">
       <Sidebar />
       <main className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
+        <MobileTopBar />
         <OfflineBanner />
         {/*
           The readiness pop-up used to live here, firing on whatever page the
@@ -23,6 +25,7 @@ export function AppShell({ children }: AppShellProps) {
         {/* Content area — padded on mobile for bottom nav + safe area */}
         <div className="flex-1 p-4 md:p-6 lg:pb-6" style={{ paddingBottom: "calc(7.5rem + env(safe-area-inset-bottom))" }}>
           <ErrorBoundary>
+            <AreaTabs />
             {children}
             {/* Blocks only when name, surname or handle is missing. */}
             <IdentityGate />

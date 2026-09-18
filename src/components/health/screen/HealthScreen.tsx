@@ -27,9 +27,13 @@ import type { RecoveryToday } from "@/lib/recovery-today";
 import type { DayRecovery, MonitorItem, SleepWeek, Vital } from "@/lib/health-view";
 import type { NutritionSummary } from "@/components/health/NutritionCard";
 import type { BodyMeasurement, HealthCheckin, Supplement } from "@/types";
+import type { DailyLoad } from "@/lib/training-load";
+import { FitnessCard } from "@/components/dashboard/FitnessCard";
 
 export interface HealthScreenData {
   today: string;
+  /** Fitness, fatigue and form over 90 days (running and the gym). */
+  fitness: DailyLoad[];
   /** "watch" when a device measures the night; "checkin" when the athlete's answers are all there is. */
   mode: "watch" | "checkin";
   recovery: RecoveryToday;
@@ -182,6 +186,11 @@ export function HealthScreen({
 
         <Section title="Carga × recuperação" subtitle="Últimos 14 dias">
           <LoadRecoveryChart history={data.history} />
+        </Section>
+
+        {/* Condicionamento, fadiga e forma — moved here from the Home (18/09): it explains the body, not the day. */}
+        <Section title="Forma e carga" subtitle="Corrida e academia">
+          <FitnessCard data={data.fitness} />
         </Section>
 
         <Section title="Sono" subtitle={watchMode ? undefined : "Pelo que você informou nos check-ins"}>

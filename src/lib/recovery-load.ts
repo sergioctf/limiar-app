@@ -7,7 +7,7 @@
  */
 import { buildRecoveryToday, type RecoveryToday } from "@/lib/recovery-today";
 import { addDays, type LoadDay } from "@/lib/health-view";
-import { computeTrainingLoad, type LoadActivity } from "@/lib/training-load";
+import { computeTrainingLoad, type DailyLoad, type LoadActivity } from "@/lib/training-load";
 import { computeMetrics } from "@/lib/performance";
 import { athleteDateStr } from "@/lib/week";
 import { getMondayStr, toBrt } from "@/lib/plan-notify";
@@ -29,6 +29,8 @@ export interface RecoveryInputs {
   doneKm: number;
   strengthDone: boolean;
   recovery: RecoveryToday;
+  /** Ninety days of fitness, fatigue and form — the load card that moved from the Home to Saúde. */
+  fitness: DailyLoad[];
 }
 
 function parsePlan(raw: string | null | undefined): WeeklyPlanData | null {
@@ -71,12 +73,14 @@ export async function loadRecoveryInputs(db: Db, userId: string, now: Date = new
     ? computeMetrics(test.distance_km * 1000, test.time_seconds, test.avg_hr ?? undefined, test.max_hr ?? undefined)
     : null;
   const load: Record<string, LoadDay> = {};
+  let fitness: DailyLoad[] = [];
   try {
     const threshold = metrics?.paces.find(p => p.name === "threshold")?.pace_min_sec ?? null;
     const loadActivities = (loadActsRes.data ?? []) as LoadActivity[];
     for (const d of computeTrainingLoad(runs, metrics?.lthr ?? null, threshold, 45, loadActivities)) {
       load[d.date] = { tss: d.tss, tsb: d.tsb };
     }
+    fitness = computeTrainingLoad(runs, metrics?.lthr ?? null, threshold, 90, loadActivities);
   } catch { /* no runs yet — readiness simply goes without load */ }
 
   const reports = (plansRes.data ?? []) as Array<{ id: string; full_report: string | null; period_start: string }>;
@@ -106,5 +110,5 @@ export async function loadRecoveryInputs(db: Db, userId: string, now: Date = new
     doneKm, strengthDone, status: todayStatus,
   });
 
-  return { today, rows, load, checkin, plan, planReportId: current?.id ?? null, doneKm, strengthDone, recovery };
+  return { today, rows, load, checkin, plan, planReportId: current?.id ?? null, doneKm, strengthDone, recovery, fitness };
 }
