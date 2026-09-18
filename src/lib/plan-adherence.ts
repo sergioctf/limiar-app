@@ -5,6 +5,7 @@
  */
 import { localDateStr } from "@/lib/week";
 import { movingSeconds } from "@/lib/run-time";
+import { isStrengthActivity } from "@/lib/sports";
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 
 export type DayStatus = "done" | "partial" | "adapted" | "missed" | "rest_ok" | "extra" | "upcoming";
@@ -36,8 +37,6 @@ export interface WeekAdherence {
 }
 
 const DAY_ORDER: WeeklyPlanDay["day"][] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-const GYM_TYPES = ["weight", "workout", "crossfit", "gym", "strength", "hiit", "hitt"];
 
 /*
  * Moving time, not elapsed. The athlete who pauses at a red light, or between
@@ -88,9 +87,8 @@ export function computeWeekAdherence(
     const dayRuns = runs.filter(r => r.date === date);
     const actualKm  = dayRuns.reduce((s, r) => s + r.distance_km, 0);
     const actualMin = dayRuns.reduce((s, r) => s + movingSeconds(r) / 60, 0);
-    const hasGym = activities.some(a =>
-      a.date === date && GYM_TYPES.some(t => a.sport_type?.toLowerCase().includes(t))
-    );
+    // Same rule as the Hoje card and the day's recovery (see day-status).
+    const hasGym = activities.some(a => a.date === date && isStrengthActivity(a.sport_type));
 
     let status: DayStatus;
     const isFuture = date > today;

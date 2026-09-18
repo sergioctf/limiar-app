@@ -13,6 +13,7 @@
  */
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 import { sessionWhy, type WhyContext } from "@/lib/session-why";
+import { dayStatus, type DayActivity, type DayRun, type DayStatus } from "@/lib/day-status";
 
 export type TodayState = "planned" | "done" | "rest" | "no_plan";
 
@@ -40,13 +41,17 @@ export interface Today {
    * Null when there is nothing worth saying.
    */
   why?: string | null;
+  /** Each planned session and whether it happened; everything registered today. */
+  status?: DayStatus;
 }
 
 const DAY_KEYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
 interface Input {
   plan: WeeklyPlanData | null | undefined;
-  runs: Array<{ date: string; distance_km: number }>;
+  runs: DayRun[];
+  /** Everything else registered — lifting, rides, swims. A lifting-only day finishes with it. */
+  activities?: DayActivity[];
   /** YYYY-MM-DD in the athlete's calendar. */
   today: string;
   weekStart: string;
@@ -72,6 +77,8 @@ export function buildToday(input: Input): Today {
   const session = key
     ? (input.plan?.days ?? []).find(d => d.day === key) ?? null
     : null;
+  // Session by session, the same way every screen reads the day.
+  const status = dayStatus({ date: input.today, planned: session, runs: input.runs, activities: input.activities ?? [] });
 
   /*
    * The calibration nudge, when it is worth making.
@@ -124,13 +131,14 @@ export function buildToday(input: Input): Today {
       ?? (input.hasTest ? "" : "Sem ritmo alvo — o teste de 3 km destrava isso.");
 
   /*
-   * Any running counts the day as done.
-   *
-   * Judging "did you do enough" belongs to weekly adherence, which weighs the
-   * whole week. On the home screen, telling somebody who ran 5 of 6 km that
-   * they missed the session teaches them to stop opening the app.
+   * Done when every session of the day has something that counts for it — any
+   * run for the run, any lifting for the lifting. Not "did you do enough": that
+   * belongs to weekly adherence, and telling somebody who ran 5 of 6 km that
+   * they missed the session teaches them to stop opening the app. But a lifting
+   * day finishes with the lifting, and a run + lifting day is not over after
+   * the run.
    */
-  const state: TodayState = doneKm > 0 ? "done" : "planned";
+  const state: TodayState = status.allDone ? "done" : "planned";
 
   return {
     state,
@@ -138,6 +146,7 @@ export function buildToday(input: Input): Today {
     headline,
     detail,
     doneKm,
+    status,
     why: sessionWhy(session, input.why ?? {}),
     prompt: needsTest ? testPrompt : undefined,
   };

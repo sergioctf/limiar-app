@@ -291,7 +291,8 @@ export function DashboardContent({
    */
   const today = useMemo(() => buildToday({
     plan: weeklyPlan ?? null,
-    runs: runs.map(r => ({ date: r.date, distance_km: r.distance_km })),
+    runs: runs.map(r => ({ date: r.date, distance_km: r.distance_km, duration_seconds: r.duration_seconds })),
+    activities: weekActivities.map(a => ({ date: a.date, sport_type: a.sport_type, duration_seconds: a.duration_seconds ?? null })),
     today: localDateStr(new Date()),
     weekStart: weekStartStr,
     hasTest: !!latestTest,

@@ -13,6 +13,7 @@ import { athleteDateStr } from "@/lib/week";
 import { getMondayStr, toBrt } from "@/lib/plan-notify";
 import { isStrengthActivity } from "@/lib/sports";
 import { dayKeyOf } from "@/lib/session-swap";
+import { dayStatus } from "@/lib/day-status";
 import type { HealthCheckin, Run, WeeklyPlanData, WellnessData } from "@/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -54,7 +55,7 @@ export async function loadRecoveryInputs(db: Db, userId: string, now: Date = new
     db.from("health_checkins").select("*").eq("user_id", userId).eq("date", today).maybeSingle(),
     db.from("coach_reports").select("id, full_report, period_start")
       .eq("user_id", userId).eq("period_type", "week").in("period_start", [monday, nextMonday]),
-    db.from("activities").select("sport_type").eq("user_id", userId).eq("date", today).is("deleted_at", null),
+    db.from("activities").select("sport_type, duration_seconds").eq("user_id", userId).eq("date", today).is("deleted_at", null),
     // Gym, bike and swim sessions load the body too — see `activityTSS`.
     db.from("activities").select("date, sport_type, duration_seconds, avg_hr")
       .eq("user_id", userId).gte("date", addDays(today, -180)).is("deleted_at", null),
@@ -84,7 +85,16 @@ export async function loadRecoveryInputs(db: Db, userId: string, now: Date = new
   const nextPlan = parsePlan(reports.find(r => r.period_start === nextMonday)?.full_report);
 
   const doneKm = runs.filter(r => r.date === today).reduce((s, r) => s + (Number(r.distance_km) || 0), 0);
-  const strengthDone = ((actsRes.data ?? []) as Array<{ sport_type: string }>).some(a => isStrengthActivity(a.sport_type));
+  const todayActs = ((actsRes.data ?? []) as Array<{ sport_type: string; duration_seconds: number | null }>)
+    .map(a => ({ ...a, date: today }));
+  const strengthDone = todayActs.some(a => isStrengthActivity(a.sport_type));
+  // One definition of "done" for the whole app (see day-status).
+  const todayStatus = dayStatus({
+    date: today,
+    planned: plan?.days.find(d => d.day === dayKeyOf(today)) ?? null,
+    runs: runs.map(r => ({ date: r.date, distance_km: Number(r.distance_km) || 0, duration_seconds: r.duration_seconds })),
+    activities: todayActs,
+  });
   const checkin = (checkinRes.data ?? null) as HealthCheckin | null;
 
   const recovery = buildRecoveryToday({
@@ -93,7 +103,7 @@ export async function loadRecoveryInputs(db: Db, userId: string, now: Date = new
     tomorrowOverride: dayKeyOf(today) === "Sun"
       ? nextPlan?.days.find(d => d.day === "Mon") ?? null
       : undefined,
-    doneKm, strengthDone,
+    doneKm, strengthDone, status: todayStatus,
   });
 
   return { today, rows, load, checkin, plan, planReportId: current?.id ?? null, doneKm, strengthDone, recovery };

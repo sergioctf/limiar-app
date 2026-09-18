@@ -1190,6 +1190,13 @@ Fluxo OAuth completo (`whoop.ts`, `/api/whoop/*`, `WhoopCard`, migration 023). I
 - **Implementação:** `src/lib/week-fit.ts`, `src/lib/day-patterns.ts`, `/api/coach/week-fit`, `WeekFitControl.tsx`, `advisor.ts` (achado `dia_pesado_*`), `workout-builder.ts` (`lightDays`), `plan-freshness.ts` (entra na impressão digital só quando definida), `weekly-plan.ts` (`fetchAgenda`), `session-adapt.ts` (desfazer uma adaptação mantém o dia atual depois de mover).
 - **Limitações:** só esta semana e a próxima; move sessões inteiras, sem redistribuir volume. Detalhes em `docs/semana-na-agenda.md`.
 
+## 6.32 Nova Home (protótipo em /hoje) e status único do dia 🟡 (novo, 18/09)
+
+- **Decisão:** Home = "Hoje": treino do dia protagonista → semana com todas as atividades registradas (tempo comum, distância por esporte, calorias do relógio ou dos treinos) → no máximo um item de atenção. Sem % na Home. Mapa de navegação decidido por Sérgio: Hoje · Treinador (+ Provas e Metas) · Histórico (Corridas + Calendário + Gráficos + recordes/conquistas) · Saúde (+ carga e forma) · Amigos · Configurações — as três últimas com mais destaque.
+- **Status único do dia ✅:** `src/lib/day-status.ts` define "feito" sessão por sessão (corrida, musculação, pedal…) e é usado pelo card Hoje, pela recuperação do dia, pela adesão e pela nova Home. Corrigiu: dia só de musculação nunca terminava; dia de corrida + musculação terminava após a corrida; três definições diferentes de "feito".
+- **Protótipo 🟡:** `/hoje` (`HomePreview.tsx`, `week-movement.ts`), com dados reais, fora do menu, até Sérgio aprovar. A Home atual continua em `/`.
+- **Próximo:** aprovar → `/hoje` vira a Home, blocos migram para as áreas do mapa, nova navegação, linguagem visual. Detalhes em `docs/nova-home.md`.
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
@@ -2385,7 +2392,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 
 ## 19.1 O que existe
 
-- **Vitest 2.1**, `npm test` (= `vitest run`). **74 arquivos, 1.391 testes, todos passando** (rodado em 18/09/2026, ~5 s).
+- **Vitest 2.1**, `npm test` (= `vitest run`). **76 arquivos, 1.407 testes, todos passando** (rodado em 18/09/2026, ~5 s).
 - **Só funções puras de `src/lib/`.** Sem banco, sem rede, sem DOM.
 - **Fixture central** (`tests/fixtures.ts`): atleta com teste de 3 km em 13:00 e FC média 178 → **VDOT ≈ 43,7, LTHR = 165**. Falhas se leem como "isso deu errado para um corredor de VDOT 43".
 - **`tests/README.md`:** tabela dos bugs reais que cada teste protege. Leitura obrigatória.

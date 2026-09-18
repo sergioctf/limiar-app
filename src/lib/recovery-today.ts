@@ -15,6 +15,7 @@ import {
   readinessOn, sessionAdvice, buildVital, CALIBRATION_NIGHTS, type LoadDay,
 } from "@/lib/health-view";
 import { swapOffer, dayKeyOf, HARD_SESSION, type SwapOffer } from "@/lib/session-swap";
+import { mainSessionDone, type DayStatus } from "@/lib/day-status";
 import type { HealthCheckin, WeeklyPlanData, WeeklyPlanDay, WellnessData } from "@/types";
 
 export type RecoveryBasis = "watch" | "checkin" | "load" | "none";
@@ -51,6 +52,8 @@ export function buildRecoveryToday(input: {
   tomorrowOverride?: WeeklyPlanDay | null;
   doneKm: number;
   strengthDone: boolean;
+  /** The day read session by session; when given, it decides "done" (see day-status). */
+  status?: DayStatus;
 }): RecoveryToday {
   const readiness = readinessOn(input.date, input.rows, input.load, input.checkin);
   const scored = readiness.components.length > 0;
@@ -71,8 +74,10 @@ export function buildRecoveryToday(input: {
     ? input.tomorrowOverride
     : key === "Sun" ? null : input.plan?.days.find(d => d.day === tomorrowKey) ?? null;
 
+  // The session that decides the day — the run when there is one — as every screen reads it.
   const sessionDone = session != null && session.type !== "rest"
-    && (session.type === "strength" ? input.strengthDone : input.doneKm > 0);
+    && (input.status ? mainSessionDone(input.status)
+      : session.type === "strength" ? input.strengthDone : input.doneKm > 0);
 
   const advice = sessionAdvice(readiness, session, {
     doneKm: input.doneKm, strengthDone: input.strengthDone, tomorrow,
