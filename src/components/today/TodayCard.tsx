@@ -9,6 +9,7 @@ import type { Tone } from "@/components/ui/tone";
 import { Ring } from "@/components/ui/Ring";
 import { SwapActions } from "@/components/today/SwapActions";
 import { AdaptSessionControl } from "@/components/today/AdaptSession";
+import { TodayCheckPanel } from "@/components/today/TodayCheck";
 import { basisLabel, type RecoveryToday } from "@/lib/recovery-today";
 
 /**
@@ -37,6 +38,17 @@ const STATUS: Record<Today["state"], string> = {
 const VERDICT_TONE: Record<string, Tone> = { alta: "good", moderada: "warn", baixa: "alert" };
 
 export function TodayCard({ today, recovery }: { today: Today; recovery?: RecoveryToday | null }) {
+  const offerBlock = (
+    <>
+      {recovery?.offer && !recovery.offer.undo && (
+        <div className="space-y-2">
+          <p className="text-xs leading-relaxed text-surface-400">{recovery.advice.detail}</p>
+          <SwapActions offer={recovery.offer} />
+        </div>
+      )}
+      {recovery?.offer?.undo && <SwapActions offer={recovery.offer} compact />}
+    </>
+  );
   const tone = TONE_FOR[today.state];
   const swapped = today.session?.swap ?? null;
 
@@ -113,13 +125,14 @@ export function TodayCard({ today, recovery }: { today: Today; recovery?: Recove
         </Link>
       )}
 
-      {recovery?.offer && !recovery.offer.undo && (
-        <div className="space-y-2">
-          <p className="text-xs leading-relaxed text-surface-400">{recovery.advice.detail}</p>
-          <SwapActions offer={recovery.offer} />
-        </div>
-      )}
-      {recovery?.offer?.undo && <SwapActions offer={recovery.offer} compact />}
+      {/*
+        Saúde in the coach's decision (18/09): when sleep, the watch, what the
+        athlete said and the load add up, the coach asks — and the question takes
+        the place of the older swap buttons instead of sitting beside them.
+      */}
+      {today.state === "planned" && today.doneKm === 0
+        ? <TodayCheckPanel>{offerBlock}</TodayCheckPanel>
+        : offerBlock}
 
       {recovery?.needsCheckin && today.state !== "done" && (
         <Link

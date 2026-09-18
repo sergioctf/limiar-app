@@ -107,10 +107,11 @@ export function isAdaptable(day: WeeklyPlanDay | null | undefined): boolean {
 
 // ─── Reasons ────────────────────────────────────────────────────────────────
 
-export type AdaptReason = "time" | "place" | "equipment" | "format" | "other";
+export type AdaptReason = "time" | "fatigue" | "place" | "equipment" | "format" | "other";
 
 export const ADAPT_REASONS: Record<AdaptReason, string> = {
   time: "Tenho menos tempo",
+  fatigue: "Estou cansado",
   place: "Local inadequado (sem ladeira, pista ou percurso)",
   equipment: "Sem relógio ou GPS para ritmo",
   format: "Prefiro outro formato",
@@ -296,7 +297,8 @@ export function adaptOptions(planned: WeeklyPlanDay, reason: AdaptReason, ctx: A
   };
   const isQuality = MEMBERS[family] !== undefined;
 
-  if (reason === "time") {
+  // Tired and short of time ask for the same thing first: the session, smaller.
+  if (reason === "time" || reason === "fatigue") {
     if (isQuality) {
       const shorter = shortenQuality(base, kind as QualityKind, ctx);
       if (shorter) {

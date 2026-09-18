@@ -9,20 +9,23 @@
  * on a later visit while the run is fresh) or "Não quero responder" (it does
  * not come back). The run's own page keeps the form either way.
  *
- * At most one prompt per visit, run first. Two dialogs back to back is the
- * nagging this replaces.
+ * At most one prompt per visit. Before a session the coach's own question
+ * comes first (18/09 — it only matters before the run), then the last run's
+ * check-in, then the week. Two dialogs back to back is the nagging this replaces.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { promptCandidate, type FeedbackItem } from "@/lib/run-feedback";
 import { athleteDaysAgoStr } from "@/lib/week";
 import { RunFeedbackForm } from "@/components/runs/RunFeedbackForm";
 import { WeekQuestionBody, fetchWeekQuestion, type WeekQuestionPayload } from "@/components/today/WeekQuestionCard";
+import { TodayCheckBody, fetchTodayCheck, type TodayCheckPayload } from "@/components/today/TodayCheck";
 
 /** A run asks for its check-in while it is still fresh: today, yesterday or the day before. */
 const FRESH_DAYS = 2;
 const laterKey = (weekStart: string) => `limiar:week-question-later:${weekStart}`;
 
 type Prompt =
+  | { kind: "today"; payload: TodayCheckPayload }
   | { kind: "run"; item: FeedbackItem }
   | { kind: "week"; payload: WeekQuestionPayload };
 
@@ -40,6 +43,18 @@ export function EntryPrompt({ refreshKey = "" }: { refreshKey?: string }) {
     const controller = new AbortController();
     (async () => {
       try {
+        // Once a day, and only while unanswered: afterwards it lives on the Hoje card.
+        const today = await fetchTodayCheck(controller.signal).catch(() => null);
+        if (today?.check.action === "ask" && !today.answer && !today.prompted) {
+          shown.current = true;
+          setPrompt({ kind: "today", payload: today });
+          void fetch("/api/coach/today-check", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "prompted" }),
+          }).catch(() => {});
+          return;
+        }
+
         const response = await fetch("/api/run-feedback", { cache: "no-store", signal: controller.signal });
         const data = response.ok ? await response.json() : null;
         const item = Array.isArray(data?.items) ? promptCandidate(data.items, athleteDaysAgoStr(FRESH_DAYS)) : null;
@@ -71,6 +86,8 @@ export function EntryPrompt({ refreshKey = "" }: { refreshKey?: string }) {
     const current = prompt;
     close();
     if (!current) return;
+    // The coach's question stays on the Hoje card; closing the pop-up is enough.
+    if (current.kind === "today") return;
     if (current.kind === "week") {
       try { if (current.payload.weekStart) localStorage.setItem(laterKey(current.payload.weekStart), "1"); } catch { /* sem storage */ }
       return;
@@ -106,12 +123,24 @@ export function EntryPrompt({ refreshKey = "" }: { refreshKey?: string }) {
         ref={dialog}
         role="dialog"
         aria-modal="true"
-        aria-label={prompt.kind === "run" ? "Check-in pós-treino" : "Pergunta sobre a semana passada"}
+        aria-label={prompt.kind === "today" ? "Pergunta antes do treino" : prompt.kind === "run" ? "Check-in pós-treino" : "Pergunta sobre a semana passada"}
         tabIndex={-1}
         onClick={e => e.stopPropagation()}
         className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl border border-surface-700 bg-surface-900 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] animate-slide-up outline-none"
       >
-        {prompt.kind === "run" ? (
+        {prompt.kind === "today" ? (
+          <div className="space-y-4">
+            <h2 className="text-lg font-bold text-surface-100">Antes do treino</h2>
+            <TodayCheckBody
+              payload={prompt.payload}
+              onLater={() => void later()}
+              onAnswered={() => setAnswered(true)}
+            />
+            {answered && (
+              <button type="button" onClick={close} className="btn-primary w-full">Fechar</button>
+            )}
+          </div>
+        ) : prompt.kind === "run" ? (
           <RunFeedbackForm
             key={`${prompt.item.run.id}:${prompt.item.feedback?.status ?? "new"}`}
             item={prompt.item}

@@ -340,7 +340,7 @@ Estão todas na seção 15, com a origem de cada uma.
 ## 3.5 Banco
 
 - Supabase Postgres, com RLS ativo em quase tudo. Tabelas e decisões na seção 5.
-- **Migrations manuais:** `supabase/schema.sql` (base de maio) + `supabase/migrations/002…032`, coladas no SQL Editor. **Não existe `001`**; `schema.sql` faz esse papel. Faltam DDLs de `activities`, `performance_tests`, `races` (ver alerta 3).
+- **Migrations manuais:** `supabase/schema.sql` (base de maio) + `supabase/migrations/002…033`, coladas no SQL Editor. **Não existe `001`**; `schema.sql` faz esse papel. Faltam DDLs de `activities`, `performance_tests`, `races` (ver alerta 3).
 - **Fora do repositório, só no Supabase:**
   - **extensões:** `pg_cron`, `pg_net`;
   - **job:** `limiar-morning`;
@@ -468,7 +468,7 @@ Limiar/                               ← pasta no OneDrive (NÃO é repo git)
     │   ├── lib/          ~100 módulos de domínio (o coração do app)
     │   ├── types/index.ts  todos os tipos compartilhados
     │   └── middleware.ts
-    ├── supabase/         schema.sql, seed.sql, migrations/002–032
+    ├── supabase/         schema.sql, seed.sql, migrations/002–033
     ├── tests/            64 arquivos, ~10.700 linhas, fixtures.ts, README.md
     ├── public/           manifest.json, sw.js, ícones
     ├── scripts/import-exercises.mjs   gera src/lib/exercise-catalog.ts
@@ -1172,6 +1172,14 @@ Fluxo OAuth completo (`whoop.ts`, `/api/whoop/*`, `WhoopCard`, migration 023). I
 - **Implementação:** `src/lib/progress-reading.ts` (determinístico), `src/components/runs/ProgressCard.tsx`, `src/app/runs/page.tsx`.
 - **Em produção com os dados do Sérgio:** consistência estável (7 de 8 semanas), rotina de 2 corridas contra 3 previstas, 14 s/km mais rápido em 6 pares comparáveis, esforço ainda sem dados (1 check-in válido).
 - **Limitações:** temperatura raramente disponível; a base de junho inclui o período da lesão no joelho; treinos fortes não são comparados sem voltas (laps). Detalhes em `docs/evolucao-historico.md`.
+
+## 6.30 Saúde na decisão do Treinador ✅ (novo, 18/09)
+
+- **Objetivo:** sono, relógio, relato do atleta e carga (com academia) decidem juntos se o treino exigente de hoje merece uma pergunta — "Hoje tem X. Você relatou cansaço e suas últimas noites ficaram abaixo do seu habitual. Como está se sentindo?" ("ponto 4").
+- **Regra:** cada origem conta uma vez, pelo sinal mais forte; sessão exigente pergunta com pontuação ≥ 2 (um sinal forte ou dois moderados de origens diferentes); dia leve nunca pergunta (conselho com ≥ 3); dor pergunta antes de qualquer corrida. Travas: uma pergunta por dia, pop-up uma vez, "estou bem" ontem só reabre se piorou, no máximo duas por semana sem motivo forte.
+- **Respostas:** manter · versão mais curta (via Adaptar, motivo novo "Estou cansado") · rodagem leve (troca existente) · amanhã (quando cabe). Nada muda sozinho; a pergunta substitui os botões antigos de recuperação baixa no card.
+- **Implementação:** `src/lib/today-check.ts`, `/api/coach/today-check`, `src/lib/adapt-context.ts` (extraído da rota de adaptação), `TodayCheck.tsx`, `EntryPrompt.tsx` (primeira prioridade), `TodayCard.tsx`. **Migration 033** `today_checks`, aplicada em 18/09.
+- **Limitações:** a notificação da manhã ainda não pergunta; limiares iniciais conservadores, a calibrar com as respostas gravadas. Detalhes em `docs/saude-no-treinador.md`.
 
 # 7. TELAS E NAVEGAÇÃO
 
@@ -2323,7 +2331,7 @@ npx vercel deploy --prod --yes
 
 ## 18.4 Banco e migrations
 
-- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **032** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028 a 032).
+- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **033** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028 a 032; em 18/09 para 033).
 - **O código tolera tabela ausente** (`try/catch` e sondas como `notification_log` em `morning-dispatch.ts`), então uma migration não aplicada **não quebra**: desliga a feature em silêncio.
 - **Fora do repositório:**
 
@@ -2368,7 +2376,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 
 ## 19.1 O que existe
 
-- **Vitest 2.1**, `npm test` (= `vitest run`). **71 arquivos, 1.349 testes, todos passando** (rodado em 18/09/2026, ~5 s).
+- **Vitest 2.1**, `npm test` (= `vitest run`). **72 arquivos, 1.369 testes, todos passando** (rodado em 18/09/2026, ~5 s).
 - **Só funções puras de `src/lib/`.** Sem banco, sem rede, sem DOM.
 - **Fixture central** (`tests/fixtures.ts`): atleta com teste de 3 km em 13:00 e FC média 178 → **VDOT ≈ 43,7, LTHR = 165**. Falhas se leem como "isso deu errado para um corredor de VDOT 43".
 - **`tests/README.md`:** tabela dos bugs reais que cada teste protege. Leitura obrigatória.
