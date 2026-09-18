@@ -1164,6 +1164,15 @@ Fluxo OAuth completo (`whoop.ts`, `/api/whoop/*`, `WhoopCard`, migration 023). I
 - **Substitui a dívida A1:** o cron de segunda não gera mais resumo por IA (nunca gerava, e teria sobrescrito o plano) e passou a chamar `ensureWeeklyPlan()` em vez de `generateStructuredWeeklyPlan()`. O push de segunda continua e leva para `/coach`.
 - **Limitações:** calculada na hora (não é gravada); fala de uma semana só; musculação entra apenas como contagem. Detalhes em `docs/devolutiva-semanal.md`.
 
+## 6.29 Evolução no histórico ✅ (novo, 17/09)
+
+- **Objetivo:** responder "O que está melhorando para você?" sem declarar melhora por causa de uma corrida mais rápida — e admitindo quando não dá para dizer ("ponto 3").
+- **Onde:** card no topo de **Corridas**; "Ver como medimos" mostra o critério e os números de cada leitura.
+- **Leituras:** consistência (4 semanas × 4 anteriores, passo de 0,5 corrida/semana); rotina × plano (quantas corridas a rotina comporta em ≥70% das semanas com plano — sugere, não muda o plano); ritmo em pares de corridas comparáveis (distância ±20%, FC ±6 bpm, subida e temperatura quando houver; sem provas, dias adaptados e treinos fortes; mínimo de 3 pares; passo de 5 s/km); esforço nos mesmos treinos pelos check-ins (≥4 avaliações do mesmo tipo, feitas como prescritas); frequência de adaptações e motivos.
+- **Implementação:** `src/lib/progress-reading.ts` (determinístico), `src/components/runs/ProgressCard.tsx`, `src/app/runs/page.tsx`.
+- **Em produção com os dados do Sérgio:** consistência estável (7 de 8 semanas), rotina de 2 corridas contra 3 previstas, 14 s/km mais rápido em 6 pares comparáveis, esforço ainda sem dados (1 check-in válido).
+- **Limitações:** temperatura raramente disponível; a base de junho inclui o período da lesão no joelho; treinos fortes não são comparados sem voltas (laps). Detalhes em `docs/evolucao-historico.md`.
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
@@ -2359,7 +2368,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 
 ## 19.1 O que existe
 
-- **Vitest 2.1**, `npm test` (= `vitest run`). **70 arquivos, 1.332 testes, todos passando** (rodado em 17/09/2026, ~5 s).
+- **Vitest 2.1**, `npm test` (= `vitest run`). **71 arquivos, 1.349 testes, todos passando** (rodado em 18/09/2026, ~5 s).
 - **Só funções puras de `src/lib/`.** Sem banco, sem rede, sem DOM.
 - **Fixture central** (`tests/fixtures.ts`): atleta com teste de 3 km em 13:00 e FC média 178 → **VDOT ≈ 43,7, LTHR = 165**. Falhas se leem como "isso deu errado para um corredor de VDOT 43".
 - **`tests/README.md`:** tabela dos bugs reais que cada teste protege. Leitura obrigatória.

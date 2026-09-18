@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Search, Plus, SlidersHorizontal, MapPin, Clock, TrendingUp, Heart, Map as MapIcon } from "lucide-react";
 import { RunCard } from "./RunCard";
 import { EmptyState } from "@/components/shared/States";
+import { ProgressCard } from "./ProgressCard";
+import type { ProgressReport } from "@/lib/progress-reading";
 import {
   formatDistanceKm, secondsToPaceString,
   runTypeLabel
@@ -14,9 +16,13 @@ import type { Run } from "@/types";
 const RUN_TYPES = ["easy","long_run","tempo","intervals","race","recovery","steady","progression","other"];
 const SOURCES   = ["strava","manual","imported_ai","strava+ai"];
 
-interface Props { runs: Run[] }
+interface Props {
+  runs: Run[];
+  /** "O que está melhorando para você?" — read from the same history listed below. */
+  progress?: ProgressReport | null;
+}
 
-export function RunsContent({ runs }: Props) {
+export function RunsContent({ runs, progress = null }: Props) {
   const [search, setSearch]             = useState("");
   const [filterType, setFilterType]     = useState("all");
   const [filterSource, setFilterSource] = useState("all");
@@ -95,6 +101,8 @@ export function RunsContent({ runs }: Props) {
           </Link>
         </div>
       </div>
+
+      <ProgressCard report={progress} />
 
       {/* Search + filters */}
       <div className="space-y-2">
