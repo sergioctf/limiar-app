@@ -22,7 +22,8 @@ const WHY: Record<string, string> = {
  * learn from. Showing the weights also answers the question every athlete asks
  * the first bad morning: "but I feel fine — why is it low?"
  */
-export function ContributorsCard({ readiness }: { readiness: Readiness }) {
+/** `bare`: no frame of its own, for when it sits inside a Disclosure. */
+export function ContributorsCard({ readiness, bare = false }: { readiness: Readiness; bare?: boolean }) {
   const [grown, setGrown] = useState(false);
   useEffect(() => {
     const id = requestAnimationFrame(() => setGrown(true));
@@ -46,7 +47,7 @@ export function ContributorsCard({ readiness }: { readiness: Readiness }) {
   }
 
   return (
-    <div className="space-y-3.5 rounded-2xl border border-surface-700 bg-surface-800 p-4">
+    <div className={bare ? "space-y-3.5 pt-2" : "space-y-3.5 rounded-2xl border border-surface-700 bg-surface-800 p-4"}>
       {parts.map((c, i) => {
         const bar = c.score >= 70 ? "bg-emerald-500" : c.score >= 45 ? "bg-amber-500" : "bg-red-500";
         return (

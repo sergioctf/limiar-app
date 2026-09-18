@@ -216,8 +216,9 @@ export function formatDateShort(dateStr: string): string {
   return format(parseISO(dateStr), "dd/MM", { locale: ptBR });
 }
 
+/** "12,34 km" — Brazilian decimal comma, like every other number the athlete reads. */
 export function formatDistanceKm(km: number): string {
-  return `${km.toFixed(2)} km`;
+  return `${km.toFixed(2).replace(".", ",")} km`;
 }
 
 export function runTypeLabel(type: string): string {

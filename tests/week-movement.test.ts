@@ -50,11 +50,24 @@ describe("the week, every sport", () => {
     expect(wed.done.map(x => `${x.label}:${x.planned}`)).toEqual(["Corrida:true", "Ciclismo:false"]);
   });
 
-  it("shows what is still planned as a quiet mark, and never a debt for past days", () => {
+  it("shows what is still planned, and what was planned and did not happen", () => {
     expect(week.days.find(x => x.key === "Thu")!.upcoming.map(s => s.label)).toEqual(["Musculação"]);
     expect(week.days.find(x => x.key === "Sat")!.upcoming.map(s => s.label)).toEqual(["Longão"]);
-    // Monday's lifting was done; nothing past is listed as missing.
+    // Past days never show as "to do"; what did not happen shows as missed.
     expect(week.days.filter(x => x.date < today).every(x => x.upcoming.length === 0)).toBe(true);
+    expect(week.days.find(x => x.key === "Mon")!.missed).toEqual([]);          // run and lifting both done
+    expect(week.days.find(x => x.key === "Wed")!.missed).toEqual([]);
+  });
+
+  it("counts days trained against days planned", () => {
+    // Trained Mon, Tue, Wed (a ride on Wednesday too); planned Mon, Tue, Wed, Thu, Sat.
+    expect(week.trainedDays).toBe(3);
+    expect(week.plannedDays).toBe(5);
+  });
+
+  it("names a planned session that a past day did not get", () => {
+    const later = weekMovement({ weekStart, today: "2026-09-19", plan, runs, activities });
+    expect(later.days.find(x => x.key === "Thu")!.missed.map(s => s.label)).toEqual(["Musculação"]);
   });
 });
 

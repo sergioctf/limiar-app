@@ -2,8 +2,9 @@
 
 import { X, Plus, Trash2, Clock, Flame, Heart, Route, Dumbbell } from "lucide-react";
 import { CalendarEntry } from "@/types";
-import { sportColor, sportLabel } from "./ActivityCalendar";
-import { cn } from "@/lib/utils";
+import { sportLabel } from "./ActivityCalendar";
+import { SportGlyph } from "@/components/shared/SportGlyph";
+import { toSportKey } from "@/lib/sports";
 
 function formatPace(sec: number | null | undefined) {
   if (!sec) return null;
@@ -68,7 +69,7 @@ export function DayModal({ date, entries, onClose, onAddGym, onDelete }: Props) 
             <div key={e.id} className="bg-surface-750 border border-surface-700 rounded-xl p-4 relative group">
               {/* Type badge */}
               <div className="flex items-center gap-2 mb-2">
-                <span className={cn("w-2.5 h-2.5 rounded-full", sportColor(e.sport_type))} />
+                <SportGlyph sport={toSportKey(e.sport_type)} className="w-3.5 h-3.5 text-brand-400" />
                 <span className="text-xs font-semibold text-surface-400 uppercase tracking-wide">
                   {sportLabel(e.sport_type)}
                 </span>

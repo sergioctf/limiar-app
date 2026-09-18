@@ -172,12 +172,8 @@ export function CoachContent({ recap = null, cycleRuns = [], cycleActivities = [
 
   return (
     <div className="space-y-5 max-w-3xl mx-auto animate-fade-in">
-      <div>
-        <h1 className="page-header">Treinador</h1>
-        <p className="text-surface-500 text-sm">
-          {reports.length} relatório(s) · {cycles.length} ciclo(s) · {tests.length} teste(s)
-        </p>
-      </div>
+      {/* Counters of reports and cycles said nothing about the training; the title is enough. */}
+      <h1 className="page-header">Treinador</h1>
 
       {/* Tab bar — 2×2 on mobile, single row on sm+ */}
       <div className="grid grid-cols-2 sm:flex gap-1 bg-surface-700 rounded-xl p-1">

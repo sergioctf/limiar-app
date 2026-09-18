@@ -8,8 +8,12 @@ import { DayModal } from "./DayModal";
 import { GymSessionForm } from "./GymSessionForm";
 import { cn } from "@/lib/utils";
 import { localDateStr } from "@/lib/week";
+import { SportGlyph } from "@/components/shared/SportGlyph";
 
-const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+/** Monday first, like every other week in the app (the plan, the Home, adherence). */
+const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+const km1 = (n: number) => n.toFixed(1).replace(".", ",");
+const dayMonth = (date: string) => `${date.slice(8, 10)}/${date.slice(5, 7)}`;
 const MONTHS_PT = [
   "Janeiro","Fevereiro","Março","Abril","Maio","Junho",
   "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro",
@@ -74,7 +78,8 @@ export function ActivityCalendar() {
   }
 
   // Build calendar grid
-  const firstDay = new Date(year, month - 1, 1).getDay(); // 0=Sun
+  // Blank cells before the 1st, counting from Monday.
+  const firstDay = (new Date(year, month - 1, 1).getDay() + 6) % 7;
   const daysInMonth = new Date(year, month, 0).getDate();
   const cells: (number | null)[] = [
     ...Array(firstDay).fill(null),
@@ -108,25 +113,26 @@ export function ActivityCalendar() {
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button onClick={prevMonth} className="p-2 rounded-lg hover:bg-surface-700 text-surface-400 hover:text-surface-200 transition-colors">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1 sm:gap-3 min-w-0">
+          <button onClick={prevMonth} aria-label="Mês anterior" className="w-11 h-11 flex items-center justify-center rounded-lg hover:bg-surface-700 text-surface-400 hover:text-surface-200 transition-colors shrink-0">
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <h2 className="text-xl font-bold text-surface-100 min-w-[200px] text-center">
+          <h2 className="text-lg sm:text-xl font-bold text-surface-100 sm:min-w-[200px] text-center truncate">
             {MONTHS_PT[month - 1]} {year}
           </h2>
-          <button onClick={nextMonth} className="p-2 rounded-lg hover:bg-surface-700 text-surface-400 hover:text-surface-200 transition-colors">
+          <button onClick={nextMonth} aria-label="Próximo mês" className="w-11 h-11 flex items-center justify-center rounded-lg hover:bg-surface-700 text-surface-400 hover:text-surface-200 transition-colors shrink-0">
             <ChevronRight className="w-5 h-5" />
           </button>
-          {loading && <Loader2 className="w-4 h-4 text-surface-500 animate-spin" />}
+          {loading && <Loader2 className="w-4 h-4 text-surface-500 animate-spin shrink-0" />}
         </div>
         <button
           onClick={() => { setFormDate(todayStr); setShowForm(true); }}
-          className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-400 text-white rounded-xl text-sm font-medium transition-colors"
+          aria-label="Registrar treino"
+          className="shrink-0 flex items-center gap-2 min-h-[44px] px-3 sm:px-4 bg-brand-500 hover:bg-brand-400 text-white rounded-xl text-sm font-medium transition-colors"
         >
           <Plus className="w-4 h-4" />
-          Registrar treino
+          <span className="hidden sm:inline">Registrar treino</span>
         </button>
       </div>
 
@@ -135,7 +141,7 @@ export function ActivityCalendar() {
         {[
           { label: "Atividades", value: totalActivities },
           { label: "Horas", value: `${Math.floor(totalMinutes / 60)}h ${Math.round(totalMinutes % 60)}min` },
-          { label: "KM rodados", value: `${totalKm.toFixed(1)} km` },
+          { label: "KM rodados", value: `${km1(totalKm)} km` },
           { label: "Corrida / Academia", value: `${runDays}d / ${gymDays}d` },
         ].map(({ label, value }) => (
           <div key={label} className="bg-surface-800 border border-surface-700 rounded-xl px-4 py-3 text-center">
@@ -179,13 +185,13 @@ export function ActivityCalendar() {
               {weekCells.map((day, dayIdx) => {
                 const i = weekIdx * 7 + dayIdx;
                 if (day === null) {
-                  return <div key={`empty-${i}`} className="min-h-[80px] bg-surface-850/50 border-b border-r border-surface-700/40" />;
+                  return <div key={`empty-${i}`} className="min-h-[64px] sm:min-h-[80px] bg-surface-850/50 border-b border-r border-surface-700/40" />;
                 }
                 const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
                 const dayEntries = byDate[dateStr] ?? [];
                 const isToday    = dateStr === todayStr;
                 const isSelected = dateStr === selected;
-                const hasSunday  = (dayIdx === 0);
+                const firstColumn = (dayIdx === 0);
 
                 // Run distance for this day
                 const dayRunKm = dayEntries.reduce((s, e) => {
@@ -200,13 +206,13 @@ export function ActivityCalendar() {
                     key={dateStr}
                     onClick={() => setSelected(isSelected ? null : dateStr)}
                     className={cn(
-                      "min-h-[80px] p-2 text-left border-b border-r border-surface-700/40 transition-colors relative flex flex-col gap-1",
+                      "min-h-[64px] sm:min-h-[80px] p-1.5 sm:p-2 text-left border-b border-r border-surface-700/40 transition-colors relative flex flex-col gap-1",
                       isSelected
                         ? "bg-brand-500/15 border-brand-500/30"
                         : dayEntries.length > 0
                           ? "hover:bg-surface-700/50 cursor-pointer"
                           : "hover:bg-surface-750/30 cursor-pointer",
-                      hasSunday && "border-l-0"
+                      firstColumn && "border-l-0"
                     )}
                   >
                     <span className={cn(
@@ -218,18 +224,16 @@ export function ActivityCalendar() {
                       {day}
                     </span>
 
-                    {/* Activity dots */}
+                    {/* One icon per activity, the same as on the Home — no colour legend to decode. */}
                     {dayEntries.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
+                      <div className="flex flex-wrap gap-0.5 sm:gap-1 text-brand-400">
                         {dayEntries.slice(0, 3).map((e, idx) => (
-                          <span
-                            key={idx}
-                            className={cn("w-2 h-2 rounded-full shrink-0", sportColor(e.sport_type))}
-                            title={sportLabel(e.sport_type)}
-                          />
+                          <span key={idx} title={sportLabel(e.sport_type)}>
+                            <SportGlyph sport={toSportKey(e.sport_type)} className="w-3.5 h-3.5" />
+                          </span>
                         ))}
                         {dayEntries.length > 3 && (
-                          <span className="text-[10px] text-surface-500 leading-none">+{dayEntries.length - 3}</span>
+                          <span className="text-[10px] text-surface-500 leading-none self-center">+{dayEntries.length - 3}</span>
                         )}
                       </div>
                     )}
@@ -237,7 +241,7 @@ export function ActivityCalendar() {
                     {/* Run distance (desktop only, ≥1km) */}
                     {dayRunKm >= 1 && (
                       <p className="text-[10px] text-brand-400 font-semibold leading-tight hidden sm:block">
-                        {dayRunKm.toFixed(1)} km
+                        {km1(dayRunKm)} km
                       </p>
                     )}
 
@@ -252,12 +256,12 @@ export function ActivityCalendar() {
               })}
 
               {/* Week totals sidebar */}
-              <div className="min-h-[80px] border-b border-surface-700/40 px-2 py-2 flex flex-col items-end justify-center gap-0.5 hidden sm:flex">
+              <div className="min-h-[64px] sm:min-h-[80px] border-b border-surface-700/40 px-2 py-2 flex-col items-end justify-center gap-0.5 hidden sm:flex">
                 {weekActivityCount > 0 ? (
                   <>
                     {weekKm >= 0.1 && (
                       <span className="text-[10px] font-bold text-surface-300 tabular-nums whitespace-nowrap">
-                        {weekKm.toFixed(1)} km
+                        {km1(weekKm)} km
                       </span>
                     )}
                     <span className="text-[10px] text-surface-500 tabular-nums">
@@ -269,24 +273,6 @@ export function ActivityCalendar() {
             </div>
           );
         })}
-      </div>
-
-      {/* Legend */}
-      <div className="flex flex-wrap gap-4 text-xs text-surface-500">
-        {[
-          { color: "bg-brand-500",   label: "Corrida"     },
-          { color: "bg-blue-500",    label: "Musculação"  },
-          { color: "bg-green-500",   label: "Ciclismo"    },
-          { color: "bg-cyan-500",    label: "Natação"     },
-          { color: "bg-yellow-500",  label: "Caminhada"   },
-          { color: "bg-purple-500",  label: "Yoga/Pilates"},
-          { color: "bg-surface-500", label: "Outros"      },
-        ].map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-1.5">
-            <span className={cn("w-2.5 h-2.5 rounded-full", color)} />
-            {label}
-          </div>
-        ))}
       </div>
 
       {/* Day modal */}
@@ -307,10 +293,10 @@ export function ActivityCalendar() {
       )}
       {selected && selectedEntries.length === 0 && (
         <div className="bg-surface-800 border border-surface-700 rounded-xl p-4 flex items-center justify-between">
-          <span className="text-surface-500 text-sm">Sem atividades em {selected}</span>
+          <span className="text-surface-500 text-sm">Sem atividades em {dayMonth(selected)}</span>
           <button
             onClick={() => { setFormDate(selected); setShowForm(true); }}
-            className="text-brand-400 text-sm hover:text-brand-300 flex items-center gap-1"
+            className="text-brand-400 text-sm hover:text-brand-300 flex items-center gap-1 min-h-[44px]"
           >
             <Plus className="w-4 h-4" /> Registrar
           </button>

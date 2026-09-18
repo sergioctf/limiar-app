@@ -43,7 +43,8 @@ export function CountUp({ value, decimals = 0, duration = 900, suffix = "", pref
       started.current = true;
       const start = performance.now();
       const tick = (now: number) => {
-        const t = Math.min(1, (now - start) / duration);
+        // The frame timestamp can precede `start`; unclamped, the first frame showed "-87".
+        const t = Math.max(0, Math.min(1, (now - start) / duration));
         setDisplay(value * easeOutExpo(t));
         if (t < 1) rafRef.current = requestAnimationFrame(tick);
         else setDisplay(value);

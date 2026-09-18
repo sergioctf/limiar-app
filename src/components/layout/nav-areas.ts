@@ -3,7 +3,7 @@
  *
  *   Hoje         — the day and the week
  *   Treinador    — plan, adaptations, conversation; Provas and Metas live here
- *   Histórico    — what was done and how it evolves: Corridas, Calendário, Gráficos
+ *   Histórico    — what was done and how it evolves: Atividades, Calendário, Gráficos
  *   Saúde        — sleep, recovery, trends, load and form
  *   Amigos       — its own area, more prominent than it was
  *   Configurações — its own area, always one tap away
@@ -37,7 +37,7 @@ export const NAV_AREAS: NavArea[] = [
   },
   {
     key: "historico", href: "/runs", label: "Histórico", icon: History, paths: ["/runs", "/calendar", "/analytics"], width: "max-w-4xl",
-    tabs: [{ href: "/runs", label: "Corridas" }, { href: "/calendar", label: "Calendário" }, { href: "/analytics", label: "Gráficos" }],
+    tabs: [{ href: "/runs", label: "Atividades" }, { href: "/calendar", label: "Calendário" }, { href: "/analytics", label: "Gráficos" }],
   },
   { key: "saude", href: "/health", label: "Saúde", icon: HeartPulse, paths: ["/health"] },
   { key: "amigos", href: "/friends", label: "Amigos", icon: Users, paths: ["/friends"] },

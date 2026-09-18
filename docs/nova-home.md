@@ -96,3 +96,42 @@ A outra IA apontou três problemas; os três foram conferidos no código, e havi
 - **Uma lista única de atividades no Histórico.** "Corridas" ainda lista só corridas; outros esportes aparecem no Calendário. O caminho único por esporte já existe na Home; falta no Histórico.
 - **Revisão visual das telas internas** (Treinador, Saúde, Gráficos) com as mesmas regras: uma ação principal, menos cartões competindo, estados vazios e carregamentos.
 - Os cabeçalhos de página ainda variam ("19 relatório(s) · 5 ciclo(s)…" no Treinador), e a distância total em Gráficos usa ponto em vez de vírgula.
+
+## Ajustes pedidos por Sérgio depois de usar (18/09)
+
+> *"na sua semana seria bom mostrar o que não foi feito mas estava previsto também, trocar esses emojis por algo mais clean (mas manter a parte visual), deixar mais visual e grande os big numbers, dias treinados / de tantos previstos, status de recuperação com a bolinha de 0-100, volte corrida, musculação e calorias para o visual maior; arrumar calendário que ficou ruim no celular; em saúde colocar o que compõe o score em algo que fecha e abre"*
+
+### Home
+- **Números grandes:** anel com **dias treinados / dias previstos** (ex.: 3/6), **tempo em atividades** em destaque e "3 dias treinados de 6 previstos · 4 sessões".
+- **Faixa da semana com três estados**, um círculo por sessão: **preenchido = feito**, **contorno = previsto**, **tracejado âmbar = não feito** (o que estava previsto e não aconteceu agora aparece — no dia e na lista do dia selecionado, como "não feito"). Legenda discreta abaixo.
+- **Ícones de linha** (`SportGlyph`: corrida, musculação, pedal, natação, caminhada, trilha, yoga…) no lugar dos emojis, na Home, no calendário, no detalhe do dia e no Histórico.
+- **Blocos grandes** de novo: Corrida (sessões + km), Musculação (sessões + tempo), cada outro esporte feito, e **Calorias** (toque = detalhe por treino). Corrida e musculação aparecem sempre que fazem parte do plano, mesmo com zero.
+- **Recuperação com o anel de 0 a 100**, colorido pelo veredito, levando a Saúde. Voltaram também o convite ao check-in da manhã quando não há relógio, o aviso de teste de calibração e a nota "Trocado hoje · era …", que o protótipo tinha deixado de fora.
+- **Alerta de sobrecarga só com sinal de carga.** Em produção ele aparecia em vermelho ("sinais de sobrecarga") com forma +1 e ACWR 0,97, porque o único sinal era sono de 5,5 h — assunto que o anel e a pergunta antes do treino já tratam. Agora só ocupa "Merece atenção" com um sinal de carga (TSB, ACWR, sequência sem descanso, salto de volume).
+- **Contagem animada corrigida:** o primeiro quadro podia ter tempo negativo e mostrava "-0" / "-87" (bug antigo do `CountUp`, também do dashboard anterior).
+
+### Calendário no celular
+- Cabeçalho que cabe: título encolhe, setas com área de toque de 44 px, "Registrar treino" vira só o ícone.
+- **Semana começando na segunda**, como o resto do app (antes começava no domingo).
+- Ícones de esporte no lugar de bolinhas de sete cores; a legenda de cores saiu.
+- Células mais baixas no celular; datas "18/09" em vez de "2026-09-18"; km com vírgula.
+
+### Saúde
+- **"O que compõe o score"** virou uma seção que abre e fecha, **fechada por padrão**.
+- "Forma e carga" sem o subtítulo repetido.
+
+## Próximos pontos aplicados (18/09)
+
+### Histórico: uma lista para todos os esportes
+- A aba **"Corridas" virou "Atividades"**: corridas e todas as outras atividades na mesma lista, com filtro por esporte (**Tudo · Corrida · Musculação · …**, só os esportes que existem no histórico).
+- Em **Corrida**, continuam os filtros de tipo, fonte, mês e ordenação, e os números de corrida (pace médio, FC média). Em outro esporte: sessões e tempo.
+- **Cada atividade tem sua própria página** (`/activities/[id]`), como uma corrida: duração, distância, calorias (medidas ou estimadas), FC, origem, "Ver no calendário" e excluir (com confirmação; exclusão reversível no banco, como no calendário).
+- Os **blocos da Home abrem o Histórico no esporte**: tocar em "Musculação" abre `/runs?sport=musculacao`.
+
+### Revisão visual das telas internas
+- Treinador: saiu o subtítulo "19 relatório(s) · 5 ciclo(s) · 1 teste(s)".
+- Distâncias com **vírgula** no app inteiro (`formatDistanceKm`), inclusive "Seus números" em Gráficos.
+
+### O que ainda fica
+- Revisão visual mais profunda do Treinador (duas camadas de abas: área e "Zonas & Plano · Testes · Perfil IA · Relatórios").
+- O alerta de sobrecarga ainda considera só corridas na carga (`detectOvertraining`), enquanto Saúde e a recuperação já somam academia.

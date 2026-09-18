@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { HeartPulse, Watch, Flame, Activity, Loader2, RefreshCw } from "lucide-react";
+import { HeartPulse, Watch, Flame, Activity, Loader2, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { haptic } from "@/lib/haptics";
 import { Section, Reveal } from "@/components/ui/Surface";
 import { Disclosure } from "@/components/ui/Disclosure";
@@ -197,9 +197,14 @@ export function HealthScreen({
           <SleepCard week={data.sleep} />
         </Section>
 
-        <Section title="O que compõe o score">
-          <ContributorsCard readiness={readiness} />
-        </Section>
+        {/* Closed by default (Sérgio, 18/09): the breakdown is there for whoever wants it, not in everyone's way. */}
+        <Disclosure
+          title="O que compõe o score"
+          summary={`${readiness.components.length} ${readiness.components.length === 1 ? "sinal" : "sinais"} · o que puxa o número para cima ou para baixo`}
+          icon={<SlidersHorizontal className="w-4 h-4" />}
+        >
+          <ContributorsCard readiness={readiness} bare />
+        </Disclosure>
 
         <Section title="Energia">
           <EnergyCard data={data.nutrition} />

@@ -7,8 +7,10 @@
  *     5 km of running are both worth showing, "35 km this week" explains
  *     nothing;
  *   · activities outside the plan count: they are part of the athlete's life;
- *   · planned sessions still to come show as a quiet mark, never as a debt —
- *     the week is a record, not a productivity report;
+ *   · planned sessions still to come show as a quiet mark; planned sessions
+ *     that did not happen show too, as such (Sérgio, 18/09: "seria bom mostrar
+ *     o que não foi feito mas estava previsto também") — plainly, without
+ *     turning the week into a score;
  *   · calories stay on the Home: the watch's active energy when it arrived for
  *     that day (Garmin), otherwise what the workouts recorded (Strava), and the
  *     line says which.
@@ -27,8 +29,12 @@ export interface MovementDay {
   isToday: boolean;
   isFuture: boolean;
   done: DoneItem[];
-  /** Planned sessions not done yet, today or later — a quiet mark, not a debt. */
+  /** Planned sessions not done yet, today or later. */
   upcoming: PlannedSession[];
+  /** Planned sessions of a day already gone that did not happen. */
+  missed: PlannedSession[];
+  /** Something was planned for the day. */
+  planned: boolean;
 }
 
 export interface SportLine {
@@ -43,6 +49,10 @@ export interface SportLine {
 
 export interface WeekMovement {
   days: MovementDay[];
+  /** Days with at least one registered activity, planned or not. */
+  trainedDays: number;
+  /** Days of the week with at least one planned session. */
+  plannedDays: number;
   sessions: number;
   minutes: number;
   bySport: SportLine[];
@@ -75,6 +85,8 @@ export function weekMovement(input: {
       isFuture: date > input.today,
       done: status.done,
       upcoming: date >= input.today ? status.sessions.filter(s => !s.done) : [],
+      missed: date < input.today ? status.sessions.filter(s => !s.done) : [],
+      planned: status.sessions.length > 0,
     };
   });
 
@@ -114,6 +126,8 @@ export function weekMovement(input: {
 
   return {
     days,
+    trainedDays: days.filter(d => d.done.length > 0).length,
+    plannedDays: days.filter(d => d.planned).length,
     sessions: all.length,
     minutes: all.reduce((s, x) => s + x.minutes, 0),
     bySport,
