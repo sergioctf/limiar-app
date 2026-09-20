@@ -40,7 +40,7 @@ import { CalorieDetailModal } from "@/components/dashboard/CalorieDetailModal";
 import { SPORTS } from "@/lib/sports";
 import { sessionTone } from "@/lib/session-colors";
 import { formatMinutes, type MovementDay, type WeekMovement } from "@/lib/week-movement";
-import { basisLabel, type RecoveryToday } from "@/lib/recovery-today";
+import type { RecoveryToday } from "@/lib/recovery-today";
 import type { CalorieDay } from "@/lib/calorie-breakdown";
 import type { OvertrainingAssessment } from "@/lib/overtraining";
 import type { Today } from "@/lib/today";
@@ -226,9 +226,18 @@ export function HomeContent({
                   <Ring ratio={recovery.score / 100} size={64} thickness={6} tone={VERDICT_TONE[recovery.verdict ?? "moderada"]}>
                     <span className="text-base font-bold">{recovery.score}</span>
                   </Ring>
+                  {/*
+                    * A frase é o assunto; "Disposição" é só o rótulo dela.
+                    *
+                    * Antes o destaque era a palavra "Recuperação", seguida de
+                    * "Relógio + carga" — a procedência do número, que interessa
+                    * a quem desconfia dele, não a quem vai treinar em dez
+                    * minutos. Quem quiser a conta abre Saúde, que é onde ela
+                    * mora (Sérgio, 20/09).
+                    */}
                   <span className="min-w-0 flex-1">
-                    <span className="block text-base font-semibold text-surface-100">{recovery.short}</span>
-                    <span className="block truncate text-xs text-surface-500">Recuperação · {basisLabel(recovery)}</span>
+                    <span className="block text-lg font-semibold leading-snug text-surface-100">{recovery.short}</span>
+                    <span className="block text-xs text-surface-500">Disposição</span>
                   </span>
                   <ArrowRight className="w-4 h-4 shrink-0 text-surface-600" />
                 </Link>
@@ -368,37 +377,27 @@ export function HomeContent({
         <Card>
           <div className="space-y-5">
             {/*
-             * Sessions in the ring, days beside it (Sérgio, 20/09).
+             * Um número, no meio (Sérgio, 20/09).
              *
-             * A day is not a session: six planned days can hold seven sessions,
-             * because one day can ask for a run and the gym. The ring answers
-             * "how much of the week did I do", the number beside it answers "on
-             * how many days did I move", and the time is the detail of both,
-             * where it stops competing with either.
+             * Havia três formas de dizer a mesma semana aqui: o anel de
+             * sessões, os dias treinados e uma frase que repetia os dois. Três
+             * números lado a lado não são três informações — são um leitor
+             * decidindo em qual acreditar. Ficou o anel; o tempo vira legenda,
+             * porque é a única coisa que ele não diz.
              */}
-            <div className="flex items-center gap-5">
+            <div className="flex flex-col items-center gap-2 py-1">
               <Ring
                 ratio={week.plannedSessions > 0 ? week.sessions / week.plannedSessions : week.sessions > 0 ? 1 : 0}
-                size={112}
-                thickness={11}
+                size={132}
+                thickness={12}
                 tone="brand"
                 label="sessões"
               >
-                <span className="text-2xl font-black tabular-nums">{week.sessions}<span className="text-surface-500 text-base font-bold">/{week.plannedSessions || week.sessions}</span></span>
+                <span className="text-3xl font-black tabular-nums">{week.sessions}<span className="text-surface-500 text-lg font-bold">/{week.plannedSessions || week.sessions}</span></span>
               </Ring>
-              <div className="space-y-3 min-w-0">
-                <div>
-                  <p className="text-3xl font-black text-surface-100 tabular-nums leading-none">
-                    {week.trainedDays}<span className="text-surface-500 text-xl">/{week.plannedDays || week.trainedDays}</span>
-                  </p>
-                  <p className="text-xs text-surface-500 mt-1">{week.trainedDays === 1 ? "dia treinado" : "dias treinados"}</p>
-                </div>
-                <p className="text-xs text-surface-400 leading-snug">
-                  <span className="text-surface-100 font-semibold">{week.sessions} {week.sessions === 1 ? "sessão" : "sessões"}</span>
-                  {week.plannedSessions > 0 ? ` de ${week.plannedSessions} previstas` : ""}
-                  {week.minutes > 0 ? ` · ${formatMinutes(week.minutes)} em atividades` : ""}
-                </p>
-              </div>
+              {week.minutes > 0 && (
+                <p className="text-xs text-surface-500">{formatMinutes(week.minutes)} em atividade</p>
+              )}
             </div>
 
             {/* The week, day by day: done, planned, and planned but not done. */}

@@ -27,6 +27,8 @@ export interface WeatherNow {
   tempC: number;
   feelsLikeC: number | null;
   code: number;
+  /** O que está acontecendo agora, já conferido contra a chuva que cai. */
+  kind: SkyKind;
   /** As próximas horas, a partir da atual. */
   next: WeatherHour[];
 }
@@ -63,6 +65,34 @@ export const SKY_LABEL: Record<SkyKind, string> = {
   neve: "Neve",
 };
 
+/**
+ * A condição de agora, conferida contra a chuva que está de fato caindo.
+ *
+ * O código WMO do "agora" do Open-Meteo é a categoria que o **modelo** atribui
+ * àquela hora naquela célula — não uma observação. Resultado: o app dizia
+ * "Pancadas de chuva" com o céu seco na janela (Sérgio, 20/09). Errado do pior
+ * jeito, porque é verificável em dois segundos e destrói a confiança no resto.
+ *
+ * Então: se o código é de chuva mas a precipitação medida é zero, quem manda é
+ * o céu — a cobertura de nuvens. A chance de chuva continua aparecendo nas
+ * próximas horas, que é onde previsão é previsão.
+ */
+export function currentSky(input: {
+  code: number;
+  precipitationMm: number | null;
+  cloudCover: number | null;
+}): SkyKind {
+  const kind = skyKind(input.code);
+  const wet = kind === "garoa" || kind === "chuva" || kind === "pancada"
+    || kind === "trovoada" || kind === "neve";
+
+  if (!wet || input.precipitationMm == null || input.precipitationMm > 0) return kind;
+
+  const c = input.cloudCover;
+  if (c == null) return "nublado";
+  return c >= 85 ? "nublado" : c >= 25 ? "poucas_nuvens" : "limpo";
+}
+
 /** Duas casas decimais: ~1 km, o suficiente para o clima. */
 export function roundCoord(n: number): number {
   return Math.round(n * 100) / 100;
@@ -72,7 +102,9 @@ export function weatherUrl(lat: number, lon: number): string {
   const p = new URLSearchParams({
     latitude: String(roundCoord(lat)),
     longitude: String(roundCoord(lon)),
-    current: "temperature_2m,apparent_temperature,weather_code",
+    // `precipitation` e `cloud_cover` existem para conferir o código do modelo
+    // contra o que está caindo de verdade — ver `currentSky`.
+    current: "temperature_2m,apparent_temperature,weather_code,precipitation,cloud_cover",
     hourly: "temperature_2m,precipitation_probability,weather_code",
     forecast_days: "2",
     timezone: "auto",
@@ -123,10 +155,16 @@ export function readForecast(raw: Raw, now: Date = new Date(), hours = 6): Weath
     });
   }
 
+  const code = Number(cur.weather_code ?? 0);
   return {
     tempC: Math.round(cur.temperature_2m),
     feelsLikeC: cur.apparent_temperature != null ? Math.round(cur.apparent_temperature) : null,
-    code: Number(cur.weather_code ?? 0),
+    code,
+    kind: currentSky({
+      code,
+      precipitationMm: cur.precipitation ?? null,
+      cloudCover: cur.cloud_cover ?? null,
+    }),
     next,
   };
 }

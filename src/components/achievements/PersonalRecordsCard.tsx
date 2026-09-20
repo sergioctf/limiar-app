@@ -1,111 +1,101 @@
 "use client";
 
-import { TrendingDown, TrendingUp, Target } from "lucide-react";
+/**
+ * Recordes pessoais.
+ *
+ * Redesenhado em 20/09 a pedido do Sérgio. O que estava errado não era o dado,
+ * era a hierarquia: distância, tempo, pace, data, mês passado e tendência
+ * ocupavam tamanhos quase iguais, com uma emoji de lâmpada no rodapé dizendo
+ * "baseado em suas 4 distância(s)". Um recorde é uma coisa só — **o tempo** —,
+ * e os outros números existem para explicá-lo.
+ *
+ * Agora: a distância vira uma medalha à esquerda, o tempo é o número grande, e
+ * pace, data e origem viram uma linha de legenda. A comparação com o mês
+ * passado só aparece quando existe, do lado direito, onde o olho já está
+ * acostumado a procurar variação.
+ */
+import { Trophy, TrendingDown, TrendingUp } from "lucide-react";
+import { Card, Section } from "@/components/ui/Surface";
 import type { DistanceRecord } from "@/lib/historical-comparison";
 
-interface PersonalRecordsCardProps {
-  records: DistanceRecord[];
-}
+/**
+ * A medalha de cada distância.
+ *
+ * "Meia-maratona" e "Maratona" viram 21K e 42K aqui: a medalha tem 48 px e o
+ * nome inteiro não cabe sem encolher a ponto de não se ler. O nome completo
+ * continua sendo o da leitura — esta é só a etiqueta.
+ */
+const BADGE: Record<string, { short: string; style: string }> = {
+  "5K":            { short: "5K",  style: "bg-green-500/10 text-green-300 border-green-500/25" },
+  "10K":           { short: "10K", style: "bg-sky-500/10 text-sky-300 border-sky-500/25" },
+  "Meia-maratona": { short: "21K", style: "bg-purple-500/10 text-purple-300 border-purple-500/25" },
+  "Maratona":      { short: "42K", style: "bg-brand-500/15 text-brand-300 border-brand-500/30" },
+};
 
-export function PersonalRecordsCard({ records }: PersonalRecordsCardProps) {
+export function PersonalRecordsCard({ records }: { records: DistanceRecord[] }) {
   const withRecords = records.filter(r => r.personalBest);
 
   if (withRecords.length === 0) {
     return (
-      <div className="card p-5">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center">
-            <Target className="w-5 h-5 text-brand-400" />
-          </div>
-          <h2 className="section-title">Recordes Pessoais</h2>
-        </div>
-        <p className="text-sm text-surface-500 text-center py-4">
-          Seus PRs aparecerão aqui conforme você completa diferentes distâncias
-        </p>
-      </div>
+      <Section title="Recordes pessoais">
+        <Card>
+          <p className="py-2 text-center text-sm text-surface-500">
+            Seus recordes aparecem aqui conforme você completa cada distância.
+          </p>
+        </Card>
+      </Section>
     );
   }
 
   return (
-    <div className="card p-5 space-y-3">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-2">
-        <div className="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center">
-          <Target className="w-5 h-5 text-brand-400" />
-        </div>
-        <h2 className="section-title">Recordes Pessoais</h2>
-      </div>
+    <Section title="Recordes pessoais">
+      <Card density="tight">
+        <ul className="divide-y divide-surface-700/50">
+          {withRecords.map(record => {
+            const pb = record.personalBest!;
+            const badge = BADGE[record.label]
+              ?? { short: record.label, style: "bg-surface-700/50 text-surface-300 border-surface-600" };
+            return (
+              <li key={record.label} className="flex items-center gap-3 py-3 first:pt-1 last:pb-1">
+                <span
+                  title={record.label}
+                  className={`flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-2xl border text-[11px] font-bold ${badge.style}`}
+                >
+                  <Trophy className="mb-0.5 h-3 w-3 opacity-70" />
+                  {badge.short}
+                </span>
 
-      {/* Records list */}
-      <div className="space-y-2">
-        {withRecords.map(record => (
-          <div
-            key={record.label}
-            className="bg-surface-700/30 rounded-lg p-3 space-y-2"
-          >
-            {/* Distance label + PR */}
-            <div className="flex items-center justify-between">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-surface-400 uppercase tracking-wide">
-                  {record.label}
-                </p>
-                {/* Time leads, as it does in the coach's records card — the two
-                    are the same number and must look like it. */}
-                <p className="text-sm font-bold text-surface-100 mt-0.5 tabular-nums">
-                  {record.personalBest?.time}
-                  <span className="text-surface-500 font-normal ml-1.5">
-                    {record.personalBest?.pace}/km
-                  </span>
-                </p>
-                {record.personalBest?.fromInsideRun && (
-                  <p className="text-[10px] text-brand-300/80 mt-0.5">
-                    dentro de um treino de {record.personalBest.activityKm?.toFixed(1)} km
+                <div className="min-w-0 flex-1">
+                  <p className="text-2xl font-black leading-none tabular-nums text-surface-100">{pb.time}</p>
+                  <p className="mt-1 truncate text-xs text-surface-500">
+                    {pb.pace}/km · {pb.date}
+                    {pb.fromInsideRun && pb.activityKm != null
+                      ? ` · dentro de ${pb.activityKm.toFixed(1).replace(".", ",")} km`
+                      : ""}
                   </p>
-                )}
-              </div>
-              <div className="text-right text-xs text-surface-500 shrink-0">
-                <p>{record.personalBest?.date}</p>
-              </div>
-            </div>
+                </div>
 
-            {/* Comparison section (this vs last month) */}
-            {record.thisMonth || record.lastMonth ? (
-              <div className="flex items-center gap-2 pt-1 border-t border-surface-600/30">
-                {record.lastMonth && (
-                  <div className="text-[10px] text-surface-500">
-                    Mês passado: {record.lastMonth.pace} /km
-                  </div>
+                {/* Só quando há com o que comparar — um espaço vazio não é informação. */}
+                {record.improvement && record.trend && record.trend !== "same" && (
+                  <span
+                    className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold ${
+                      record.trend === "up"
+                        ? "bg-green-500/10 text-green-300"
+                        : "bg-yellow-500/10 text-yellow-300"
+                    }`}
+                    title={record.lastMonth ? `Mês passado: ${record.lastMonth.pace}/km` : undefined}
+                  >
+                    {record.trend === "up"
+                      ? <TrendingDown className="h-3 w-3" />
+                      : <TrendingUp className="h-3 w-3" />}
+                    {record.improvement}
+                  </span>
                 )}
-
-                {record.thisMonth && record.improvement && (
-                  <div className="flex items-center gap-1 ml-auto">
-                    {record.trend === "up" && (
-                      <>
-                        <TrendingDown className="w-3 h-3 text-green-400" />
-                        <span className="text-[10px] text-green-400 font-semibold">
-                          {record.improvement} mais rápido
-                        </span>
-                      </>
-                    )}
-                    {record.trend === "down" && (
-                      <>
-                        <TrendingUp className="w-3 h-3 text-yellow-400" />
-                        <span className="text-[10px] text-yellow-400 font-semibold">
-                          {record.improvement} mais lento
-                        </span>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            ) : null}
-          </div>
-        ))}
-      </div>
-
-      <p className="text-xs text-surface-500 pt-2">
-        💡 Baseado em suas {withRecords.length} distância(s)
-      </p>
-    </div>
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
+    </Section>
   );
 }

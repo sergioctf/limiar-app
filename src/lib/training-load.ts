@@ -231,6 +231,41 @@ export function computeRunStreak(runs: Run[]): number {
 }
 
 /**
+ * Sequência em **semanas**: semanas seguidas com pelo menos uma corrida.
+ *
+ * A sequência em dias media a coisa errada para este atleta (Sérgio, 20/09).
+ * Quem corre três vezes por semana há dois anos tinha "1 dia" de sequência na
+ * terça e "0" na quarta — um número que pisca e que pune justamente a rotina
+ * que o plano pede. Em semanas, a mesma pessoa tem 104.
+ *
+ * A semana corrente só conta quando já teve corrida; sem isso a contagem
+ * começa na semana passada, para a sequência não zerar toda segunda de manhã.
+ */
+export function computeWeekStreak(runs: Run[]): number {
+  if (runs.length === 0) return 0;
+
+  const mondayOf = (d: Date): string => {
+    const m = new Date(d);
+    m.setHours(0, 0, 0, 0);
+    m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
+    return localDateStr(m);
+  };
+
+  const weeksWithRun = new Set(runs.map(r => mondayOf(new Date(`${r.date}T12:00:00`))));
+
+  const cursor = new Date();
+  cursor.setHours(0, 0, 0, 0);
+  if (!weeksWithRun.has(mondayOf(cursor))) cursor.setDate(cursor.getDate() - 7);
+
+  let streak = 0;
+  while (weeksWithRun.has(mondayOf(cursor))) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 7);
+  }
+  return streak;
+}
+
+/**
  * Weekly volume for last N weeks, including current partial week.
  */
 export function weeklyVolumeProgress(

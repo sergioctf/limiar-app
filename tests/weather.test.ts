@@ -6,7 +6,7 @@
  * exata de alguém para um serviço de terceiro.
  */
 import { describe, expect, it } from "vitest";
-import { readForecast, roundCoord, skyKind, weatherUrl, SKY_LABEL } from "@/lib/weather";
+import { currentSky, readForecast, roundCoord, skyKind, weatherUrl, SKY_LABEL } from "@/lib/weather";
 
 const raw = {
   current: { temperature_2m: 23.4, apparent_temperature: 25.1, weather_code: 2 },
@@ -70,5 +70,37 @@ describe("a localização que sai do aparelho", () => {
     expect(url).toContain("latitude=-23.56");
     expect(url).toContain("longitude=-46.65");
     expect(url).not.toContain("-23.5612312");
+  });
+});
+
+describe("o que está acontecendo agora, e não o que o modelo previu", () => {
+  it("não diz chuva com o céu seco — o bug que o Sérgio viu na janela", () => {
+    // Código 80 = pancadas de chuva, mas nada caindo e céu meio limpo.
+    const f = readForecast({
+      ...raw,
+      current: { temperature_2m: 24, apparent_temperature: 25, weather_code: 80, precipitation: 0, cloud_cover: 40 },
+    }, at(13))!;
+    expect(SKY_LABEL[f.kind]).toBe("Parcialmente nublado");
+  });
+
+  it("céu fechado sem chuva é nublado, não pancada", () => {
+    expect(currentSky({ code: 61, precipitationMm: 0, cloudCover: 95 })).toBe("nublado");
+  });
+
+  it("sem nuvem nenhuma e sem chuva, é céu limpo", () => {
+    expect(currentSky({ code: 80, precipitationMm: 0, cloudCover: 5 })).toBe("limpo");
+  });
+
+  it("mas chuva medida continua sendo chuva", () => {
+    expect(currentSky({ code: 80, precipitationMm: 0.4, cloudCover: 90 })).toBe("pancada");
+    expect(currentSky({ code: 63, precipitationMm: 2, cloudCover: 100 })).toBe("chuva");
+  });
+
+  it("sem medida de precipitação, acredita no código", () => {
+    expect(currentSky({ code: 80, precipitationMm: null, cloudCover: 30 })).toBe("pancada");
+  });
+
+  it("um dia de sol não é reinterpretado", () => {
+    expect(currentSky({ code: 0, precipitationMm: 0, cloudCover: 90 })).toBe("limpo");
   });
 });

@@ -19,8 +19,8 @@ import { TargetRaceCard } from "@/components/dashboard/TargetRaceCard";
 import { TestCountdown } from "@/components/home/TestCountdown";
 import { analyzeHistoricalComparison, type EffortLite } from "@/lib/historical-comparison";
 import { pickTargetComparison } from "@/lib/target-comparison";
-import { computeRunStreak } from "@/lib/training-load";
-import { formatDistanceKm, totalDistanceKm, trainingDaysInWindow } from "@/lib/utils";
+import { computeWeekStreak } from "@/lib/training-load";
+import { totalDistanceKm, trainingDaysInWindow } from "@/lib/utils";
 import type { TestStatus } from "@/lib/test-status";
 import type { Goal, PerformanceTest, Run } from "@/types";
 
@@ -46,6 +46,13 @@ export function HomeHistory({
     return () => { cancelled = true; };
   }, []);
 
+  /*
+   * Quilometragem de uma vida não precisa de casa decimal: "1.247 km" diz a
+   * mesma coisa que "1.247,32 km" e cabe melhor num número grande.
+   */
+  const totalKm = Math.round(totalDistanceKm(runs)).toLocaleString("pt-BR");
+  const weeks = computeWeekStreak(recentFirst);
+
   const records = useMemo(() => analyzeHistoricalComparison(recentFirst, efforts), [recentFirst, efforts]);
   const target = useMemo(() => pickTargetComparison(goals, latestTest), [goals, latestTest]);
   const last30 = trainingDaysInWindow(recentFirst, activities, 30);
@@ -60,8 +67,9 @@ export function HomeHistory({
           <Section title="Seus números">
             <div className="grid grid-cols-2 gap-3">
               <StatCard label="Total de corridas" value={runs.length} icon={Target} />
-              <StatCard label="Distância total" value={formatDistanceKm(totalDistanceKm(runs))} icon={MapPin} />
-              <StatCard label="Sequência" value={computeRunStreak(recentFirst) + " dias"} icon={Flame} />
+              <StatCard label="Distância total" value={`${totalKm} km`} icon={MapPin} />
+              {/* Em semanas, não em dias: é o que a rotina de 3–4 treinos por semana mede. */}
+              <StatCard label="Sequência" value={`${weeks} ${weeks === 1 ? "semana" : "semanas"}`} icon={Flame} />
               <StatCard label="Dias treinados (30d)" value={last30.count} icon={CalendarCheck} />
             </div>
           </Section>

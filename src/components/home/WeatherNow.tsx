@@ -20,9 +20,9 @@ import {
 import { readForecast, skyKind, weatherUrl, SKY_LABEL, type SkyKind, type WeatherNow as Forecast } from "@/lib/weather";
 
 const COORDS_KEY = "limiar_coords";
-/** O tempo não muda a cada visita; meia hora de cache poupa pedido e bateria. */
 const CACHE_KEY = "limiar_weather";
-const CACHE_MS = 30 * 60 * 1000;
+/** Dez minutos: o bastante para poupar pedido, pouco para a linha envelhecer. */
+const CACHE_MS = 10 * 60 * 1000;
 
 const ICON: Record<SkyKind, LucideIcon> = {
   limpo: Sun,
@@ -128,7 +128,8 @@ export function WeatherNow() {
     );
   }
 
-  const kind = skyKind(forecast.code);
+  // `kind` é novo: uma previsão guardada antes dele ainda pode estar no cache.
+  const kind = forecast.kind ?? skyKind(forecast.code);
   const Icon = ICON[kind];
 
   return (

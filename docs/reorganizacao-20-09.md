@@ -70,3 +70,12 @@ Seus números · Recordes · Prova-alvo          ← voltaram de Gráficos
 | `src/components/achievements/MyAchievements.tsx` | minhas medalhas, em Amigos |
 | `src/app/friends/conquistas/page.tsx` | Amigos → Conquistas |
 | `tests/weather.test.ts`, `tests/test-countdown.test.ts` | 12 testes novos |
+
+## Ajustes depois de usar (20/09, mesma noite)
+
+- **O tempo dizia "Pancadas de chuva" com o céu seco.** O código WMO do "agora" do Open-Meteo é a categoria que o *modelo* atribui à hora, não uma observação. Agora o app pede também `precipitation` e `cloud_cover`: se o código é de chuva mas não está caindo nada, quem manda é o céu (`currentSky`). A chance de chuva continua nas próximas horas, que é onde previsão é previsão. Cache caiu de 30 para 10 minutos.
+- **"Como você está hoje"** perdeu o "Recuperação · Relógio + carga". A frase da disposição ganhou o destaque, com "Disposição" como rótulo pequeno. A procedência do número interessa a quem desconfia dele — e mora em Saúde.
+- **"Minha semana" ficou com um número só**, centralizado. Havia três formas de dizer a mesma semana (anel de sessões, dias treinados e uma frase repetindo os dois); três números lado a lado não são três informações, são um leitor decidindo em qual acreditar. O tempo virou legenda do anel.
+- **Sequência passou de dias para semanas** (`computeWeekStreak`). Quem corre três vezes por semana há dois anos tinha "1 dia" na terça e "0" na quarta — um número que pisca e pune a rotina que o próprio plano pede. Em semanas, a mesma pessoa tem 104.
+- **Distância total sem casa decimal:** "1.247 km" diz o mesmo que "1.247,32 km" e cabe melhor.
+- **Recordes redesenhados:** o problema não era o dado, era a hierarquia — distância, tempo, pace, data, mês passado e tendência tinham tamanhos quase iguais, com uma lâmpada emoji no rodapé. Um recorde é **o tempo**; o resto explica. Agora: medalha da distância à esquerda, tempo como número grande, pace/data/origem em legenda, e a variação do mês só quando existe.
