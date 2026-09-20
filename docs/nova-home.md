@@ -138,7 +138,7 @@ A outra IA apontou três problemas; os três foram conferidos no código, e havi
 
 ### Verificação em produção (18/09, noite)
 - Home: anel de recuperação 60 · "Treine com margem"; semana 3/6 dias · 3h21 · 4 sessões; quarta com a corrida feita e a musculação do dia não feita (tracejado), quinta com a musculação não feita, sábado e domingo previstos; blocos Corrida 2 (14 km), Musculação 2 (1h51), Calorias 1.590 kcal · treinos; o alerta de sobrecarga (só sono) não aparece mais.
-- Histórico → Atividades: "133 atividades · 552,3 km de corrida", filtros Tudo · Corrida · Musculação · Ciclismo;  abre em Musculação (63 atividades); a página de uma musculação mostra 59 min, 322 kcal, FC 116, "Ver no calendário" e "Excluir"; o menu acende Histórico também nela.
+- Histórico → Atividades: "133 atividades · 552,3 km de corrida", filtros Tudo · Corrida · Musculação · Ciclismo; `/runs?sport=musculacao` abre em Musculação (63 atividades); a página de uma musculação mostra 59 min, 322 kcal, FC 116, "Ver no calendário" e "Excluir"; o menu acende Histórico também nela.
 - Calendário em 390 px: sem rolagem lateral, semana começando na segunda, ícones nos dias, "+" compacto, "29,9 km".
 - Saúde: "O que compõe o score" fechado, com o resumo "5 sinais".
 - Deploy: a fila da Vercel travou duas vezes num deploy "Queued"; os presos foram **cancelados** pela API (o mesmo botão do painel, nada apagado) e o seguinte subiu normalmente.
