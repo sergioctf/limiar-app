@@ -40,7 +40,12 @@ export const NAV_AREAS: NavArea[] = [
     tabs: [{ href: "/runs", label: "Atividades" }, { href: "/calendar", label: "Calendário" }, { href: "/analytics", label: "Gráficos" }],
   },
   { key: "saude", href: "/health", label: "Saúde", icon: HeartPulse, paths: ["/health"] },
-  { key: "amigos", href: "/friends", label: "Amigos", icon: Users, paths: ["/friends"] },
+  {
+    key: "amigos", href: "/friends", label: "Amigos", icon: Users, paths: ["/friends"], width: "max-w-3xl",
+    // Conquistas vieram de Gráficos (20/09): medalha só significa alguma coisa
+    // ao lado de quem mais tem.
+    tabs: [{ href: "/friends", label: "Amigos" }, { href: "/friends/conquistas", label: "Conquistas" }],
+  },
   { key: "config", href: "/settings", label: "Configurações", icon: Settings, paths: ["/settings"] },
 ];
 

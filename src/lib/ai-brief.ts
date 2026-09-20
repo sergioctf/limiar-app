@@ -141,9 +141,9 @@ function recuperacaoSection(i: BriefInput): BriefSection | null {
   const lines: string[] = [];
   if (r.score != null) {
     lines.push(`Base do número: ${basisLabel(r)}.`);
-    for (const c of r.readiness.components) {
-      lines.push(`${c.label}: ${Math.round(c.score)}/100 (${c.auto ? "do relógio" : "relatado por você"})`);
-    }
+    lines.push(`O que o compõe: ${r.readiness.components
+      .map(c => `${c.label} ${Math.round(c.score)}/100 (${c.auto ? "relógio" : "seu relato"})`)
+      .join(" · ")}.`);
     if (r.readiness.cap) lines.push(`Teto aplicado: ${r.readiness.cap.reason}`);
   } else {
     lines.push("Nenhum sinal chegou hoje — nem relógio, nem check-in.");
@@ -165,9 +165,10 @@ function sonoSection(i: BriefInput): BriefSection | null {
   const s = i.sleep;
   if (!s || s.measured === 0) return null;
 
-  const lines = s.nights
+  const lines = [`Noite a noite: ${s.nights
     .filter(n => n.hours != null)
-    .map(n => `${shortDate(n.date)}: ${num(n.hours!)} h${n.score != null ? ` · qualidade ${n.score}` : ""}`);
+    .map(n => `${shortDate(n.date)} ${num(n.hours!)} h${n.score != null ? ` (qualidade ${n.score})` : ""}`)
+    .join(" · ")}.`];
   if (s.debtHours > 0) lines.push(`Dívida acumulada na semana: ${num(s.debtHours)} h abaixo do alvo.`);
 
   return {
@@ -292,11 +293,20 @@ function ritmosSection(i: BriefInput): BriefSection | null {
   const m = i.metrics;
   if (!m) return null;
 
+  /*
+   * As previsões de prova entram aqui, e não só quando existe prova marcada.
+   *
+   * Em teste (20/09) a IA respondeu "maratona em torno de 3h45" multiplicando o
+   * ritmo de maratona pela distância — conta feita pelo modelo, que é
+   * exatamente o que a ADR-02 proíbe. Com a previsão de Daniels no dossiê ela
+   * não precisa calcular: o número já está aqui, e é melhor do que o dela.
+   */
   const lines: string[] = [
     `VDOT ${num(m.vdot)} · VO₂ máx estimado ${num(m.vo2max)}.`,
     `Limiar de frequência cardíaca (LTHR) estimado: ${m.lthr} bpm.`,
-    ...m.paces.map(p => `${p.label}: ${paceToString(p.pace_max_sec)} a ${paceToString(p.pace_min_sec)} /km`),
-    ...m.zones.map(z => `Zona ${z.zone} (${z.name}): ${z.min_bpm}${z.max_bpm ? `–${z.max_bpm}` : "+"} bpm`),
+    `Ritmos de treino: ${m.paces.map(p => `${p.label} ${paceToString(p.pace_max_sec)}–${paceToString(p.pace_min_sec)}`).join(" · ")} (min/km).`,
+    `Faixas de FC: ${m.zones.map(z => `Z${z.zone} ${z.min_bpm}${z.max_bpm ? `–${z.max_bpm}` : "+"}`).join(" · ")} bpm.`,
+    `Previsão de tempo neste VDOT: ${m.predictions.map(p => `${p.distance_label} ${timeToString(p.predicted_seconds)}`).join(" · ")}.`,
   ];
 
   return {

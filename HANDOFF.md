@@ -1221,7 +1221,18 @@ Fase 2 do plano em `docs/plano-proximos-passos.md`. Detalhes em **`docs/ia-centr
 - **Conversa gravada, sem limite de uso** (decisão do Sérgio): migration **`035_ai_conversas.sql`** → `ai_messages`, RLS de ler/inserir/**apagar** as próprias, `date` no fuso do atleta, linha do tempo agrupada por dia e botão de apagar tudo na tela.
 - **O dossiê é sempre montado no servidor.** A tela recebe uma cópia para responder na hora; `/api/ia/perguntar` monta o seu do zero — quem pergunta não escolhe os números sobre os quais a IA responde. E a leitura rápida é gravada **recalculando** no servidor, não copiando o texto que o cliente mostrou.
 - **Custo conhecido:** montar o dossiê são ~18 consultas (`ai-brief-load.ts`), pagas ao abrir `/ia`, a cada pergunta aberta e a cada gravação de leitura. O atleta nunca espera pela gravação; a tela e a pergunta, sim.
-- **Ainda não feito (Fase 3):** tirar "Sua semana" e o resumo de IA do Treinador, "O que está melhorando" do Histórico, e levar a inteligência das Metas para a conversa. Até lá a mesma leitura aparece em dois lugares, de propósito.
+## 6.35 Fase 3 e a reorganização das telas ✅ (novo, 20/09)
+
+Detalhes em **`docs/reorganizacao-20-09.md`**.
+
+- **A IA foi testada contra os dados reais antes de qualquer remoção**, e o teste achou que **ela fazia conta**: perguntada sobre VDOT, multiplicou o ritmo de maratona pela distância e cuspiu "3h45". Corrigido em dois lugares — as previsões de Daniels entraram no dossiê (seção "Meus ritmos") e o prompt ganhou *"VOCÊ NÃO FAZ CONTA. Nenhuma."*. Temperatura caiu de 0,7 para 0,3.
+- **Teto da Groq:** 8.000 tokens/min no plano gratuito, e o dossiê tem ~2.000 — três perguntas seguidas batem nele. `callGroqDetailed` lê o `retry-after` e a tela diz quantos segundos esperar, em vez de "tente de novo". O limite é do provedor, não uma decisão do Limiar.
+- **Saíram das telas** (os leitores continuam, é deles que a IA lê): `WeekRecapCard` do Treinador, `ProgressCard` do Histórico, `HistoryHighlights` de Gráficos. Gráficos voltou a ser só gráfico. **Metas ficou:** sugerir meta é funcionalidade, não interpretação.
+- **Hoje ganhou um rodapé:** teste de 3 km (contagem regressiva, `TestCountdown` + `daysUntilTestDue`), Seus números, Recordes e Prova-alvo. Falam da vida inteira, por isso ficam depois da semana.
+- **Conquistas foram para Amigos** (`/friends/conquistas`, com aba própria em `nav-areas.ts`): medalha só significa alguma coisa ao lado de quem mais tem.
+- **Tempo na Hoje** (`WeatherNow` + `weather.ts`): Open-Meteo, sem chave. Localização pedida **no toque**, guardada só no navegador, enviada arredondada a duas casas (~1 km).
+- **Cores por tipo de treino** (`session-colors.ts`, extraído do `WeeklyPlanCard`): rodagem verde, limiar amarelo, tiro vermelho, longão roxo — agora também na Hoje. **Nunca em "Minha semana"**, onde a cor já quer dizer feito / previsto / não feito.
+- **Custo assumido:** a Home voltou a carregar o histórico inteiro de corridas (só colunas numéricas, nunca `strava_raw_json`), porque "Seus números" e os recordes falam da vida toda. A carga segue olhando 180 dias, agora por filtro em memória.
 
 # 7. TELAS E NAVEGAÇÃO
 

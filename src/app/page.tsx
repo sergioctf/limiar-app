@@ -24,7 +24,9 @@ import { dayKeyOf } from "@/lib/session-swap";
 import { computeMetrics } from "@/lib/performance";
 import { detectOvertraining } from "@/lib/overtraining";
 import { calorieBreakdown } from "@/lib/calorie-breakdown";
-import type { PerformanceTest, Run, WeeklyPlanData, WellnessData } from "@/types";
+import { testStatus } from "@/lib/test-status";
+import { HomeHistory } from "@/components/home/HomeHistory";
+import type { Goal, PerformanceTest, Run, WeeklyPlanData, WellnessData } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -55,37 +57,48 @@ export default async function HomePage() {
   const nextMonday = addDays(monday, 7);
   const admin = createAdminClient();
 
-  const [profile, plans, runs, activities, wellness, tests, body, feedback, sync, anyActivity] = await Promise.all([
+  const [profile, plans, runs, activities, wellness, tests, body, feedback, sync, anyActivity, goals] = await Promise.all([
     supabase.from("profiles").select("name, username").eq("id", user.id).maybeSingle(),
     safe<{ period_start: string; full_report: string | null }>(admin.from("coach_reports").select("period_start, full_report")
       .eq("user_id", user.id).eq("period_type", "week").in("period_start", [monday, nextMonday])),
-    // The columns the day, the week and the load need — not the raw Strava payload.
+    /*
+     * As colunas de que o dia, a semana, a carga e os recordes precisam — nunca
+     * o JSON cru do Strava (dívida A6). O histórico inteiro voltou a ser
+     * carregado em 20/09, porque "Seus números" e os recordes pessoais falam da
+     * vida toda; são ~10 números por corrida, não o payload de antes.
+     */
     safe<Run>(supabase.from("runs")
       .select("id, date, name, type, distance_km, duration_seconds, moving_time_seconds, elapsed_time_seconds, avg_hr, avg_pace_seconds_per_km, calories")
-      .eq("user_id", user.id).is("deleted_at", null).gte("date", athleteDaysAgoStr(180, now))
+      .eq("user_id", user.id).is("deleted_at", null)
       .order("date", { ascending: false }) as unknown as PromiseLike<{ data: Run[] | null }>),
-    safe<{ id: string; date: string; name: string | null; sport_type: string; duration_seconds: number | null; distance_m: number | null; calories: number | null }>(
-      supabase.from("activities").select("id, date, name, sport_type, duration_seconds, distance_m, calories")
-        .eq("user_id", user.id).is("deleted_at", null).gte("date", monday).order("date")),
+    // Trinta dias: a semana para os blocos, o mês para "dias treinados (30d)".
+    safe<{ id: string; date: string; name: string | null; sport_type: string; duration_seconds: number | null; distance_m: number | null; calories: number | null; avg_hr: number | null }>(
+      supabase.from("activities").select("id, date, name, sport_type, duration_seconds, distance_m, calories, avg_hr")
+        .eq("user_id", user.id).is("deleted_at", null).gte("date", athleteDaysAgoStr(30, now)).order("date")),
     safe<WellnessData>(supabase.from("wellness_data").select("*").eq("user_id", user.id).gte("date", athleteDaysAgoStr(30, now))),
     safe<PerformanceTest>(admin.from("performance_tests").select("*").eq("user_id", user.id).order("test_date", { ascending: false }).limit(1)),
     safe<{ weight_kg: number | null }>(admin.from("body_measurements").select("weight_kg").eq("user_id", user.id).order("date", { ascending: false }).limit(1)),
     safe<{ run_id: string }>(supabase.from("run_feedback").select("run_id").eq("user_id", user.id).eq("status", "deferred")),
     safe<{ created_at: string }>(supabase.from("sync_logs").select("created_at").eq("user_id", user.id).eq("source", "strava").order("created_at", { ascending: false }).limit(1)),
     safe<{ id: string }>(supabase.from("activities").select("id").eq("user_id", user.id).is("deleted_at", null).limit(1)),
+    safe<Goal>(supabase.from("goals").select("*").eq("user_id", user.id).in("status", ["active", "upcoming"])
+      .or(`race_date.is.null,race_date.gt.${today}`).order("race_date", { ascending: true }).limit(3)),
   ]);
 
   const plan = parsePlan(plans.find(r => r.period_start === monday)?.full_report);
   const nextPlan = parsePlan(plans.find(r => r.period_start === nextMonday)?.full_report);
   const weightKg = body[0]?.weight_kg ?? null;
   const weekRuns = runs.filter(r => r.date >= monday);
+  const weekActivities = activities.filter(a => a.date >= monday);
+  // A carga olha seis meses; o resto da página, a vida inteira.
+  const recentRuns = runs.filter(r => r.date >= athleteDaysAgoStr(180, now));
   const latestTest = tests[0] ?? null;
 
   const todayView = buildToday({
-    plan, runs: weekRuns, activities, today, weekStart: monday, hasTest: !!latestTest,
+    plan, runs: weekRuns, activities: weekActivities, today, weekStart: monday, hasTest: !!latestTest,
   });
   const week = weekMovement({
-    weekStart: monday, today, plan, runs: weekRuns, activities,
+    weekStart: monday, today, plan, runs: weekRuns, activities: weekActivities,
     wellness: wellness.filter(w => w.date >= monday), weightKg,
   });
   const recovery = await loadRecoveryInputs(supabase, user.id, now).then(r => r.recovery, () => null);
@@ -95,7 +108,7 @@ export default async function HomePage() {
     ? computeMetrics(latestTest.distance_km * 1000, latestTest.time_seconds, latestTest.avg_hr ?? undefined, latestTest.max_hr ?? undefined)
     : null;
   const overtraining = detectOvertraining(
-    runs, metrics?.lthr ?? null, metrics?.paces.find(p => p.name === "threshold")?.pace_min_sec ?? null, wellness,
+    recentRuns, metrics?.lthr ?? null, metrics?.paces.find(p => p.name === "threshold")?.pace_min_sec ?? null, wellness,
   );
 
   const tomorrowKey = dayKeyOf(addDays(today, 1));
@@ -110,7 +123,7 @@ export default async function HomePage() {
    */
   let attention: HomeAttention | null = null;
   const deferred = new Set(feedback.map(f => f.run_id));
-  const recentDeferred = runs.find(r => deferred.has(r.id) && r.date >= athleteDaysAgoStr(7, now));
+  const recentDeferred = recentRuns.find(r => deferred.has(r.id) && r.date >= athleteDaysAgoStr(7, now));
   const weekday = new Date(`${today}T12:00:00Z`).getUTCDay();
   if (recentDeferred) {
     attention = { text: "Você deixou para depois o check-in de uma corrida.", href: `/runs/${recentDeferred.id}`, action: "Responder" };
@@ -138,8 +151,17 @@ export default async function HomePage() {
           username={(profile.data?.username as string | null) ?? null}
           isNewUser={runs.length === 0 && anyActivity.length === 0}
           overtraining={overtraining}
-          calorieDay={calorieBreakdown(weekRuns, activities, weightKg)}
+          calorieDay={calorieBreakdown(weekRuns, weekActivities, weightKg)}
           lastSyncAt={sync[0]?.created_at ?? null}
+          history={
+            <HomeHistory
+              runs={runs}
+              goals={goals}
+              latestTest={latestTest}
+              testStatus={testStatus(latestTest)}
+              activities={activities}
+            />
+          }
         />
       </DashboardWithRefresh>
     </AppShell>

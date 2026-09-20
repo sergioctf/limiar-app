@@ -198,3 +198,19 @@ export function shouldScheduleTest(
   if (status.nudge === "none") return false;
   return cycleWeek === 1;
 }
+
+/**
+ * Dias até o teste vencer — negativo quando já venceu.
+ *
+ * O app avisava sobre o teste em duas frases sobre o passado ("seu teste tem 6
+ * semanas") e em nenhum lugar com uma data. Sérgio, 20/09: *"o teste de 3 km é
+ * uma das coisas mais importantes desse app, e tá meio largado."* Uma contagem
+ * é uma coisa que se coloca na agenda; uma idade, não.
+ *
+ * A régua é a mesma do resto do módulo: vence em `TEST_AGING_WEEKS`, quando os
+ * ritmos começam a descrever outra pessoa.
+ */
+export function daysUntilTestDue(testDate: string, now: Date = new Date()): number {
+  const due = new Date(`${testDate}T12:00:00`).getTime() + TEST_AGING_WEEKS * 7 * 86_400_000;
+  return Math.round((due - now.getTime()) / 86_400_000);
+}

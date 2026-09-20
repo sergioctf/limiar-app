@@ -100,6 +100,57 @@ function fmtRun(r: Run): string {
   return `${r.date}: ${r.distance_km.toFixed(2)} km | ${dur} | ${pace}${hr}${maxHr}${elev}${cad} [${r.type}]${notes}`.trim();
 }
 
+/**
+ * O resultado detalhado de uma chamada, para quem precisa distinguir "falhou"
+ * de "falhou porque você perguntou rápido demais".
+ *
+ * O plano gratuito da Groq tem teto por minuto (8.000 tokens, medido em
+ * 20/09/2026) e o dossiê da IA central é grande: três perguntas seguidas já
+ * batem nele. Quem chama precisa poder dizer ao atleta quantos segundos
+ * esperar, em vez de "tente de novo".
+ */
+export type GroqResult =
+  | { ok: true; text: string }
+  | { ok: false; reason: "no_key" | "rate_limit" | "error"; retryAfterSec?: number };
+
+/** Quantos segundos a Groq pediu para esperar, quando ela diz. */
+function retryAfterFrom(body: string): number | undefined {
+  const m = body.match(/try again in ([\d.]+)s/i);
+  return m ? Math.ceil(Number(m[1])) : undefined;
+}
+
+export async function callGroqDetailed(
+  systemPrompt: string, userPrompt: string, maxTokens = 600, temperature = 0.7,
+): Promise<GroqResult> {
+  const rawKey = process.env.GROQ_API_KEY ?? "";
+  const apiKey = (rawKey.charCodeAt(0) === 65279 ? rawKey.slice(1) : rawKey).trim() || undefined;
+  if (!apiKey) return { ok: false, reason: "no_key" };
+
+  try {
+    const res = await fetch(GROQ_API_URL, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: groqBody(systemPrompt, userPrompt, { maxTokens, temperature }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      if (res.status === 429) {
+        return { ok: false, reason: "rate_limit", retryAfterSec: retryAfterFrom(body) };
+      }
+      console.error("[AI] Groq error:", res.status, body);
+      return { ok: false, reason: "error" };
+    }
+
+    const data = await res.json();
+    const text = (data.choices?.[0]?.message?.content as string | undefined)?.trim();
+    return text ? { ok: true, text } : { ok: false, reason: "error" };
+  } catch (err) {
+    console.error("[AI] Fetch error:", err);
+    return { ok: false, reason: "error" };
+  }
+}
+
 /** Call Groq and return raw text */
 async function callGroq(systemPrompt: string, userPrompt: string, maxTokens = 600): Promise<string | null> {
   // Strip BOM (U+FEFF, charCode 65279) and whitespace — PowerShell pipe introduces these invisibly
@@ -1118,7 +1169,7 @@ export async function answerAthleteQuestion(input: {
   question: string;
   firstName?: string | null;
   history?: Array<{ role: "user" | "assistant"; content: string }>;
-}): Promise<string | null> {
+}): Promise<GroqResult> {
   const systemPrompt = `
 Você é o treinador do Limiar conversando com ${input.firstName ?? "o atleta"}, em português do Brasil.
 
@@ -1127,6 +1178,9 @@ pelo motor do app (Daniels, Friel, CTL/ATL/TSB). Você não recalcula, não esti
 
 - Todo número que você disser precisa aparecer no dossiê, igual. Nunca arredonde para um número
   mais bonito nem some coisas por conta própria.
+- VOCÊ NÃO FAZ CONTA. Nenhuma. Não multiplique ritmo por distância, não converta ritmo em tempo de
+  prova, não some quilometragem, não calcule média nem porcentagem. Se o número pedido não está
+  escrito no dossiê, ele não existe para você — mesmo que dê para deduzi-lo a partir de outros.
 - Se a pergunta pede algo que não está no dossiê, diga com todas as letras que você não tem esse
   dado, e diga o que faria você ter (conectar o relógio, fazer o teste de calibração, registrar o
   treino, cadastrar a prova).
@@ -1151,5 +1205,6 @@ ${input.brief}
     `Pergunta do atleta: ${input.question}`,
   ].filter(Boolean).join("\n\n");
 
-  return callGroq(systemPrompt, userPrompt, 700);
+  // Temperatura baixa: aqui a graça é ser exato, não ser criativo.
+  return callGroqDetailed(systemPrompt, userPrompt, 700, 0.3);
 }

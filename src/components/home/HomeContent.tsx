@@ -10,8 +10,12 @@
  * One main action. The recovery is its own block, as a 0–100 ring. The
  * week counts every sport, shows what was planned and did not happen as well
  * as what did, and carries its numbers big (Sérgio, 18/09: "deixar mais visual
- * e grande os big numbers"). Charts, records and totals live in Histórico, load
- * and form in Saúde, the cycle and calibration in Treinador.
+ * e grande os big numbers").
+ *
+ * No fim da página, depois de tudo: o teste de 3 km, seus números, os recordes
+ * e a prova-alvo — voltaram de Gráficos em 20/09, mas no rodapé, porque falam
+ * da vida inteira e não do dia. Carga e forma ficam em Saúde, o ciclo no
+ * Treinador, e Gráficos voltou a ser só gráfico.
  */
 import { useState } from "react";
 import Link from "next/link";
@@ -21,6 +25,7 @@ import { Ring } from "@/components/ui/Ring";
 import type { Tone } from "@/components/ui/tone";
 import { CountUp } from "@/components/shared/CountUp";
 import { SportGlyph } from "@/components/shared/SportGlyph";
+import { WeatherNow } from "@/components/home/WeatherNow";
 import { TodayCheckPanel } from "@/components/today/TodayCheck";
 import { AdaptSessionControl } from "@/components/today/AdaptSession";
 import { SwapActions } from "@/components/today/SwapActions";
@@ -33,6 +38,7 @@ import { OvertrainingAlert } from "@/components/dashboard/OvertrainingAlert";
 import { NotificationNudge } from "@/components/dashboard/NotificationNudge";
 import { CalorieDetailModal } from "@/components/dashboard/CalorieDetailModal";
 import { SPORTS } from "@/lib/sports";
+import { sessionTone } from "@/lib/session-colors";
 import { formatMinutes, type MovementDay, type WeekMovement } from "@/lib/week-movement";
 import { basisLabel, type RecoveryToday } from "@/lib/recovery-today";
 import type { CalorieDay } from "@/lib/calorie-breakdown";
@@ -80,7 +86,7 @@ function DayMarks({ day }: { day: MovementDay }) {
 
 export function HomeContent({
   dateLabel, today, recovery, week, tomorrow, attention, refreshKey,
-  firstName, userName, username, isNewUser, overtraining, calorieDay, lastSyncAt,
+  firstName, userName, username, isNewUser, overtraining, calorieDay, lastSyncAt, history,
 }: {
   dateLabel: string;
   today: Today;
@@ -97,6 +103,14 @@ export function HomeContent({
   /** The week's workouts, measured and estimated, for "Calorias" on tap. */
   calorieDay: CalorieDay | null;
   lastSyncAt: string | null;
+  /**
+   * O fundo da página: teste de 3 km, seus números, recordes e prova-alvo.
+   *
+   * Vieram de Gráficos em 20/09, a pedido do Sérgio, e ficam aqui embaixo de
+   * propósito — falam da vida inteira, não do dia, e em cima disputariam com a
+   * sessão de hoje.
+   */
+  history?: React.ReactNode;
 }) {
   const todayIndex = Math.max(0, week.days.findIndex(d => d.isToday));
   const [selected, setSelected] = useState(todayIndex);
@@ -174,6 +188,8 @@ export function HomeContent({
         <div className="min-w-0">
           <p className="text-xl font-bold text-surface-100">{greeting()}{firstName ? `, ${firstName}` : ""}</p>
           <p className="text-xs text-surface-500 mt-0.5 first-letter:uppercase">{dateLabel}</p>
+          {/* Quem vai correr decide roupa e hora por isto (Sérgio, 20/09). */}
+          <div className="mt-1.5"><WeatherNow /></div>
         </div>
         <Link href="/runs/new" className="btn-secondary shrink-0" aria-label="Registrar treino">
           <Plus className="w-4 h-4" />
@@ -261,17 +277,28 @@ export function HomeContent({
               </div>
             ) : (
               <ul className="space-y-3">
-                {(status?.sessions ?? []).map((s, i) => (
+                {(status?.sessions ?? []).map((s, i) => {
+                  /*
+                   * A cor é a do tipo do treino, a mesma do Treinador: rodagem
+                   * verde, limiar amarelo, tiro vermelho, longão roxo (Sérgio,
+                   * 20/09 — "vamos continuar usando esses color codes"). Só
+                   * aqui: em "Minha semana" a cor já quer dizer feito, previsto
+                   * ou não feito, e duas gramáticas no mesmo bloco se anulam.
+                   */
+                  const tone = sessionTone(s.type);
+                  return (
                   <li key={`${s.sport}-${i}`} className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-3 min-w-0">
-                      <span className={`shrink-0 rounded-xl flex items-center justify-center ${i === 0 ? "w-11 h-11" : "w-9 h-9"} ${
-                        s.done ? "bg-brand-500/15 text-brand-400" : "bg-surface-700/60 text-surface-300"
-                      }`}>
+                      <span className={`shrink-0 rounded-xl flex items-center justify-center border ${i === 0 ? "w-11 h-11" : "w-9 h-9"} ${tone.bg} ${tone.border} ${tone.text}`}>
                         <SportGlyph sport={s.sport} className={i === 0 ? "w-5 h-5" : "w-4 h-4"} />
                       </span>
                       <div className="min-w-0">
                         <p className={`${i === 0 ? "text-2xl font-black" : "text-base font-semibold"} text-surface-100 leading-tight`}>{s.label}</p>
-                        {s.detail && <p className="text-sm text-surface-400 mt-0.5">{s.detail}{i === 0 && today.session?.pace ? ` · ${today.session.pace}` : ""}</p>}
+                        <p className="text-sm text-surface-400 mt-0.5">
+                          <span className={`text-xs font-semibold uppercase tracking-wide ${tone.text}`}>{tone.label}</span>
+                          {s.detail ? ` · ${s.detail}` : ""}
+                          {i === 0 && today.session?.pace ? ` · ${today.session.pace}` : ""}
+                        </p>
                       </div>
                     </div>
                     <span className={`shrink-0 mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
@@ -280,7 +307,8 @@ export function HomeContent({
                       {s.done ? <><Check className="w-3 h-3" /> feito</> : "previsto"}
                     </span>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
 
@@ -467,6 +495,8 @@ export function HomeContent({
           </div>
         </Card>
       </Section>
+
+      {history}
 
       {lastSyncAt && (
         <p className="text-center text-[11px] text-surface-600">

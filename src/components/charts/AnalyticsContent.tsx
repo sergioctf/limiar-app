@@ -16,11 +16,17 @@ type Tab = "volume" | "pace" | "heart" | "longrun" | "evolution";
 
 interface Props {
   runs: Run[];
-  /** Records, achievements and totals — moved here from the Home (18/09). */
-  highlights?: React.ReactNode;
 }
 
-export function AnalyticsContent({ runs, highlights }: Props) {
+/**
+ * Só os gráficos (Sérgio, 20/09).
+ *
+ * Recordes, conquistas, totais e prova-alvo passaram por aqui entre 18 e 20/09
+ * e seguiram viagem: os números e os recordes para a Hoje, as conquistas para
+ * Amigos. Eles falam do histórico inteiro; esta tela fala de tendência, e
+ * começava com meia tela de coisa que não era gráfico.
+ */
+export function AnalyticsContent({ runs }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("volume");
   const [showReport, setShowReport] = useState(false);
 
@@ -58,8 +64,6 @@ export function AnalyticsContent({ runs, highlights }: Props) {
       </div>
 
       {showReport && <MonthlyReportModal runs={runs} onClose={() => setShowReport(false)} />}
-
-      {highlights}
 
       {/* Tabs */}
       <div className="flex gap-1 bg-surface-700 rounded-xl p-1 overflow-x-auto">

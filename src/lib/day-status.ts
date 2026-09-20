@@ -38,6 +38,14 @@ export interface DayActivity {
 
 export interface PlannedSession {
   sport: SportKey;
+  /**
+   * O tipo da sessão do plano — "easy", "intervals", "long_run", "strength"…
+   *
+   * Existe para a tela poder pintar a sessão na cor do tipo, que é como o
+   * Treinador já fala (rodagem verde, tiro vermelho, longão roxo) e como o
+   * Sérgio lê o treino antes de ler o nome. Ver `session-colors.ts`.
+   */
+  type: string;
   label: string;
   /** "7 km", "40 min" — a glanceable line, never a paragraph. */
   detail: string | null;
@@ -78,13 +86,14 @@ export function plannedSessionsOf(day: WeeklyPlanDay | null | undefined): Array<
     const key: SportKey = sport && SPORTS[sport] ? sport : "corrida";
     out.push({
       sport: key,
+      type: day.type,
       label: day.label,
       detail: day.distance_km ? km(day.distance_km) : day.duration_min ? `${day.duration_min} min` : null,
     });
   }
   if (isStrengthDay || day.strength) {
     const minutes = day.strength?.estimatedMinutes ?? (isStrengthDay ? day.duration_min : null);
-    out.push({ sport: "musculacao", label: "Musculação", detail: minutes ? `${minutes} min` : null });
+    out.push({ sport: "musculacao", type: "strength", label: "Musculação", detail: minutes ? `${minutes} min` : null });
   }
   return out;
 }

@@ -91,7 +91,7 @@ Sérgio, 20/09: **"sem limite, gravado com data, tudo organizado."**
 - **Gravada com a data do atleta**, numa linha do tempo agrupada por dia, com botão de apagar a conversa (migration `035_ai_conversas.sql`).
 - **Latência:** leitura rápida responde na hora, no navegador; o campo aberto mostra "Lendo seus dados…".
 
-## Fase 3 — Limpar as telas com a IA no lugar
+## Fase 3 — Limpar as telas com a IA no lugar ✅ *feita em 20/09 — ver [reorganizacao-20-09.md](reorganizacao-20-09.md)*
 
 - **Treinador:** saem "Sua semana" (devolutiva) e o resumo de IA — viram sugestões da IA. Ficam plano, adaptações, agenda, conselheiro e previsão de provas.
 - **Histórico:** sai "O que está melhorando para você" — vira sugestão da IA. O Histórico fica só o histórico.
@@ -109,7 +109,7 @@ Sérgio, 20/09: **"sem limite, gravado com data, tudo organizado."**
 
 1. ~~**Fase 1 inteira** numa entrega (bug das notificações primeiro, depois a Home).~~ ✅ 20/09
 2. ~~**Fase 2 inteira** — dossiê, botão, leituras rápidas e campo aberto.~~ ✅ 20/09
-3. **Fase 3** — limpeza das telas, agora que a IA cobre o que sai delas.
+3. ~~**Fase 3** — limpeza das telas, agora que a IA cobre o que sai delas.~~ ✅ 20/09
 4. **Fase 4** — conforme a prioridade do Sérgio.
 
 ## O que mudou no código na Fase 1

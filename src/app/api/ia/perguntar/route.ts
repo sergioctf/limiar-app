@@ -47,26 +47,43 @@ export async function POST(request: NextRequest) {
   const brief = await loadAthleteBrief(supabase, admin, user.id).catch(() => null);
   if (!brief) return json({ error: "Não consegui reunir seus dados agora." }, 503);
 
-  const answer = await answerAthleteQuestion({
+  const result = await answerAthleteQuestion({
     brief: briefText(brief),
     question,
     firstName: brief.firstName,
     history,
   });
 
-  if (!answer) {
+  if (!result.ok) {
     // A pergunta do atleta não se perde só porque o modelo não respondeu.
     await admin.from("ai_messages").insert({
       user_id: user.id, role: "user", kind: "aberta", content: question, date,
     });
+    /*
+     * O teto é da Groq, não uma decisão do Limiar (o Sérgio pediu explicitamente
+     * "sem limite"). Então a mensagem diz o que está acontecendo e por quanto
+     * tempo, em vez de um "tente de novo" que não ajuda a decidir nada.
+     */
+    if (result.reason === "rate_limit") {
+      const s = result.retryAfterSec;
+      return json({
+        error: s
+          ? `Muitas perguntas em sequência. O provedor pediu ${s} s — as leituras rápidas continuam valendo enquanto isso.`
+          : "Muitas perguntas em sequência. Espere alguns segundos — as leituras rápidas continuam valendo.",
+        retryAfterSec: s ?? null,
+      }, 429);
+    }
+    if (result.reason === "no_key") {
+      return json({ error: "A IA não está configurada neste ambiente." }, 503);
+    }
     return json({ error: "A IA não respondeu agora. Tente de novo em instantes." }, 503);
   }
 
   const sources = brief.sections.map(s => s.title);
   await admin.from("ai_messages").insert([
     { user_id: user.id, role: "user",      kind: "aberta", content: question, date },
-    { user_id: user.id, role: "assistant", kind: "aberta", content: answer, sources, date },
+    { user_id: user.id, role: "assistant", kind: "aberta", content: result.text, sources, date },
   ]);
 
-  return json({ answer, sources });
+  return json({ answer: result.text, sources });
 }

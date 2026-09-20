@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import type { WeeklyPlanData, WeeklyPlanDay, PlanChatMessage } from "@/types";
 import { SPORTS, isRunSession } from "@/lib/sports";
+import { sessionTone } from "@/lib/session-colors";
 import { savePlanOffline, loadPlanOffline } from "@/lib/offline-store";
 import { isLegacyPlanShape } from "@/lib/workout-builder";
 import { WorkoutStepsView } from "@/components/coach/WorkoutStepsView";
@@ -38,27 +39,32 @@ function formatWeekRange(mondayStr: string): string {
   return `${mon.getDate()} ${months[mon.getMonth()]} – ${sun.getDate()} ${months[sun.getMonth()]}`;
 }
 
-// ─── Type → visual style map ─────────────────────────────────────────────────
+// ─── Type → visual style ─────────────────────────────────────────────────────
+//
+// As cores vêm de `session-colors.ts` para a Hoje poder falar a mesma língua
+// (rodagem verde, tiro vermelho, longão roxo). Os ícones ficam aqui, porque só
+// esta tela usa esse desenho.
 
 interface TypeStyle {
   bg: string; border: string; text: string; dot: string; icon: React.ReactNode;
 }
 
-const TYPE_STYLES: Record<string, TypeStyle> = {
-  rest:      { bg: "bg-surface-700/40",  border: "border-surface-600/60",   text: "text-surface-400",  dot: "bg-surface-500",  icon: <Moon         className="w-3.5 h-3.5" /> },
-  easy:      { bg: "bg-green-500/10",    border: "border-green-500/30",     text: "text-green-400",    dot: "bg-green-500",    icon: <Wind         className="w-3.5 h-3.5" /> },
-  recovery:  { bg: "bg-cyan-500/10",     border: "border-cyan-500/30",      text: "text-cyan-400",     dot: "bg-cyan-500",     icon: <Wind         className="w-3.5 h-3.5" /> },
-  tempo:     { bg: "bg-yellow-500/10",   border: "border-yellow-500/30",    text: "text-yellow-400",   dot: "bg-yellow-500",   icon: <Timer        className="w-3.5 h-3.5" /> },
-  intervals: { bg: "bg-red-500/10",      border: "border-red-500/30",       text: "text-red-400",      dot: "bg-red-400",      icon: <Repeat       className="w-3.5 h-3.5" /> },
-  long_run:  { bg: "bg-purple-500/10",   border: "border-purple-500/30",    text: "text-purple-400",   dot: "bg-purple-500",   icon: <Zap          className="w-3.5 h-3.5" /> },
-  test:      { bg: "bg-pink-500/10",     border: "border-pink-500/30",      text: "text-pink-400",     dot: "bg-pink-500",     icon: <FlaskConical className="w-3.5 h-3.5" /> },
-  race:      { bg: "bg-brand-500/15",    border: "border-brand-500/40",     text: "text-brand-400",    dot: "bg-brand-500",    icon: <Trophy       className="w-3.5 h-3.5" /> },
-  strength:  { bg: "bg-surface-700/50",   border: "border-surface-600/60",   text: "text-surface-300",  dot: "bg-surface-400",  icon: <Dumbbell     className="w-3.5 h-3.5" /> },
-  hiit:      { bg: "bg-orange-500/10",   border: "border-orange-500/30",    text: "text-orange-400",   dot: "bg-orange-500",   icon: <Dumbbell     className="w-3.5 h-3.5" /> },
+const TYPE_ICONS: Record<string, React.ReactNode> = {
+  rest:      <Moon         className="w-3.5 h-3.5" />,
+  easy:      <Wind         className="w-3.5 h-3.5" />,
+  recovery:  <Wind         className="w-3.5 h-3.5" />,
+  tempo:     <Timer        className="w-3.5 h-3.5" />,
+  intervals: <Repeat       className="w-3.5 h-3.5" />,
+  long_run:  <Zap          className="w-3.5 h-3.5" />,
+  test:      <FlaskConical className="w-3.5 h-3.5" />,
+  race:      <Trophy       className="w-3.5 h-3.5" />,
+  strength:  <Dumbbell     className="w-3.5 h-3.5" />,
+  hiit:      <Dumbbell     className="w-3.5 h-3.5" />,
 };
 
 function typeStyle(type: string): TypeStyle {
-  return TYPE_STYLES[type] ?? TYPE_STYLES.easy;
+  const tone = sessionTone(type);
+  return { ...tone, icon: TYPE_ICONS[type] ?? TYPE_ICONS.easy };
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────

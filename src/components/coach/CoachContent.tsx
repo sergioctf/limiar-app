@@ -35,10 +35,8 @@ import { StrengthProgressCard } from "@/components/coach/StrengthProgressCard";
 import { VdotEvolutionChart }   from "@/components/coach/VdotEvolutionChart";
 import { AthleteProfileCard }   from "@/components/coach/AthleteProfileCard";
 import { PlanAdherenceCard }    from "@/components/coach/PlanAdherenceCard";
-import { WeekRecapCard }        from "@/components/coach/WeekRecapCard";
 import { CycleSummaryCard }     from "@/components/dashboard/CycleSummaryCard";
 import { TestCalibrationCard }  from "@/components/dashboard/TestCalibrationCard";
-import type { WeekRecap }       from "@/lib/week-recap";
 import { AerobicEfficiencyCard } from "@/components/coach/AerobicEfficiencyCard";
 import { ProactiveAdjustBanner } from "@/components/coach/ProactiveAdjustBanner";
 import { MacroPlanCard }        from "@/components/coach/MacroPlanCard";
@@ -50,7 +48,6 @@ type Tab = "zonas" | "testes" | "relatorios" | "perfil";
 
 interface Props {
   /** The week that just closed, in three questions. Null while none has. */
-  recap?: WeekRecap | null;
   /** For where the block sits in its four-week cycle (moved from the Home, 18/09). */
   cycleRuns?: import("@/types").Run[];
   cycleActivities?: Array<{ date: string; sport_type: string }>;
@@ -63,7 +60,7 @@ interface Props {
   weeklyActualKm?: Record<string, number>;
 }
 
-export function CoachContent({ recap = null, cycleRuns = [], cycleActivities = [], reports, cycles, tests: initialTests, adherenceHistory = [], efficiencyTrend = null, macroPlan = null, weeklyActualKm = {} }: Props) {
+export function CoachContent({ cycleRuns = [], cycleActivities = [], reports, cycles, tests: initialTests, adherenceHistory = [], efficiencyTrend = null, macroPlan = null, weeklyActualKm = {} }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("zonas");
   const [expanded,  setExpanded]  = useState<string | null>(reports[0]?.id ?? null);
 
@@ -225,9 +222,6 @@ export function CoachContent({ recap = null, cycleRuns = [], cycleActivities = [
 
           {/* Where "Responder depois" on the week question leads: next to the plan it changes. */}
           <WeekQuestionCard />
-
-          {/* The week that ended, right above the week it produced. */}
-          <WeekRecapCard recap={recap} />
 
           <WeeklyPlanCard
             initialPlan={initialWeeklyPlan}

@@ -5,11 +5,9 @@ import Link from "next/link";
 import { Search, Plus, SlidersHorizontal, MapPin, Clock, TrendingUp, Heart, Map as MapIcon } from "lucide-react";
 import { RunCard } from "./RunCard";
 import { EmptyState } from "@/components/shared/States";
-import { ProgressCard } from "./ProgressCard";
 import { ActivityCard, activityLabel, type HistoryActivity } from "./ActivityCard";
 import { SportGlyph } from "@/components/shared/SportGlyph";
 import { SPORTS, toSportKey } from "@/lib/sports";
-import type { ProgressReport } from "@/lib/progress-reading";
 import {
   formatDistanceKm, secondsToPaceString,
   runTypeLabel
@@ -25,11 +23,16 @@ interface Props {
   activities?: HistoryActivity[];
   /** From `?sport=` — the Home's tiles open the history on their sport. */
   initialSport?: string | null;
-  /** "O que está melhorando para você?" — read from the same history listed below. */
-  progress?: ProgressReport | null;
 }
 
-export function RunsContent({ runs, activities = [], initialSport = null, progress = null }: Props) {
+/**
+ * O histórico, e só ele (Sérgio, 20/09).
+ *
+ * "O que está melhorando para você?" saiu daqui: virou leitura da IA central,
+ * que responde a mesma coisa com os mesmos dados e pode ser perguntada de
+ * qualquer tela. Esta lista volta a fazer uma coisa — listar.
+ */
+export function RunsContent({ runs, activities = [], initialSport = null }: Props) {
   // "tudo", "corrida" or another sport key. Running keeps its own filters and numbers.
   const sportsPresent = useMemo(() => {
     const keys = new Set<string>();
@@ -140,8 +143,6 @@ export function RunsContent({ runs, activities = [], initialSport = null, progre
           </Link>
         </div>
       </div>
-
-      <ProgressCard report={progress} />
 
       {/* Every sport in one history: pick one, or see them all together. */}
       {sportsPresent.length > 0 && (
