@@ -35,6 +35,8 @@ export interface MovementDay {
   missed: PlannedSession[];
   /** Something was planned for the day. */
   planned: boolean;
+  /** How many sessions the plan asked of this day, done or not. */
+  plannedSessions: number;
 }
 
 export interface SportLine {
@@ -53,6 +55,15 @@ export interface WeekMovement {
   trainedDays: number;
   /** Days of the week with at least one planned session. */
   plannedDays: number;
+  /**
+   * Sessions the plan asked for across the week.
+   *
+   * Not the same as `plannedDays`, and that is exactly why it exists: one day
+   * that asks for a run and the gym is one day and two sessions. The Home
+   * counts sessions (Sérgio, 20/09) because a week where the run happened and
+   * the gym did not is not a week that was done.
+   */
+  plannedSessions: number;
   sessions: number;
   minutes: number;
   bySport: SportLine[];
@@ -87,6 +98,7 @@ export function weekMovement(input: {
       upcoming: date >= input.today ? status.sessions.filter(s => !s.done) : [],
       missed: date < input.today ? status.sessions.filter(s => !s.done) : [],
       planned: status.sessions.length > 0,
+      plannedSessions: status.sessions.length,
     };
   });
 
@@ -128,6 +140,7 @@ export function weekMovement(input: {
     days,
     trainedDays: days.filter(d => d.done.length > 0).length,
     plannedDays: days.filter(d => d.planned).length,
+    plannedSessions: days.reduce((s, d) => s + d.plannedSessions, 0),
     sessions: all.length,
     minutes: all.reduce((s, x) => s + x.minutes, 0),
     bySport,

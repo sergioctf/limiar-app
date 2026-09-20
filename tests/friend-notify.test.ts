@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   notifyFriendsOfWorkout, notifyFriendRequest, notifyFriendAccepted,
-  acceptedFriendIds, describeWorkout, firstName,
+  acceptedFriendIds, describeWorkout, firstName, workoutOf,
 } from "@/lib/friend-notify";
 
 /**
@@ -115,6 +115,90 @@ describe("describeWorkout", () => {
   it("says just the label when it knows nothing else", () => {
     expect(describeWorkout({ label: "Yoga", distanceKm: 0, durationMin: 0, date: "x" }))
       .toBe("Yoga");
+  });
+});
+
+describe("workoutOf", () => {
+  it("names a run by its sport, not by Strava's title", () => {
+    const w = workoutOf("Run", { name: "Afternoon Run", distanceKm: 8.24, date: HOJE });
+    expect(describeWorkout(w)).toBe("Corrida · 8,2 km");
+  });
+
+  it("names a gym session by its sport, not by what the athlete called it", () => {
+    const w = workoutOf("WeightTraining", { name: "Peito e tríceps", durationMin: 52, date: HOJE });
+    expect(describeWorkout(w)).toBe("Musculação · 52 min");
+  });
+
+  it("speaks Portuguese for every sport the app knows", () => {
+    expect(describeWorkout(workoutOf("Ride", { distanceKm: 32, date: HOJE }))).toBe("Ciclismo · 32,0 km");
+    expect(describeWorkout(workoutOf("Swim", { distanceKm: 1.5, date: HOJE }))).toBe("Natação · 1,5 km");
+    expect(describeWorkout(workoutOf("Yoga", { durationMin: 40, date: HOJE }))).toBe("Yoga · 40 min");
+  });
+
+  it("falls back to the row's own name for a sport it cannot place", () => {
+    const w = workoutOf("Petanca", { name: "Petanca no clube", durationMin: 90, date: HOJE });
+    expect(describeWorkout(w)).toBe("Petanca no clube · 90 min");
+  });
+
+  it("says \"Treino\" when it has neither a sport nor a name", () => {
+    expect(describeWorkout(workoutOf(null, { date: HOJE }))).toBe("Treino");
+  });
+
+  it("carries the date through, because the date is the throttle", () => {
+    expect(workoutOf("Run", { distanceKm: 5, date: "2026-08-10" }).date).toBe("2026-08-10");
+  });
+});
+
+describe("um treino de qualquer esporte avisa os amigos", () => {
+  // The bug this covers: `notifyFriendsOfWorkout` was called only from the
+  // branch that handles everything that is *not* a run, so running — the sport
+  // the app is built around — announced nothing to anybody.
+  it.each([
+    ["Run",            { distanceKm: 8.24 },  "Corrida · 8,2 km"],
+    ["WeightTraining", { durationMin: 52 },   "Musculação · 52 min"],
+    ["Ride",           { distanceKm: 32 },    "Ciclismo · 32,0 km"],
+  ])("%s chega ao amigo", async (sport, metrics, expected) => {
+    const db = fakeDb({
+      friendships: friendsOf(ANA, [BRUNO]),
+      profiles: { [ANA]: { name: "Ana Paula" } },
+    });
+    const send = vi.fn().mockResolvedValue(undefined);
+
+    const res = await notifyFriendsOfWorkout(
+      db, ANA, workoutOf(sport, { ...metrics, date: HOJE }), send, HOJE);
+
+    expect(res.notified).toBe(1);
+    expect(send.mock.calls[0][1].body).toBe(expected);
+  });
+
+  it("o mesmo treino chegando por dois caminhos avisa uma vez só", async () => {
+    // Webhook and the nightly catch-up both import the same run; the notices
+    // table is the primary key that decides which one gets to speak.
+    const db = fakeDb({
+      friendships: friendsOf(ANA, [BRUNO]),
+      profiles: { [ANA]: { name: "Ana" } },
+    });
+    const send = vi.fn().mockResolvedValue(undefined);
+    const run = workoutOf("Run", { distanceKm: 8.2, date: HOJE });
+
+    await notifyFriendsOfWorkout(db, ANA, run, send, HOJE);
+    await notifyFriendsOfWorkout(db, ANA, run, send, HOJE);
+
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("uma corrida de ontem, importada hoje, não vira notificação", async () => {
+    const db = fakeDb({
+      friendships: friendsOf(ANA, [BRUNO]),
+      profiles: { [ANA]: { name: "Ana" } },
+    });
+    const send = vi.fn().mockResolvedValue(undefined);
+
+    const res = await notifyFriendsOfWorkout(
+      db, ANA, workoutOf("Run", { distanceKm: 8.2, date: "2026-08-09" }), send, HOJE);
+
+    expect(res.notified).toBe(0);
+    expect(send).not.toHaveBeenCalled();
   });
 });
 

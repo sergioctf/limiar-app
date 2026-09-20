@@ -9,6 +9,8 @@ import {
 } from "@/lib/strava";
 import { isProbableDuplicate } from "@/lib/utils";
 import { analyzeRun } from "@/lib/ai";
+import { notifyFriendsOfWorkout, workoutOf } from "@/lib/friend-notify";
+import { sendPushToUser } from "@/lib/push";
 
 // Allow up to 90s — bulk sync + AI analysis for top 3 runs
 export const maxDuration = 90;
@@ -145,6 +147,17 @@ export async function POST(request: NextRequest) {
               imported++;
               existingIds.add(act.id);
               if (inserted?.id) newlyImportedRunIds.push(inserted.id);
+              // Pressing sync by hand is still how a workout arrives when the
+              // webhook misses it, and it announced nothing for any sport.
+              // Only today's sessions get through: a first connection
+              // backfills months, and nobody wants March applauded in
+              // September.
+              await notifyFriendsOfWorkout(admin, user.id, workoutOf("Run", {
+                name:        run.name,
+                distanceKm:  run.distance_km ?? null,
+                durationMin: run.duration_seconds != null ? run.duration_seconds / 60 : null,
+                date:        run.date ?? "",
+              }), (id, payload) => sendPushToUser(admin, id, payload));
             }
           }
         } else {
@@ -170,7 +183,16 @@ export async function POST(request: NextRequest) {
             strava_raw_json:    act,
           });
 
-          if (!error) { activitiesImported++; existingActivityIds.add(act.id); }
+          if (!error) {
+            activitiesImported++;
+            existingActivityIds.add(act.id);
+            await notifyFriendsOfWorkout(admin, user.id, workoutOf(sportType, {
+              name:        act.name,
+              distanceKm:  act.distance != null ? act.distance / 1000 : null,
+              durationMin: act.moving_time != null ? act.moving_time / 60 : null,
+              date,
+            }), (id, payload) => sendPushToUser(admin, id, payload));
+          }
         }
       }
 

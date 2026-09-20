@@ -19,7 +19,7 @@ import { refreshStravaToken, getStravaActivity, stravaActivityToRun } from "@/li
 import { analyzeRun } from "@/lib/ai";
 import { isProbableDuplicate, formatDistanceKm } from "@/lib/utils";
 import { sendPushToUser } from "@/lib/push";
-import { notifyFriendsOfWorkout } from "@/lib/friend-notify";
+import { notifyFriendsOfWorkout, workoutOf } from "@/lib/friend-notify";
 
 // Permite até 60s (necessário para IA + Strava fetch)
 export const maxDuration = 60;
@@ -154,12 +154,12 @@ export async function POST(request: NextRequest) {
         await admin.from("activities").insert(row);
         // Only a genuinely new session is worth announcing. An edit on Strava
         // is not a workout, and the throttle inside would swallow it anyway.
-        await notifyFriendsOfWorkout(admin, userId, {
-          label: row.name ?? "Treino",
-          distanceKm: row.distance_m != null ? row.distance_m / 1000 : null,
+        await notifyFriendsOfWorkout(admin, userId, workoutOf(row.sport_type, {
+          name:        row.name,
+          distanceKm:  row.distance_m != null ? row.distance_m / 1000 : null,
           durationMin: row.duration_seconds != null ? row.duration_seconds / 60 : null,
-          date: row.date,
-        }, (id, payload) => sendPushToUser(admin, id, payload));
+          date:        row.date,
+        }), (id, payload) => sendPushToUser(admin, id, payload));
       }
 
       return NextResponse.json({ ok: true, sport: sportType, stored: "activities" });
@@ -264,6 +264,19 @@ export async function POST(request: NextRequest) {
         .select("id")
         .single();
       savedRunId = inserted?.id ?? null;
+
+      // A run is announced exactly like a gym session is. It was not: this
+      // call lived only in the branch above, the one for everything that is
+      // not a run, so the sport the app is built around was the one sport a
+      // friend never heard about.
+      if (savedRunId) {
+        await notifyFriendsOfWorkout(admin, userId, workoutOf("Run", {
+          name:        run.name,
+          distanceKm:  run.distance_km ?? null,
+          durationMin: run.duration_seconds != null ? run.duration_seconds / 60 : null,
+          date:        run.date ?? "",
+        }), (id, payload) => sendPushToUser(admin, id, payload));
+      }
     }
 
     // 5. Análise IA (async — não bloqueia se demorar ou falhar)

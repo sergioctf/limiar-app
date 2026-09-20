@@ -17,6 +17,7 @@
 
 import { athleteDateStr } from "@/lib/week";
 import { wantsNotification } from "@/lib/notification-prefs";
+import { SPORTS, toSportKey } from "@/lib/sports";
 
 /** The bits of the admin Supabase client this module uses. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -57,6 +58,29 @@ export function describeWorkout(w: FriendWorkout): string {
     return `${w.label} · ${Math.round(w.durationMin)} min`;
   }
   return w.label;
+}
+
+/**
+ * The workout line for a row any import path is holding.
+ *
+ * The sport names it, not the title the row carries: "Corrida · 8,2 km",
+ * "Musculação · 52 min", "Ciclismo · 32 km". Strava writes "Afternoon Run",
+ * which says the wrong thing in the wrong language on a Brazilian friend's
+ * lock screen, and a gym session the athlete called "Peito e tríceps" means
+ * nothing to anybody else. The raw name is the fallback, for the sports the
+ * taxonomy cannot place.
+ */
+export function workoutOf(
+  sportType: string | null | undefined,
+  w: { name?: string | null; distanceKm?: number | null; durationMin?: number | null; date: string },
+): FriendWorkout {
+  const key = toSportKey(sportType);
+  return {
+    label:       key ? SPORTS[key].label : (w.name?.trim() || "Treino"),
+    distanceKm:  w.distanceKm ?? null,
+    durationMin: w.durationMin ?? null,
+    date:        w.date,
+  };
 }
 
 /**

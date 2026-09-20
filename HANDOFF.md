@@ -1198,6 +1198,17 @@ Fluxo OAuth completo (`whoop.ts`, `/api/whoop/*`, `WhoopCard`, migration 023). I
 - **Ajustes de uso (18/09):** semana com feito / previsto / **não feito**, ícones de linha (`SportGlyph`) no lugar de emojis, anel de dias treinados/previstos, blocos grandes de corrida, musculação e calorias, anel de recuperação 0–100; alerta de sobrecarga só com sinal de carga; `CountUp` sem valores negativos. Calendário no celular (semana começando na segunda, ícones, cabeçalho compacto). "O que compõe o score" recolhível em Saúde.
 - **Histórico unificado:** aba "Atividades" com todos os esportes e filtro por esporte; `/activities/[id]` para qualquer esporte; `?sport=` a partir da Home. Distâncias com vírgula. Detalhes em `docs/nova-home.md`.
 
+## 6.33 Amigos avisados em qualquer esporte + Home reordenada ✅ (novo, 20/09)
+
+Primeira fase do plano em `docs/plano-proximos-passos.md` (que descreve também a IA central, ainda por fazer).
+
+- **Bug corrigido — corrida não avisava ninguém:** `notifyFriendsOfWorkout` era chamado **só** no ramo do webhook que trata o que *não* é corrida. A sincronização manual e a noturna não avisavam para esporte nenhum. Agora todos os caminhos de entrada avisam: `strava/webhook` (corrida e demais), `strava/sync`, `cron/strava-sync` e a corrida registrada à mão (pelo `runs/[id]/analyze`, único momento no servidor que sabe que ela existe — e o aviso vai **antes** da chamada de IA, para uma falha da Groq não decidir se o amigo fica sabendo).
+- **`workoutOf(sportType, …)`** (`friend-notify.ts`) monta o texto pelo esporte, não pelo título da linha: "Corrida · 8,2 km", "Musculação · 52 min", "Ciclismo · 32,0 km". O nome cru ("Afternoon Run", "Peito e tríceps") é só o último recurso. As três regras antigas seguem valendo — amizade aceita, silenciado respeitado, **um aviso por amigo por dia** (é o que protege o treino que chega por dois caminhos) — e só o dia de hoje vira notificação.
+- **Hoje reordenada:** alertas (notificações bloqueadas, sobrecarga, item de atenção) **no topo**, não no fim; "Como você está hoje" virou bloco próprio (anel 0–100, veredito, pergunta antes da sessão exigente e a troca que ela oferece, convite ao check-in) e só aparece quando tem o que dizer; depois "Treino de hoje" e "Minha semana".
+- **Semana por sessões:** o anel passou a ser "X de Y **sessões**" (`week.plannedSessions`, novo em `week-movement.ts`) e os dias treinados/previstos ocuparam o lugar das horas; as horas viraram detalhe. Dia ≠ sessão: uma segunda-feira de corrida + academia é um dia e duas sessões.
+- **Caixinhas dinâmicas:** todo esporte com sessão registrada na semana, mais todo esporte que o plano pediu (com zero, quando ainda não aconteceu), mais calorias. Antes corrida e musculação eram fixas.
+- **Frases de disposição reescritas** (`recovery-today.ts`): "Treine com margem" → "Dá para treinar, sem forçar" / "Dá para fazer o treino forte, sem exagerar"; "Recuperação baixa — dá para aliviar" → "Recuperação baixa: hoje pede um treino mais leve".
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação

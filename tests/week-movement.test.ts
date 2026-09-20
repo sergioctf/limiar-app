@@ -65,6 +65,14 @@ describe("the week, every sport", () => {
     expect(week.plannedDays).toBe(5);
   });
 
+  it("counts sessions apart from days, because Monday asks for two", () => {
+    // Five planned days, six planned sessions: Monday carries a run and the gym.
+    expect(week.plannedSessions).toBe(6);
+    expect(week.days.find(x => x.key === "Mon")!.plannedSessions).toBe(2);
+    expect(week.days.find(x => x.key === "Tue")!.plannedSessions).toBe(1);
+    expect(week.days.find(x => x.key === "Fri")!.plannedSessions).toBe(0);
+  });
+
   it("names a planned session that a past day did not get", () => {
     const later = weekMovement({ weekStart, today: "2026-09-19", plan, runs, activities });
     expect(later.days.find(x => x.key === "Thu")!.missed.map(s => s.label)).toEqual(["Musculação"]);

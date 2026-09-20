@@ -23,6 +23,8 @@ import { authorizeCron } from "@/lib/cron-auth";
 import { refreshStravaToken, getStravaActivities, stravaActivityToRun, enrichActivitiesWithCalories } from "@/lib/strava";
 import { ensureSubscription, stravaCredentials, callbackUrl } from "@/lib/strava-subscription";
 import { pendingRuns, backfillEfforts } from "@/lib/records-backfill";
+import { notifyFriendsOfWorkout, workoutOf } from "@/lib/friend-notify";
+import { sendPushToUser } from "@/lib/push";
 
 export const maxDuration = 60;
 
@@ -178,7 +180,20 @@ export async function GET(request: NextRequest) {
             };
           });
           const { error } = await admin.from("activities").insert(rows);
-          if (!error) importedActivities[conn.user_id] = rows.length;
+          if (!error) {
+            importedActivities[conn.user_id] = rows.length;
+            // The safety net catches up on three days at once; only what
+            // happened today is worth a friend's attention, and that filter
+            // lives inside the call.
+            for (const r of rows) {
+              await notifyFriendsOfWorkout(admin, conn.user_id, workoutOf(r.sport_type, {
+                name:        r.name,
+                distanceKm:  r.distance_m != null ? Number(r.distance_m) / 1000 : null,
+                durationMin: r.duration_seconds != null ? Number(r.duration_seconds) / 60 : null,
+                date:        r.date,
+              }), (id, payload) => sendPushToUser(admin, id, payload));
+            }
+          }
         }
       }
 
@@ -200,7 +215,17 @@ export async function GET(request: NextRequest) {
       const withCalories = await enrichActivitiesWithCalories(token, missing);
       const rows = withCalories.map(a => stravaActivityToRun(a, conn.user_id));
       const { error } = await admin.from("runs").insert(rows);
-      if (!error) imported[conn.user_id] = rows.length;
+      if (!error) {
+        imported[conn.user_id] = rows.length;
+        for (const r of rows) {
+          await notifyFriendsOfWorkout(admin, conn.user_id, workoutOf("Run", {
+            name:        r.name,
+            distanceKm:  r.distance_km ?? null,
+            durationMin: r.duration_seconds != null ? r.duration_seconds / 60 : null,
+            date:        r.date ?? "",
+          }), (id, payload) => sendPushToUser(admin, id, payload));
+        }
+      }
 
     } catch (err) {
       imported[conn.user_id] = -1;

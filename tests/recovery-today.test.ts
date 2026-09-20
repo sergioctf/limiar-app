@@ -72,7 +72,7 @@ describe("recuperação de hoje", () => {
     const checkin = { date: HOJE, sleep_hours: 4, sleep_quality: 1, soreness: 5, rpe: 10, energy: null, soreness_areas: null, notes: null } as HealthCheckin;
     const r = buildRecoveryToday({ ...base, rows: [], checkin, load: { [HOJE]: { tss: 0, tsb: -35 } } });
     expect(r.verdict).toBe("baixa");
-    expect(r.short).toBe("Recuperação baixa — dá para aliviar");
+    expect(r.short).toBe("Recuperação baixa: hoje pede um treino mais leve");
     expect(r.offer?.options).toContain("easy");
   });
 

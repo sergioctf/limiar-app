@@ -85,10 +85,17 @@ export function buildRecoveryToday(input: {
 
   const hard = session != null && HARD_SESSION.has(session.type);
   const v = scored ? readiness.verdict : null;
+  /*
+   * The line says what to do, not how the athlete scored.
+   *
+   * "Treine com margem" was the one Sérgio stopped on (20/09): it is coach
+   * jargon, and a phrase nobody can act on is a phrase that might as well not
+   * be on the screen. Each one now names the session it is talking about.
+   */
   const short = sessionDone ? "Treino de hoje feito"
     : v === "alta" ? (hard ? "Pronto para o treino forte" : "Corpo recuperado")
-    : v === "moderada" ? "Treine com margem"
-    : v === "baixa" ? (hard ? "Recuperação baixa — dá para aliviar" : "Recuperação baixa — vá bem leve")
+    : v === "moderada" ? (hard ? "Dá para fazer o treino forte, sem exagerar" : "Dá para treinar, sem forçar")
+    : v === "baixa" ? (hard ? "Recuperação baixa: hoje pede um treino mais leve" : "Recuperação baixa: vá bem leve hoje")
     : "Sem dados de recuperação";
 
   return {

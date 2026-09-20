@@ -6,6 +6,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { analyzeRun } from "@/lib/ai";
+import { notifyFriendsOfWorkout, workoutOf } from "@/lib/friend-notify";
+import { sendPushToUser } from "@/lib/push";
 
 export async function POST(
   _request: NextRequest,
@@ -27,6 +29,24 @@ export async function POST(
     .single();
 
   if (!run) return NextResponse.json({ error: "Run not found" }, { status: 404 });
+
+  /*
+   * A run logged by hand announces itself here.
+   *
+   * The form writes to `runs` straight from the browser and then asks for this
+   * analysis, so this is the only server-side moment that knows a manual run
+   * exists. The announcement goes before the AI call on purpose: a Groq outage
+   * must not be what decides whether a friend hears about the session. Runs
+   * that arrived from Strava were already announced on import, and the
+   * one-per-day throttle inside is what keeps the second attempt quiet — as it
+   * does for a re-analysis pressed on the run's own page.
+   */
+  await notifyFriendsOfWorkout(admin, user.id, workoutOf("Run", {
+    name:        run.name,
+    distanceKm:  run.distance_km ?? null,
+    durationMin: run.duration_seconds != null ? run.duration_seconds / 60 : null,
+    date:        run.date ?? "",
+  }), (id, payload) => sendPushToUser(admin, id, payload));
 
   // Fetch ALL runs for full context — Groq has 128k token window
   const { data: allRuns } = await admin

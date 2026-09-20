@@ -3,8 +3,11 @@
 /**
  * Hoje — the Home (approved by Sérgio on 18/09, replacing the dashboard).
  *
- * Hierarchy: what I do today → what I did this week → what deserves attention.
- * One main action. The recovery sits inside the session as its 0–100 ring. The
+ * Hierarchy (Sérgio, 20/09): what needs my attention → how I am today → what I
+ * train today → my week. The alerts come first, because a warning at the foot
+ * of a scrolling page is a warning nobody reads, and how the body is comes
+ * before the session because it is what decides how the session goes.
+ * One main action. The recovery is its own block, as a 0–100 ring. The
  * week counts every sport, shows what was planned and did not happen as well
  * as what did, and carries its numbers big (Sérgio, 18/09: "deixar mais visual
  * e grande os big numbers"). Charts, records and totals live in Histórico, load
@@ -29,6 +32,7 @@ import { AutoWellnessSync } from "@/components/dashboard/AutoWellnessSync";
 import { OvertrainingAlert } from "@/components/dashboard/OvertrainingAlert";
 import { NotificationNudge } from "@/components/dashboard/NotificationNudge";
 import { CalorieDetailModal } from "@/components/dashboard/CalorieDetailModal";
+import { SPORTS } from "@/lib/sports";
 import { formatMinutes, type MovementDay, type WeekMovement } from "@/lib/week-movement";
 import { basisLabel, type RecoveryToday } from "@/lib/recovery-today";
 import type { CalorieDay } from "@/lib/calorie-breakdown";
@@ -113,12 +117,35 @@ export function HomeContent({
   const overtrained = !!overtraining && overtraining.level !== "ok"
     && overtraining.signals.some(s => LOAD_SIGNALS.has(s.id));
 
-  // Big tiles: running and lifting always (they are the plan), any other sport done, then calories.
+  /*
+   * The tiles are whatever the week actually has.
+   *
+   * They used to be running and lifting, hardcoded, plus anything else that was
+   * done — which showed a swimmer a "Corrida 0" every Monday and an athlete who
+   * only lifts a sport they never practise. Now: every sport with a session
+   * registered, plus every sport the plan asked for this week even when none of
+   * it has happened yet, so a planned sport shows its zero and an unplanned one
+   * does not exist.
+   */
   const tiles = [...week.bySport];
-  if (!tiles.some(t => t.sport === "corrida")) tiles.unshift({ sport: "corrida", label: "Corrida", emoji: "", sessions: 0, minutes: 0, km: 0 });
-  if (!tiles.some(t => t.sport === "musculacao") && week.days.some(d => [...d.upcoming, ...d.missed].some(s => s.sport === "musculacao"))) {
-    tiles.splice(1, 0, { sport: "musculacao", label: "Musculação", emoji: "", sessions: 0, minutes: 0, km: null });
+  for (const d of week.days) {
+    for (const p of [...d.upcoming, ...d.missed]) {
+      if (!p.sport || tiles.some(t => t.sport === p.sport)) continue;
+      const meta = SPORTS[p.sport];
+      tiles.push({
+        sport: p.sport, label: meta?.label ?? p.label, emoji: meta?.emoji ?? "",
+        sessions: 0, minutes: 0, km: meta?.unit === "distance" ? 0 : null,
+      });
+    }
   }
+
+  /*
+   * The block about the body only exists when it has something to say: a score,
+   * a question before the session, an invitation to check in, or an offer to
+   * swap. An empty "Como você está hoje" card says nothing and costs a screen.
+   */
+  const healthBlock = mainPending
+    || (recovery != null && (recovery.score != null || recovery.needsCheckin || recovery.offer != null));
 
   const offer = (
     <>
@@ -153,10 +180,63 @@ export function HomeContent({
         </Link>
       </div>
 
+      {/* ── What deserves attention, before anything else ─────────────────── */}
+      <NotificationNudge />
+      {overtrained ? (
+        <Section title="Merece atenção">
+          <OvertrainingAlert assessment={overtraining!} />
+        </Section>
+      ) : attention && (
+        <Section title="Merece atenção">
+          <Link href={attention.href} className="flex items-center justify-between gap-3 rounded-2xl border border-surface-700 px-4 py-3 min-h-[56px] hover:border-surface-600">
+            <span className="text-sm text-surface-200">{attention.text}</span>
+            <span className="shrink-0 inline-flex items-center gap-1 text-sm text-brand-400">{attention.action} <ArrowRight className="w-4 h-4" /></span>
+          </Link>
+        </Section>
+      )}
+
       <EntryPrompt refreshKey={refreshKey} />
 
-      {/* ── 1. Hoje — the protagonist ─────────────────────────────────────── */}
-      <Section title="Hoje">
+      {/* ── 1. Como você está hoje ────────────────────────────────────────── */}
+      {healthBlock && (
+        <Section title="Como você está hoje">
+          <Card>
+            <div className="space-y-3">
+              {recovery && recovery.score != null && (
+                <Link
+                  href="/health"
+                  className="flex items-center gap-3 rounded-2xl border border-surface-700 bg-surface-900/40 p-3 transition-colors hover:border-surface-600 active:scale-[0.99]"
+                >
+                  <Ring ratio={recovery.score / 100} size={64} thickness={6} tone={VERDICT_TONE[recovery.verdict ?? "moderada"]}>
+                    <span className="text-base font-bold">{recovery.score}</span>
+                  </Ring>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-base font-semibold text-surface-100">{recovery.short}</span>
+                    <span className="block truncate text-xs text-surface-500">Recuperação · {basisLabel(recovery)}</span>
+                  </span>
+                  <ArrowRight className="w-4 h-4 shrink-0 text-surface-600" />
+                </Link>
+              )}
+
+              {/* The question before a demanding session, and the swap it can lead to. */}
+              {mainPending ? <TodayCheckPanel>{offer}</TodayCheckPanel> : offer}
+
+              {recovery?.needsCheckin && today.state !== "done" && (
+                <Link
+                  href="/health?checkin=1"
+                  className="flex min-h-[44px] items-center justify-between rounded-xl bg-surface-700/30 px-3 text-sm text-surface-300 hover:text-surface-100"
+                >
+                  <span>Como você dormiu? Check-in de 20 s afina a recuperação</span>
+                  <ArrowRight className="w-4 h-4 shrink-0" />
+                </Link>
+              )}
+            </div>
+          </Card>
+        </Section>
+      )}
+
+      {/* ── 2. Treino de hoje ─────────────────────────────────────────────── */}
+      <Section title="Treino de hoje">
         <Card density="roomy">
           <div className="space-y-4">
             {swapped && (
@@ -208,35 +288,6 @@ export function HomeContent({
               <p className="text-xs text-surface-500 pl-3 border-l-2 border-surface-700 leading-relaxed">{today.why}</p>
             )}
 
-            {/* Recovery, beside the session it is about: the 0–100 ring; the depth lives in Saúde. */}
-            {recovery && recovery.score != null && (
-              <Link
-                href="/health"
-                className="flex items-center gap-3 rounded-2xl border border-surface-700 bg-surface-900/40 p-3 transition-colors hover:border-surface-600 active:scale-[0.99]"
-              >
-                <Ring ratio={recovery.score / 100} size={52} thickness={5} tone={VERDICT_TONE[recovery.verdict ?? "moderada"]}>
-                  <span className="text-sm font-bold">{recovery.score}</span>
-                </Ring>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold text-surface-100">{recovery.short}</span>
-                  <span className="block truncate text-xs text-surface-500">Recuperação · {basisLabel(recovery)}</span>
-                </span>
-                <ArrowRight className="w-4 h-4 shrink-0 text-surface-600" />
-              </Link>
-            )}
-
-            {mainPending ? <TodayCheckPanel>{offer}</TodayCheckPanel> : offer}
-
-            {recovery?.needsCheckin && today.state !== "done" && (
-              <Link
-                href="/health?checkin=1"
-                className="flex min-h-[44px] items-center justify-between rounded-xl bg-surface-700/30 px-3 text-sm text-surface-300 hover:text-surface-100"
-              >
-                <span>Como você dormiu? Check-in de 20 s afina a recuperação</span>
-                <ArrowRight className="w-4 h-4 shrink-0" />
-              </Link>
-            )}
-
             {/* One main action; adapting is the second one. */}
             {today.state === "planned" && (
               <div className="space-y-2">
@@ -281,32 +332,43 @@ export function HomeContent({
         </Card>
       </Section>
 
-      {/* ── 2. Sua semana — every sport, done and not done, numbers big ──── */}
+      {/* ── 3. Minha semana — every sport, done and not done, numbers big ── */}
       <Section
-        title="Sua semana"
+        title="Minha semana"
         action={<Link href="/runs" className="text-xs text-surface-500 hover:text-surface-300">Histórico</Link>}
       >
         <Card>
           <div className="space-y-5">
-            {/* Big numbers: days trained of the days planned, time, sessions. */}
+            {/*
+             * Sessions in the ring, days beside it (Sérgio, 20/09).
+             *
+             * A day is not a session: six planned days can hold seven sessions,
+             * because one day can ask for a run and the gym. The ring answers
+             * "how much of the week did I do", the number beside it answers "on
+             * how many days did I move", and the time is the detail of both,
+             * where it stops competing with either.
+             */}
             <div className="flex items-center gap-5">
               <Ring
-                ratio={week.plannedDays > 0 ? week.trainedDays / week.plannedDays : week.trainedDays > 0 ? 1 : 0}
+                ratio={week.plannedSessions > 0 ? week.sessions / week.plannedSessions : week.sessions > 0 ? 1 : 0}
                 size={112}
                 thickness={11}
                 tone="brand"
-                label="dias"
+                label="sessões"
               >
-                <span className="text-2xl font-black tabular-nums">{week.trainedDays}<span className="text-surface-500 text-base font-bold">/{week.plannedDays || week.trainedDays}</span></span>
+                <span className="text-2xl font-black tabular-nums">{week.sessions}<span className="text-surface-500 text-base font-bold">/{week.plannedSessions || week.sessions}</span></span>
               </Ring>
               <div className="space-y-3 min-w-0">
                 <div>
-                  <p className="text-3xl font-black text-surface-100 tabular-nums leading-none">{week.minutes > 0 ? formatMinutes(week.minutes) : "0 min"}</p>
-                  <p className="text-xs text-surface-500 mt-1">em atividades</p>
+                  <p className="text-3xl font-black text-surface-100 tabular-nums leading-none">
+                    {week.trainedDays}<span className="text-surface-500 text-xl">/{week.plannedDays || week.trainedDays}</span>
+                  </p>
+                  <p className="text-xs text-surface-500 mt-1">{week.trainedDays === 1 ? "dia treinado" : "dias treinados"}</p>
                 </div>
                 <p className="text-xs text-surface-400 leading-snug">
-                  <span className="text-surface-100 font-semibold">{week.trainedDays} {week.trainedDays === 1 ? "dia treinado" : "dias treinados"}</span>
-                  {week.plannedDays > 0 ? ` de ${week.plannedDays} previstos` : ""} · {week.sessions} {week.sessions === 1 ? "sessão" : "sessões"}
+                  <span className="text-surface-100 font-semibold">{week.sessions} {week.sessions === 1 ? "sessão" : "sessões"}</span>
+                  {week.plannedSessions > 0 ? ` de ${week.plannedSessions} previstas` : ""}
+                  {week.minutes > 0 ? ` · ${formatMinutes(week.minutes)} em atividades` : ""}
                 </p>
               </div>
             </div>
@@ -405,22 +467,6 @@ export function HomeContent({
           </div>
         </Card>
       </Section>
-
-      {/* ── 3. At most one thing that deserves attention ─────────────────── */}
-      {overtrained ? (
-        <Section title="Merece atenção">
-          <OvertrainingAlert assessment={overtraining!} />
-        </Section>
-      ) : attention && (
-        <Section title="Merece atenção">
-          <Link href={attention.href} className="flex items-center justify-between gap-3 rounded-2xl border border-surface-700 px-4 py-3 min-h-[56px] hover:border-surface-600">
-            <span className="text-sm text-surface-200">{attention.text}</span>
-            <span className="shrink-0 inline-flex items-center gap-1 text-sm text-brand-400">{attention.action} <ArrowRight className="w-4 h-4" /></span>
-          </Link>
-        </Section>
-      )}
-
-      <NotificationNudge />
 
       {lastSyncAt && (
         <p className="text-center text-[11px] text-surface-600">
