@@ -50,7 +50,7 @@ Cada frase agora nomeia a sessão de que está falando, em vez de usar jargão d
 | Recuperação baixa — vá bem leve | Recuperação baixa: vá bem leve hoje |
 | Pronto para o treino forte · Corpo recuperado | iguais — já diziam o que fazer |
 
-## Fase 2 — A IA central (a mudança grande)
+## Fase 2 — A IA central ✅ *feita em 20/09 — detalhes em [ia-central.md](ia-central.md)*
 
 A regra do app continua valendo (ADR-02): **o motor calcula, a IA narra.** A IA central não inventa número: ela recebe um dossiê já calculado e responde com ele. Quando não houver dado, ela diz que não há.
 
@@ -84,10 +84,12 @@ Sua semana · O que está melhorando · Minha recuperação · Minha saúde hoje
 ### 2.4 Campo aberto
 O modelo recebe o dossiê e a pergunta, e responde **só com aquilo**. Toda resposta mostra de onde vieram os números ("semana de 14/09, plano do Treinador, check-in de 16/09"). Perguntas fora do que o app sabe recebem "não tenho esse dado", não um chute.
 
-### 2.5 O que decidir na entrega
-- **Conversa gravada ou não:** proposta é gravar (com data) para dar continuidade e permitir auditar o que a IA disse, com opção de apagar. Exige migration.
-- **Limite de uso:** as sugestões não consomem API; o campo aberto sim. Vale um limite por dia para não estourar custo.
-- **Latência:** resposta instantânea para sugestões; o campo aberto mostra estado de carregamento honesto.
+### 2.5 O que foi decidido ✅
+Sérgio, 20/09: **"sem limite, gravado com data, tudo organizado."**
+
+- **Sem limite de uso** — nem nas leituras (que não consomem API) nem no campo aberto.
+- **Gravada com a data do atleta**, numa linha do tempo agrupada por dia, com botão de apagar a conversa (migration `035_ai_conversas.sql`).
+- **Latência:** leitura rápida responde na hora, no navegador; o campo aberto mostra "Lendo seus dados…".
 
 ## Fase 3 — Limpar as telas com a IA no lugar
 
@@ -106,10 +108,9 @@ O modelo recebe o dossiê e a pergunta, e responde **só com aquilo**. Toda resp
 ## Ordem de execução
 
 1. ~~**Fase 1 inteira** numa entrega (bug das notificações primeiro, depois a Home).~~ ✅ 20/09
-2. **Fase 2.1 + 2.2 + 2.3** — a IA já útil no primeiro dia, sem depender do modelo.
-3. **Fase 2.4** — campo aberto.
-4. **Fase 3** — limpeza das telas, só depois de a IA cobrir o que sai delas.
-5. **Fase 4** — conforme a prioridade do Sérgio.
+2. ~~**Fase 2 inteira** — dossiê, botão, leituras rápidas e campo aberto.~~ ✅ 20/09
+3. **Fase 3** — limpeza das telas, agora que a IA cobre o que sai delas.
+4. **Fase 4** — conforme a prioridade do Sérgio.
 
 ## O que mudou no código na Fase 1
 

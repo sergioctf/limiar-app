@@ -1209,6 +1209,20 @@ Primeira fase do plano em `docs/plano-proximos-passos.md` (que descreve também 
 - **Caixinhas dinâmicas:** todo esporte com sessão registrada na semana, mais todo esporte que o plano pediu (com zero, quando ainda não aconteceu), mais calorias. Antes corrida e musculação eram fixas.
 - **Frases de disposição reescritas** (`recovery-today.ts`): "Treine com margem" → "Dá para treinar, sem forçar" / "Dá para fazer o treino forte, sem exagerar"; "Recuperação baixa — dá para aliviar" → "Recuperação baixa: hoje pede um treino mais leve".
 
+## 6.34 IA central ✅ (novo, 20/09)
+
+Fase 2 do plano em `docs/plano-proximos-passos.md`. Detalhes em **`docs/ia-central.md`** — leia esse antes de mexer.
+
+- **Regra que organiza tudo:** as telas apresentam os dados, a IA interpreta. E a ADR-02 continua acima disso: **o motor calcula, a IA narra.**
+- **`src/lib/ai-brief.ts` é o dossiê** — não faz conta nenhuma. Pega o que os leitores determinísticos das telas já concluíram (`today`, `week-movement`, `week-recap`, `progress-reading`, `recovery-today`, `training-load`, `overtraining`, `performance`, `plan-adherence`, `shoes`, provas, metas) e escreve em seções: título, frase de resposta, fatos e **fonte**.
+- **Duas formas de perguntar, o mesmo material:** os botões de leitura rápida devolvem a própria seção, no navegador, sem rede e sem modelo; o campo aberto manda o dossiê à Groq (`answerAthleteQuestion`), que responde **só sobre ele**.
+- **Seção sem dado não existe** — não vira botão, não vira resposta, não entra no texto do modelo. Sem dado nenhum, a IA não diz nem "está tudo bem". `tests/ai-brief.test.ts` (16 testes) existe para isso: número que apareça sem estar no dossiê foi inventado.
+- **Botão redondo laranja** (`CoachFab`, no `AppShell`) no canto inferior direito de toda aba, acima da barra de baixo; some na `/ia`.
+- **Conversa gravada, sem limite de uso** (decisão do Sérgio): migration **`035_ai_conversas.sql`** → `ai_messages`, RLS de ler/inserir/**apagar** as próprias, `date` no fuso do atleta, linha do tempo agrupada por dia e botão de apagar tudo na tela.
+- **O dossiê é sempre montado no servidor.** A tela recebe uma cópia para responder na hora; `/api/ia/perguntar` monta o seu do zero — quem pergunta não escolhe os números sobre os quais a IA responde. E a leitura rápida é gravada **recalculando** no servidor, não copiando o texto que o cliente mostrou.
+- **Custo conhecido:** montar o dossiê são ~18 consultas (`ai-brief-load.ts`), pagas ao abrir `/ia`, a cada pergunta aberta e a cada gravação de leitura. O atleta nunca espera pela gravação; a tela e a pergunta, sim.
+- **Ainda não feito (Fase 3):** tirar "Sua semana" e o resumo de IA do Treinador, "O que está melhorando" do Histórico, e levar a inteligência das Metas para a conversa. Até lá a mesma leitura aparece em dois lugares, de propósito.
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
@@ -2359,7 +2373,7 @@ npx vercel deploy --prod --yes
 
 ## 18.4 Banco e migrations
 
-- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **034** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028 a 032; em 18/09 para 033 e 034).
+- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **035** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028 a 032; em 18/09 para 033 e 034; em 20/09 para 035, conferida pelas três policies de `ai_messages` em `pg_policies`).
 - **O código tolera tabela ausente** (`try/catch` e sondas como `notification_log` em `morning-dispatch.ts`), então uma migration não aplicada **não quebra**: desliga a feature em silêncio.
 - **Fora do repositório:**
 

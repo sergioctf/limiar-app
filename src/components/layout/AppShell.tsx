@@ -4,6 +4,7 @@ import { MobileBottomNav } from "./MobileBottomNav";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import { AreaTabs, MobileTopBar } from "./AreaChrome";
+import { CoachFab } from "@/components/ai/CoachFab";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -32,6 +33,8 @@ export function AppShell({ children }: AppShellProps) {
           </ErrorBoundary>
         </div>
       </main>
+      {/* A IA é uma camada sobre o app, não uma aba: alcançável de qualquer tela. */}
+      <CoachFab />
       <MobileBottomNav />
     </div>
   );

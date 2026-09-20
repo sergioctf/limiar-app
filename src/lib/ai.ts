@@ -1099,3 +1099,57 @@ Dê a dica do dia.
 
   return callGroq(systemPrompt, userPrompt, 250);
 }
+
+// ─── A IA central ────────────────────────────────────────────────────────────
+
+/**
+ * A pergunta aberta do atleta, respondida sobre o dossiê e só sobre ele.
+ *
+ * O dossiê (`ai-brief.ts`) já é o resultado dos motores determinísticos. Aqui o
+ * modelo não calcula nada: ele lê o que o motor concluiu e conversa. É a ADR-02
+ * levada ao pé da letra — o motor prescreve, a IA narra — e é o que impede a
+ * resposta de inventar um VDOT, um TSB ou uma quilometragem que ninguém mediu.
+ *
+ * `history` são as últimas mensagens da conversa, para uma pergunta curta do
+ * tipo "e na semana passada?" continuar fazendo sentido.
+ */
+export async function answerAthleteQuestion(input: {
+  brief: string;
+  question: string;
+  firstName?: string | null;
+  history?: Array<{ role: "user" | "assistant"; content: string }>;
+}): Promise<string | null> {
+  const systemPrompt = `
+Você é o treinador do Limiar conversando com ${input.firstName ?? "o atleta"}, em português do Brasil.
+
+A REGRA QUE VALE MAIS QUE TODAS: você só sabe o que está no DOSSIÊ abaixo. Ele foi calculado
+pelo motor do app (Daniels, Friel, CTL/ATL/TSB). Você não recalcula, não estima e não completa.
+
+- Todo número que você disser precisa aparecer no dossiê, igual. Nunca arredonde para um número
+  mais bonito nem some coisas por conta própria.
+- Se a pergunta pede algo que não está no dossiê, diga com todas as letras que você não tem esse
+  dado, e diga o que faria você ter (conectar o relógio, fazer o teste de calibração, registrar o
+  treino, cadastrar a prova).
+- Nada de diagnóstico. Se for dor, lesão ou sintoma, reconheça, diga o que os dados mostram e
+  recomende procurar um profissional.
+- Fale com o atleta por "você", direto, sem bajular e sem encher linguiça.
+- Curto: 2 a 5 frases. Só use lista se a pergunta pedir várias coisas.
+- Quando usar números, termine dizendo de onde eles vieram (a "fonte" da seção que você usou).
+- Não use markdown além de quebras de linha.
+
+DOSSIÊ:
+${input.brief}
+`.trim();
+
+  const conversa = (input.history ?? [])
+    .slice(-6)
+    .map(m => `${m.role === "user" ? "Atleta" : "Você"}: ${m.content}`)
+    .join("\n");
+
+  const userPrompt = [
+    conversa ? `Conversa até aqui:\n${conversa}` : "",
+    `Pergunta do atleta: ${input.question}`,
+  ].filter(Boolean).join("\n\n");
+
+  return callGroq(systemPrompt, userPrompt, 700);
+}
