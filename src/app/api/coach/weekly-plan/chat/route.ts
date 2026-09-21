@@ -13,16 +13,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { processPlanFeedback, extractAthleteNotes } from "@/lib/ai";
+import { noteExpiry, stillValidFilter, weekStartsAt } from "@/lib/athlete-notes";
 import type { WeeklyPlanData, PlanChatMessage } from "@/types";
 
 /** Builds an athlete profile string from DB notes */
-async function loadAthleteProfile(admin: ReturnType<typeof createAdminClient>, userId: string): Promise<string | null> {
+async function loadAthleteProfile(
+  admin: ReturnType<typeof createAdminClient>, userId: string,
+  /** A semana da conversa: vale o que valia para ela. */
+  weekStart: string | null,
+): Promise<string | null> {
   try {
     const { data } = await admin
       .from("athlete_notes")
       .select("category, content")
       .eq("user_id", userId)
       .eq("active", true)
+      .or(stillValidFilter(weekStart ? weekStartsAt(weekStart) : new Date()))
       .order("created_at", { ascending: false })
       .limit(30);
 
@@ -51,7 +57,9 @@ export async function POST(request: NextRequest) {
   const reportId = body.reportId as string | undefined;
 
   // ── 1. Load athlete profile for AI context ────────────────────────────────
-  const athleteProfile = await loadAthleteProfile(admin, user.id);
+  const athleteProfile = await loadAthleteProfile(
+    admin, user.id, (body.currentPlan as WeeklyPlanData)?.week_start ?? null,
+  );
 
   // ── 2. Recent runs for AI context ────────────────────────────────────────
   const { data: recentRuns } = await admin
@@ -96,18 +104,23 @@ export async function POST(request: NextRequest) {
   }
 
   // ── 5. Extract & save athlete notes asynchronously ───────────────────────
-  // Fire-and-forget: don't await so we don't slow down the response
+  // Fire-and-forget: don't await so we don't slow down the response.
+  //
+  // A conversa é sobre a semana deste plano: agenda e preferência ditas aqui
+  // vencem com ela (ver athlete-notes.ts — "essa segunda" não é toda segunda).
+  const chatWeek = (body.currentPlan as WeeklyPlanData)?.week_start ?? null;
   extractAthleteNotes(body.message as string, result.assistantMessage)
     .then(async (notes) => {
       if (notes.length === 0) return;
       try {
         await admin.from("athlete_notes").insert(
           notes.map(n => ({
-            user_id:  user.id,
-            category: n.category,
-            content:  n.content,
-            source:   "chat",
-            active:   true,
+            user_id:    user.id,
+            category:   n.category,
+            content:    n.content,
+            source:     "chat",
+            active:     true,
+            expires_at: noteExpiry(n.category, chatWeek),
           }))
         );
       } catch {

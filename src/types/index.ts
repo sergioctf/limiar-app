@@ -531,6 +531,14 @@ export interface WeeklyPlanData {
   rearrangement?: import("@/lib/week-fit").WeekRearrangement;
   /** Built on the running days the athlete gave for this week, before it was generated. */
   agenda?: WeeklyPlanDay["day"][];
+  /**
+   * Onde a semana está no bloco de quatro, e se é a de recuperação.
+   *
+   * A semana de 28/09 do Sérgio era de recuperação (14 km, 3 + 3 + 8), e nada
+   * na tela dizia isso — ele leu como plano quebrado, com razão. Gravado aqui
+   * para a tela e o recado poderem dizer o que a semana é.
+   */
+  cycle?: { week: number; isRecovery: boolean };
 }
 
 export interface PlanChatMessage {

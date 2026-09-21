@@ -1252,6 +1252,17 @@ Detalhes em **`docs/saude-categorias-e-adr02.md`**.
 - **A2 resolvida — a IA não reescreve mais o plano.** `/api/coach/weekly-plan/adjust` e `adjustWeeklyPlanProactive` foram **removidas**. O banner de treino perdido agora chama `fitWeek` com `remainingDays()` como disponibilidade: prévia com explicação determinística, e nada é salvo antes do "Aplicar" (ADR-05). O motor protege longão → forte → rodagem, não empilha dias fortes, move a sessão inteira (estrutura, ritmo, adaptação e a musculação do dia ficam de pé — era isso que a reescrita por IA perdia) e não tenta repor os quilômetros que passaram.
 - **`remember: false`** na rota do week-fit: "os dias que sobraram" não é a agenda de ninguém, e gravar aquilo faria a próxima geração da semana repetir uma frase que o atleta não disse.
 
+## 6.38 Semana de 28/09: recado que inventava, memória que não esquecia ✅ (novo, 21/09)
+
+Detalhes e **três decisões em aberto** em **`docs/semana-2809.md`**.
+
+- **O recado da semana passou a ser conferido pelo código** (`src/lib/week-note.ts`): todo número em km que a IA citar tem que estar no plano; reprovado, entra o recado do motor. Motivo: o de 28/09 disse "6 km" e "20 km" numa semana de 3 + 3 + 8 e não disse que era de recuperação — com o prompt já proibindo distâncias. **Regra em prompt é pedido; a garantia fica no código.**
+- **Notas de memória têm prazo** (migração **036**, `expires_at`; `src/lib/athlete-notes.ts`). Agenda e preferência ditas no chat de uma semana vencem na virada dela; lesão, objetivo e observação não. Quem gera a semana X lê as notas válidas **no começo de X** (`weekStartsAt`), não agora — a de 28/09 foi gerada às 00:02 de 21/09 e herdou "essa segunda não tenho tempo" como "segunda-feira tem pouco tempo".
+- **O plano grava `cycle: { week, isRecovery }`** e o Treinador mostra a faixa "Semana de recuperação". 3/3/8 sem explicação parece defeito.
+- **Aviso "Merece atenção" de segunda/terça abre `/ia?leitura=semana_passada`** — regressão da Fase 3, que tirou a devolutiva do Treinador mas deixou o aviso apontando para lá.
+- **Dados:** backup em `Limiar/tmp/backups/2026-09-21_semana-2809_e_notas.json`; as duas notas vazadas ganharam prazo (28/09 00:00); a semana de 28/09 foi regenerada (mesmos números, recado honesto).
+- **Em aberto, com o Sérgio:** recuperação com corrida abaixo do mínimo (proposta: tirar uma corrida), rodagem como válvula de escape do volume (proposta: teto de ~70% do longão), e a trava de volume subindo 29% por causa de uma troca (proposta: +10% no máximo sem prova).
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
@@ -2402,7 +2413,7 @@ npx vercel deploy --prod --yes
 
 ## 18.4 Banco e migrations
 
-- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **035** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028 a 032; em 18/09 para 033 e 034; em 20/09 para 035, conferida pelas três policies de `ai_messages` em `pg_policies`).
+- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **036** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028 a 032; em 18/09 para 033 e 034; em 20/09 para 035, conferida pelas três policies de `ai_messages` em `pg_policies`; em 21/09 para 036, conferida lendo `expires_at` pela API).
 - **O código tolera tabela ausente** (`try/catch` e sondas como `notification_log` em `morning-dispatch.ts`), então uma migration não aplicada **não quebra**: desliga a feature em silêncio.
 - **Fora do repositório:**
 

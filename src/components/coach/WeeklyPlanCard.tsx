@@ -501,6 +501,27 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
         </div>
       )}
 
+      {/*
+        A semana de recuperação diz o que é.
+
+        A de 28/09 do Sérgio saiu com 14 km em 3 + 3 + 8, e nada na tela dizia
+        que era a quarta semana do bloco, mais leve de propósito — ele leu como
+        plano quebrado. Um número pequeno sem explicação parece erro; com ela,
+        parece o que é.
+      */}
+      {plan.cycle?.isRecovery && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-4 py-3">
+          <Moon className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" />
+          <div>
+            <p className="text-sm font-semibold text-surface-100">Semana de recuperação</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-surface-400">
+              A quarta do bloco, mais leve de propósito: é quando o corpo absorve as três semanas
+              anteriores. Na próxima, o volume volta a subir.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* AI proactive message */}
       {plan.ai_message && (
         <div className="bg-brand-500/8 border border-brand-500/20 rounded-xl px-4 py-3 flex items-start gap-2.5">

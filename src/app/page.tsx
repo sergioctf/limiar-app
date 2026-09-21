@@ -137,7 +137,13 @@ export default async function HomePage() {
   if (recentDeferred) {
     attention = { text: "Você deixou para depois o check-in de uma corrida.", href: `/runs/${recentDeferred.id}`, action: "Responder" };
   } else if (weekday === 1 || weekday === 2) {
-    attention = { text: "Como foi a semana passada, o que o treinador entendeu e o que muda.", href: "/coach", action: "Ver" };
+    /*
+     * A leitura da semana que fechou mora na IA desde 20/09 (Fase 3). O aviso
+     * continuou apontando para o Treinador, que já não a mostrava — o toque
+     * levava a uma página que não respondia a pergunta feita (Sérgio, 21/09).
+     * Agora abre a IA já com essa leitura na tela.
+     */
+    attention = { text: "Como foi a semana passada, o que o treinador entendeu e o que muda.", href: "/ia?leitura=semana_passada", action: "Ver" };
   }
 
   const d = new Date(`${today}T12:00:00Z`);

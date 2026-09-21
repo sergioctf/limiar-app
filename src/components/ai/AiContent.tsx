@@ -31,12 +31,14 @@ export interface AiMessage {
 }
 
 export function AiContent({
-  brief, suggestions, history, firstName,
+  brief, suggestions, history, firstName, autoAsk = null,
 }: {
   brief: AthleteBrief;
   suggestions: Suggestion[];
   history: AiMessage[];
   firstName: string | null;
+  /** Uma leitura para responder ao abrir — quando a tela foi aberta por um aviso. */
+  autoAsk?: string | null;
 }) {
   const [messages, setMessages] = useState<AiMessage[]>(history);
   const [question, setQuestion] = useState("");
@@ -46,6 +48,21 @@ export function AiContent({
 
   // Uma conversa rola para a última coisa dita, não para o começo do histórico.
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages, thinking]);
+
+  /*
+   * Chegou por um aviso ("Como foi a semana passada…"): a resposta já aparece,
+   * sem o atleta precisar achar a pergunta de novo. Uma vez só — o parâmetro sai
+   * da URL, para um recarregar da página não perguntar tudo outra vez.
+   */
+  const asked = useRef(false);
+  useEffect(() => {
+    if (!autoAsk || asked.current) return;
+    asked.current = true;
+    const s = suggestions.find(x => x.id === autoAsk);
+    if (s) askSuggestion(s);
+    window.history.replaceState(null, "", "/ia");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAsk]);
 
   const add = (m: Omit<AiMessage, "id">) =>
     setMessages(prev => [...prev, { ...m, id: `${Date.now()}-${prev.length}` }]);

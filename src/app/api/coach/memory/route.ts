@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import type { AthleteNoteCategory } from "@/types";
+import { stillValidFilter } from "@/lib/athlete-notes";
 
 export async function GET() {
   const supabase = createClient();
@@ -19,6 +20,7 @@ export async function GET() {
       .select("*")
       .eq("user_id", user.id)
       .eq("active", true)
+      .or(stillValidFilter())
       .order("created_at", { ascending: false });
 
     if (error) throw error;

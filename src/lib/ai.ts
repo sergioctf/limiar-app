@@ -754,6 +754,9 @@ Regras:
 2. Ignore agradecimentos, confirmações genéricas ("ok", "entendido"), perguntas sobre o plano
 3. Se nada relevante foi dito, retorne []
 4. Máximo 3 notas por conversa — apenas o mais importante
+5. Um pedido sobre UM dia ou UMA semana ("essa segunda", "esta semana", "amanhã") NÃO é um fato
+   sobre o atleta — ele já foi aplicado ao plano. Não transforme em regra geral: nunca escreva
+   "segunda-feira tem pouco tempo" a partir de "essa segunda não tenho tempo".
 
 Formato: [{"category": "tipo", "content": "fato específico e conciso"}]
 `.trim();
@@ -801,25 +804,32 @@ export async function generateCoachNote(input: {
   nextRace:  { name: string; date: string; distance_km: number } | null;
   vdot:      number | null;
   athleteProfile: string | null;
-  recentKm:  number;
+  /** O que a semana anterior pediu. Era "a soma das últimas 10 corridas", que não é semana nenhuma. */
+  previousPlannedKm: number | null;
+  /** A quarta semana do bloco, mais leve por desenho — o recado precisa saber disso. */
+  isRecovery: boolean;
+  /** As corridas que o motor montou. São os únicos números que o recado pode citar. */
+  sessions: Array<{ label: string; km: number }>;
 }): Promise<string | null> {
   const systemPrompt = `
 Você é o treinador do atleta. Escreva UMA mensagem curta (2-3 frases, português do Brasil)
-enquadrando a semana de treino que já foi montada.
+enquadrando a semana de treino que já foi montada pelo motor do app.
 
 REGRAS:
 1. NÃO prescreva treinos, distâncias ou ritmos — isso já está definido no plano.
-2. Explique a INTENÇÃO da semana (o que essa fase busca) e dê um ponto de atenção prático.
-3. Seja específico ao contexto dado. Nada de motivação genérica.
-4. Sem markdown, sem emojis, sem listas.
+2. Se citar quilômetros, use SOMENTE os números da seção SEMANA MONTADA. Nenhum outro número.
+3. Se a semana for de RECUPERAÇÃO, diga isso com todas as letras e explique para que serve.
+4. O PERFIL traz o histórico do atleta; não trate um pedido antigo sobre um dia específico como regra desta semana.
+5. Explique a INTENÇÃO da semana e dê um ponto de atenção prático. Nada de motivação genérica.
+6. Sem markdown, sem emojis, sem listas.
 `.trim();
 
   const userPrompt = `
-FASE: ${PHASE_PT[input.phase] ?? input.phase}
-VOLUME PLANEJADO: ~${input.weeklyKm} km de corrida
-VOLUME RECENTE: ~${input.recentKm} km
+FASE: ${PHASE_PT[input.phase] ?? input.phase}${input.isRecovery ? " — SEMANA DE RECUPERAÇÃO (quarta do bloco, mais leve de propósito)" : ""}
+SEMANA MONTADA: ${input.weeklyKm} km no total — ${input.sessions.map(s => `${s.label} ${s.km} km`).join(", ")}
+${input.previousPlannedKm != null ? `SEMANA ANTERIOR: ${input.previousPlannedKm} km planejados` : ""}
 ${input.vdot ? `VDOT: ${input.vdot.toFixed(1)}` : "Sem teste recente"}
-${input.nextRace ? `PRÓXIMA PROVA: ${input.nextRace.name} (${input.nextRace.distance_km} km) em ${input.nextRace.date}` : "Sem prova marcada"}
+${input.nextRace ? `PRÓXIMA PROVA: ${input.nextRace.name} em ${input.nextRace.date}` : "Sem prova marcada"}
 ${input.athleteProfile ? `\nPERFIL:\n${input.athleteProfile}` : ""}
 
 Escreva a mensagem da semana.

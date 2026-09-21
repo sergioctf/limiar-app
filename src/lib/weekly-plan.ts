@@ -17,6 +17,8 @@ import { normalizeStrengthPrefs, type StrengthPrefs } from "@/lib/strength-prefs
 import { prefsForAgenda } from "@/lib/week-fit";
 import { planFingerprint, planStaleness, type Staleness } from "@/lib/plan-freshness";
 import { readWeek, type ShortfallReason, type WeekReading } from "@/lib/week-reading";
+import { allowedWeekNumbers, fallbackWeekNote, noteRespectsPlan, type WeekNoteFacts } from "@/lib/week-note";
+import { stillValidFilter, weekStartsAt } from "@/lib/athlete-notes";
 import type { RunContext } from "@/lib/run-feedback";
 import type { WeeklyPlanData, WeeklyPlanDay, Run, TrainingPrefs } from "@/types";
 
@@ -396,25 +398,36 @@ export function phaseForRace(raceDate: string | null, weekStart: string): WeekCo
   return "base";
 }
 
-/** Short coach's note for the week — context only, never the workouts. */
+/**
+ * O recado da semana — contexto, nunca os treinos.
+ *
+ * Escrito pela IA e **conferido pelo código**: todo número em km que ele citar
+ * tem que estar no plano (`noteRespectsPlan`). Em 21/09 o recado da semana de
+ * recuperação de 28/09 inventou "6 km" e "20 km" e não disse que a semana era
+ * de recuperação; o prompt já proibia distâncias e o modelo escreveu assim
+ * mesmo. Recado reprovado vira o do motor (`fallbackWeekNote`), que só diz o
+ * que o plano tem. Sem IA disponível, também.
+ */
 async function coachNoteFor(input: {
-  weekStart: string; weeklyKm: number; phase: WeekContext["phase"];
+  phase: WeekContext["phase"];
   nextRace: { name: string; date: string; distance_km: number } | null;
-  vdot: number | null; athleteProfile: string | null; runs: Run[];
-}): Promise<string | null> {
-  const lastWeekKm = input.runs
-    .filter(r => r.date < input.weekStart)
-    .slice(0, 10)
-    .reduce((s, r) => s + r.distance_km, 0);
-
-  return generateCoachNote({
-    weeklyKm: input.weeklyKm,
+  vdot: number | null; athleteProfile: string | null;
+  facts: WeekNoteFacts;
+}): Promise<string> {
+  const note = await generateCoachNote({
+    weeklyKm: input.facts.weeklyKm,
     phase: input.phase ?? "base",
     nextRace: input.nextRace,
     vdot: input.vdot,
     athleteProfile: input.athleteProfile,
-    recentKm: Math.round(lastWeekKm),
-  });
+    previousPlannedKm: input.facts.previousPlannedKm,
+    isRecovery: input.facts.isRecovery,
+    sessions: input.facts.sessions,
+  }).catch(() => null);
+
+  return note && noteRespectsPlan(note, allowedWeekNumbers(input.facts))
+    ? note
+    : fallbackWeekNote(input.facts);
 }
 
 /** Read the stored plan for a week, repaired so the UI can always render it. */
@@ -565,8 +578,10 @@ export async function ensureWeeklyPlan(
 
   const fetchProfileNotes = async () => {
     try {
+      // O que vale NA SEMANA MONTADA, não agora: esta semana é gerada durante a
+      // anterior, e o pedido de "essa segunda" ainda vale até a virada.
       const { data } = await db.from("athlete_notes").select("category, content")
-        .eq("user_id", userId).eq("active", true)
+        .eq("user_id", userId).eq("active", true).or(stillValidFilter(weekStartsAt(weekStart)))
         .order("created_at", { ascending: false }).limit(30);
       if (!data || data.length === 0) return null;
       return (data as Array<{ category: string; content: string }>)
@@ -776,9 +791,17 @@ export async function ensureWeeklyPlan(
   const weekPrefs = prefsForAgenda(prefs, agenda);
   const days = buildWeekPlan(ctx, sports ?? [], weekPrefs, strengthPrefs);
 
-  // Coach's note is best-effort — the plan stands on its own without it.
+  // The note narrates the week the engine built, with the engine's numbers.
+  const runningDays = days.filter(d => (d.distance_km ?? 0) > 0);
   const aiMessage = await coachNoteFor({
-    weekStart, weeklyKm, phase: ctx.phase, nextRace, vdot, athleteProfile, runs,
+    phase: ctx.phase, nextRace, vdot, athleteProfile,
+    facts: {
+      weeklyKm: Math.round(runningDays.reduce((s, d) => s + (d.distance_km ?? 0), 0) * 10) / 10,
+      isRecovery,
+      cycleWeek: cycle.week,
+      sessions: runningDays.map(d => ({ label: d.label, km: d.distance_km ?? 0 })),
+      previousPlannedKm: previous?.plannedKm ?? null,
+    },
   }).catch(() => null);
 
   const plan: WeeklyPlanData = {
@@ -795,6 +818,7 @@ export async function ensureWeeklyPlan(
     week_reading: reading ?? undefined,
     phase: ctx.phase,
     agenda: agenda ?? undefined,
+    cycle: { week: cycle.week, isRecovery },
   };
 
   // ── Upsert the week's report ───────────────────────────────────────────────
