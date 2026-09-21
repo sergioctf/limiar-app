@@ -258,6 +258,18 @@ function explain(
   return lines;
 }
 
+/**
+ * Os dias que ainda restam na semana, a partir de um deles.
+ *
+ * É a "agenda" do caso em que o atleta não declarou agenda nenhuma — ele só
+ * perdeu um treino, e a pergunta passa a ser o que ainda cabe no que sobrou da
+ * semana. Sem isso o ajuste proativo precisava de alguém para inventar os dias,
+ * e quem inventava era um modelo de linguagem (dívida A2).
+ */
+export function remainingDays(from: DayKey): DayKey[] {
+  return DAY_ORDER.slice(idx(from));
+}
+
 /** Put the week back exactly as it was before it was reorganised. */
 export function undoFit(plan: WeeklyPlanData): { plan: WeeklyPlanData } | { error: string } {
   const r = plan.rearrangement;

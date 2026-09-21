@@ -5,7 +5,7 @@
  * prioritised, and changes nothing until they confirm.
  */
 import { describe, expect, it } from "vitest";
-import { fitWeek, prefsForAgenda, undoFit, type FitProposal } from "@/lib/week-fit";
+import { fitWeek, prefsForAgenda, remainingDays, undoFit, type FitProposal } from "@/lib/week-fit";
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 
 const strength = { exercises: [{}, {}, {}], estimatedMinutes: 40 } as unknown as WeeklyPlanDay["strength"];
@@ -128,5 +128,44 @@ describe("the agenda as planning data", () => {
     expect(prefsForAgenda(prefs, ["Sat", "Tue", "Thu"])).toEqual({ runDays: ["Tue", "Thu", "Sat"], longRunDay: "Sat" });
     expect(prefsForAgenda(prefs, ["Tue", "Thu"]).longRunDay).toBeNull();
     expect(prefsForAgenda(prefs, null)).toBe(prefs);
+  });
+});
+
+/**
+ * Depois de um treino perdido — o que substituiu o ajuste por IA (dívida A2).
+ *
+ * A "agenda" aqui são os dias que sobraram na semana. O atleta não declarou
+ * nada; ele só perdeu um treino, e a pergunta é o que ainda cabe.
+ */
+describe("o que sobrou da semana", () => {
+  it("os dias que restam são de hoje até domingo", () => {
+    expect(remainingDays("Thu")).toEqual(["Thu", "Fri", "Sat", "Sun"]);
+    expect(remainingDays("Mon")).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+    expect(remainingDays("Sun")).toEqual(["Sun"]);
+  });
+
+  it("perdida a rodagem de segunda, a quarta-feira não vira dois treinos", () => {
+    // Quarta de manhã: sobra o tiro de hoje e o longão de sábado.
+    const p = ok(fitWeek(week, { available: remainingDays("Wed"), fromDay: "Wed", longRunDay: "Sat" }));
+
+    expect(at(p, "Wed").label).toBe("Tiros curtos 6×200 m");
+    expect(at(p, "Sat").label).toBe("Longão");
+    // A rodagem de segunda passou. Nada a repõe — nem em quarta, nem em domingo.
+    expect(p.plan.days.filter(d => d.label === "Rodagem leve")).toHaveLength(1);  // a de segunda, intocada no passado
+    expect(at(p, "Sun").type).toBe("rest");
+  });
+
+  it("com a semana inteira pela frente, não mexe em nada", () => {
+    // É a resposta certa e a que a versão por IA nunca dava: não há o que fazer.
+    const p = ok(fitWeek(week, { available: remainingDays("Mon"), fromDay: "Mon", longRunDay: "Sat" }));
+    expect(p.unchanged).toBe(true);
+    expect(p.dropped).toEqual([]);
+  });
+
+  it("a musculação do dia fica onde estava quando a corrida se move", () => {
+    // O que a reescrita por IA perdia: a estrutura da sessão e a musculação.
+    const p = ok(fitWeek(week, { available: ["Thu", "Sat"], fromDay: "Wed", longRunDay: "Sat" }));
+    expect(at(p, "Thu").strength).toBeTruthy();
+    expect(at(p, "Thu").quality).toBe("repetitions");
   });
 });

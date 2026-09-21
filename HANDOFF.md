@@ -1244,6 +1244,14 @@ Detalhes em **`docs/adesao-e-carga-21-09.md`**. Viraram urgentes porque a IA cen
 - **"Dias sem descanso" conta qualquer treino** (`computeTrainingStreak`), não só corrida.
 - **Bug encontrado ao comparar os dois TSB:** `loadRecoveryInputs` não selecionava `moving_time_seconds`, e `estimateTSS` mede pelo tempo em movimento de propósito (FC e pace médios do Strava são calculados sobre ele). A carga de Saúde saía inflada por cada semáforo. Uma coluna a mais e os dois números viraram o mesmo: **−5,1**.
 
+## 6.37 Saúde em categorias e a IA fora do plano ✅ (novo, 21/09)
+
+Detalhes em **`docs/saude-categorias-e-adr02.md`**.
+
+- **Saúde tem um índice de quatro categorias no topo** (`HealthOverview`): Recuperação (score), Sono (média da semana), Forma (TSB) e Energia (alvo do dia). Cada uma leva à sua seção, e a tela foi agrupada atrás delas — "Corpo" entrou em *Energia e alimentação*. **É um índice, não um resumo:** nenhum número novo nasce ali. Antes eram nove seções do mesmo tamanho numa rolagem plana.
+- **A2 resolvida — a IA não reescreve mais o plano.** `/api/coach/weekly-plan/adjust` e `adjustWeeklyPlanProactive` foram **removidas**. O banner de treino perdido agora chama `fitWeek` com `remainingDays()` como disponibilidade: prévia com explicação determinística, e nada é salvo antes do "Aplicar" (ADR-05). O motor protege longão → forte → rodagem, não empilha dias fortes, move a sessão inteira (estrutura, ritmo, adaptação e a musculação do dia ficam de pé — era isso que a reescrita por IA perdia) e não tenta repor os quilômetros que passaram.
+- **`remember: false`** na rota do week-fit: "os dias que sobraram" não é a agenda de ninguém, e gravar aquilo faria a próxima geração da semana repetir uma frase que o atleta não disse.
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
@@ -2016,7 +2024,7 @@ combustível em treino: > 75 min → 50 g/h (leve) | 75 g/h (prova); gel ≈ 25 
 | # | Dívida | Evidência | Impacto | Correção |
 |---|---|---|---|---|
 | A1 | ~~**Cron `weekly-report` quebrado e contraditório**~~ **resolvida em 17/09** (resumo por IA removido; plano pelo motor via `ensureWeeklyPlan`; devolutiva determinística em `week-recap.ts`) | `src/app/api/cron/weekly-report/route.ts` | (a) O resumo semanal procurava `coach_reports` `week` da semana passada com `summary` não nulo, mas **a linha do plano sempre tem `summary`** (`weekly-plan.ts:669`), então o resumo **nunca é gerado para quem teve plano**. Se fosse gerado, **sobrescreveria o `full_report` do plano** da semana passada com texto. (b) Para quem não tem plano na semana (sem corridas em 60 d), **gera plano por LLM**, que `ensureWeeklyPlan` considera "usável" (tem `sport`) e **nunca substitui**, e a trava de semana congela | Separar resumos em `period_type='week_summary'` (ou tabela própria); remover `generateStructuredWeeklyPlan` e chamar `ensureWeeklyPlan`; checar produção por planos sem `fingerprint` |
-| A2 | **Ajuste proativo por IA reescreve a semana em andamento** | `/api/coach/weekly-plan/adjust` + `adjustWeeklyPlanProactive` | Viola ADR-02 e ADR-05; os dias reescritos perdem `structure` com intensidade/FC e a sessão de `strength` | Substituir por regras determinísticas (reusar `session-swap`/`plan-edit`) ou remover o banner |
+| A2 | ~~**Ajuste proativo por IA reescreve a semana em andamento**~~ **resolvida em 21/09** (rota e `adjustWeeklyPlanProactive` removidas; o banner agora usa `fitWeek` sobre os dias que sobraram, com prévia e confirmação) | `ProactiveAdjustBanner` + `week-fit.ts` | — | — |
 | A3 | **Autorização por convenção** | Maioria das rotas usa `createAdminClient()` + `.eq("user_id", user.id)` | Um filtro esquecido = vazamento entre usuários; nenhum teste cobre rotas | Cliente com RLS nas rotas do próprio usuário; testes de autorização nas rotas sensíveis; revisar cada `createAdminClient` |
 | A4 | **Next.js 14.2.35 com vulnerabilidades** | `npm audit` (5 avisos no `next`; a correção pede Next 16) | Exposição a CVEs do framework | Planejar upgrade 14 → 15 → 16 (mudanças em cookies/headers assíncronos, cache) com smoke tests |
 | A5 | **Sem observabilidade** | Sem Sentry; crons sem alerta; IA falha para `null`; logs só na Vercel (retenção curta no Hobby) | Falhas silenciosas (o resumo semanal morto passou meses sem ninguém notar) | Sentry (ou Axiom/Logtail); o cron grava resultado em tabela `job_runs`; alerta se um cron não roda |

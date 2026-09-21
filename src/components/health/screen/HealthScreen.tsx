@@ -16,6 +16,7 @@ import { MonitorCard } from "./MonitorCard";
 import { EnergyCard } from "./EnergyCard";
 import { CheckinSheet } from "./CheckinSheet";
 import { CheckinPanel } from "./CheckinPanel";
+import { HealthOverview, HEALTH_SECTIONS } from "./HealthOverview";
 import { IntervalsCard } from "@/components/health/IntervalsCard";
 import { AppleHealthSyncCard } from "@/components/health/AppleHealthSyncCard";
 import { WhoopCard } from "@/components/health/WhoopCard";
@@ -67,14 +68,24 @@ function ago(iso: string): string {
 }
 
 /**
- * Saúde, rebuilt around one morning decision.
+ * Saúde, em quatro categorias.
  *
- * The order is the order of the questions an athlete asks on waking: am I
- * recovered, and what does that mean for today's session → which signals say so
- * → how did my training get me here → how did I sleep → what is the score made
- * of → what should I eat → the rest of what the watch knows → my body over time.
- * Devices sit at the bottom because they are set up once and then forgotten,
- * which is exactly how a connection should feel.
+ * Sérgio, 20/09: *"em saúde, reorganizar o topo em categorias — energia/
+ * alimentação, sono, forma e carga, recuperação."*
+ *
+ * A tela respondia bem a uma pergunta ("estou recuperado?") e depois virava
+ * uma rolagem plana de nove seções do mesmo tamanho. Quem abre a Saúde às 6h30
+ * não quer nove respostas iguais; quer saber **qual das quatro** merece atenção
+ * hoje. O topo agora é um índice de quatro números — um por categoria, cada um
+ * levando à sua seção — e o resto da tela está agrupado atrás deles:
+ *
+ *   Recuperação → o score, os sinais vitais, carga × recuperação, o que compõe
+ *   Sono        → a semana de noites
+ *   Forma e carga → condicionamento, fadiga e forma
+ *   Energia     → o alvo do dia e o corpo ao longo do tempo
+ *
+ * O monitor do relógio e os dispositivos ficam por último: são configurados uma
+ * vez e esquecidos, que é exatamente como uma conexão deve parecer.
  */
 export function HealthScreen({
   data, initialBody, initialSupplements,
@@ -147,6 +158,15 @@ export function HealthScreen({
       </header>
 
       <Reveal className="space-y-6">
+        {/* O índice das quatro categorias. Nenhum número novo: todos vêm das seções abaixo. */}
+        <HealthOverview
+          recovery={recovery}
+          sleep={data.sleep}
+          fitness={data.fitness}
+          nutrition={data.nutrition}
+        />
+
+        <section id={HEALTH_SECTIONS.recuperacao} className="scroll-mt-20 space-y-6">
         <RecoveryHero
           recovery={recovery}
           trend={data.trend}
@@ -188,16 +208,7 @@ export function HealthScreen({
           <LoadRecoveryChart history={data.history} />
         </Section>
 
-        {/* Condicionamento, fadiga e forma — moved here from the Home (18/09): it explains the body, not the day. */}
-        <Section title="Forma e carga" subtitle="Corrida e academia">
-          <FitnessCard data={data.fitness} />
-        </Section>
-
-        <Section title="Sono" subtitle={watchMode ? undefined : "Pelo que você informou nos check-ins"}>
-          <SleepCard week={data.sleep} />
-        </Section>
-
-        {/* Closed by default (Sérgio, 18/09): the breakdown is there for whoever wants it, not in everyone's way. */}
+        {/* Fechado por padrão (Sérgio, 18/09): a conta fica para quem quiser, não no caminho de todo mundo. */}
         <Disclosure
           title="O que compõe o score"
           summary={`${readiness.components.length} ${readiness.components.length === 1 ? "sinal" : "sinais"} · o que puxa o número para cima ou para baixo`}
@@ -205,23 +216,39 @@ export function HealthScreen({
         >
           <ContributorsCard readiness={readiness} bare />
         </Disclosure>
+        </section>
 
-        <Section title="Energia">
-          <EnergyCard data={data.nutrition} />
-        </Section>
+        <section id={HEALTH_SECTIONS.sono} className="scroll-mt-20">
+          <Section title="Sono" subtitle={watchMode ? undefined : "Pelo que você informou nos check-ins"}>
+            <SleepCard week={data.sleep} />
+          </Section>
+        </section>
+
+        {/* Condicionamento, fadiga e forma — veio da Home em 18/09: explica o corpo, não o dia. */}
+        <section id={HEALTH_SECTIONS.forma} className="scroll-mt-20">
+          <Section title="Forma e carga" subtitle="Corrida e academia">
+            <FitnessCard data={data.fitness} />
+          </Section>
+        </section>
+
+        <section id={HEALTH_SECTIONS.energia} className="scroll-mt-20 space-y-6">
+          <Section title="Energia e alimentação">
+            <EnergyCard data={data.nutrition} />
+          </Section>
+
+          <Section title="Corpo">
+            <div className="space-y-2.5">
+              <BodyCompositionCard initial={initialBody} />
+              <SupplementsCard initial={initialSupplements} />
+            </div>
+          </Section>
+        </section>
 
         {data.monitor.length > 0 && (
           <Section title="Monitor do relógio" subtitle="Fora do score — só para você acompanhar">
             <MonitorCard items={data.monitor} />
           </Section>
         )}
-
-        <Section title="Corpo">
-          <div className="space-y-2.5">
-            <BodyCompositionCard initial={initialBody} />
-            <SupplementsCard initial={initialSupplements} />
-          </div>
-        </Section>
 
         {/*
           Without a watch, the invitation to connect one sits just above the

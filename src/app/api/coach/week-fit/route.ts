@@ -37,7 +37,8 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await db.auth.getUser();
   if (!user) return json({ error: "Entre novamente." }, 401);
 
-  const body = await request.json().catch(() => null) as { action?: unknown; week?: unknown; days?: unknown } | null;
+  const body = await request.json().catch(() => null) as
+    { action?: unknown; week?: unknown; days?: unknown; remember?: unknown } | null;
   const action = body?.action;
   if (action !== "preview" && action !== "confirm" && action !== "undo") return json({ error: "Pedido inválido." }, 400);
 
@@ -108,9 +109,19 @@ export async function POST(request: NextRequest) {
   }
 
   if (!(await save(proposal.plan))) return json({ error: "Não foi possível reorganizar a semana." }, 500);
-  // Kept as planning data: what the week was built around, and what the coach can learn from.
-  await db.from("week_availability")
-    .upsert({ user_id: user.id, week_start: week, run_days: days }, { onConflict: "user_id,week_start" })
-    .then(() => {}, () => {});
+  /*
+   * A agenda só é guardada quando o atleta declarou uma.
+   *
+   * O ajuste depois de um treino perdido usa "os dias que sobraram" como
+   * disponibilidade, e isso não é a agenda de ninguém — gravar aquilo como
+   * "só consigo treinar nesses dias" seria colocar na boca dele uma frase que
+   * ele não disse, e que voltaria na próxima geração da semana.
+   */
+  if (body?.remember !== false) {
+    // Kept as planning data: what the week was built around, and what the coach can learn from.
+    await db.from("week_availability")
+      .upsert({ user_id: user.id, week_start: week, run_days: days }, { onConflict: "user_id,week_start" })
+      .then(() => {}, () => {});
+  }
   return json({ ok: true, plan: proposal.plan, explanation: proposal.explanation });
 }
