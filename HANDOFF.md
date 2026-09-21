@@ -1234,6 +1234,16 @@ Detalhes em **`docs/reorganizacao-20-09.md`**.
 - **Cores por tipo de treino** (`session-colors.ts`, extraído do `WeeklyPlanCard`): rodagem verde, limiar amarelo, tiro vermelho, longão roxo — agora também na Hoje. **Nunca em "Minha semana"**, onde a cor já quer dizer feito / previsto / não feito.
 - **Custo assumido:** a Home voltou a carregar o histórico inteiro de corridas (só colunas numéricas, nunca `strava_raw_json`), porque "Seus números" e os recordes falam da vida toda. A carga segue olhando 180 dias, agora por filtro em memória.
 
+## 6.36 Adesão e carga: três números que mentiam ✅ (novo, 21/09)
+
+Detalhes em **`docs/adesao-e-carga-21-09.md`**. Viraram urgentes porque a IA central passou a citar esses números.
+
+- **A11 resolvida:** `computeAdherenceHistory` ignora semanas que ainda não começaram. O plano da próxima semana é gerado no domingo e, a partir daí, o card abria **nele** — sete dias "a fazer" e adesão nula. Nos dados reais do Sérgio, o card passou de 21/09 (vazio) para 14/09 (83%).
+- **A12 resolvida:** a regra "o dia de hoje ainda não acabou" existia só no ramo da corrida; uma quinta de academia nascia "Perdido" às 8h. Agora vale para qualquer esporte.
+- **Sobrecarga enxerga todos os esportes:** `detectOvertraining` recebe as atividades e as repassa a `computeTrainingLoad`. Os dois carregadores buscam **180 dias** de atividades — a mesma janela das corridas, senão a carga crônica começa do zero e uma rotina antiga de academia vira pico novo. Nos dados reais o **ACWR caiu de 1,31 para 1,18**: o limiar de alerta é 1,30, ou seja, a Home mostrava "Carga subindo rápido" para uma carga que não subia.
+- **"Dias sem descanso" conta qualquer treino** (`computeTrainingStreak`), não só corrida.
+- **Bug encontrado ao comparar os dois TSB:** `loadRecoveryInputs` não selecionava `moving_time_seconds`, e `estimateTSS` mede pelo tempo em movimento de propósito (FC e pace médios do Strava são calculados sobre ele). A carga de Saúde saía inflada por cada semáforo. Uma coluna a mais e os dois números viraram o mesmo: **−5,1**.
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
@@ -2015,8 +2025,8 @@ combustível em treino: > 75 min → 50 g/h (leve) | 75 g/h (prova); gel ≈ 25 
 | A8 | ~~**Carga de treino só de corrida**~~ **resolvida em 16/09** (`activityTSS`) | `training-load.ts` | TSB e recuperação subestimam fadiga de quem faz força 3×/semana (caso de Sérgio) | TSS por sRPE × duração para `activities`; calibrar com o atleta |
 | A9 | **Webhook do Strava aceita eventos forjados** | `strava/webhook/route.ts` não confere `subscription_id`; o delete marca `runs.deleted_at` só pelo `object_id` | Qualquer pessoa pode apagar (soft delete) corridas de usuários conhecendo o ID da atividade no Strava; eventos falsos geram custo de API/IA | Validar `subscription_id`; no delete, confirmar com a API do Strava (404) antes de marcar |
 | A10 | **Análise por IA síncrona no webhook do Strava** | `strava/webhook/route.ts` | Webhook lento → Strava reenvia; atividade só é salva se a função não estourar | Salvar e responder 200; análise em job posterior (fila simples em tabela) |
-| A11 | **Card de adesão mostra a semana seguinte como "esta semana"** | `plan-adherence.ts` (`computeAdherenceHistory`) + `PlanAdherenceCard` | Ordena por `period_start` e chama de atual o relatório mais recente; com o plano da próxima semana já gerado, o card mostra sete dias "a fazer" enquanto o topo da página fala da semana corrente (visto em produção, 17/09) | Escolher a semana pela data de hoje, não pelo relatório mais recente |
-| A12 | **Musculação do dia conta como perdida antes de o dia acabar** | `plan-adherence.ts`, ramo `type === "strength"` | A regra "hoje ainda está pendente" só vale para corrida; um dia de força sem registro aparece "Perdido" já pela manhã (a quinta de 17/09 entrou assim no cálculo dos 63%) | Aplicar a mesma regra de `upcoming` para força |
+| A11 | ~~**Card de adesão mostra a semana seguinte como "esta semana"**~~ **resolvida em 21/09** (`computeAdherenceHistory` ignora semanas que ainda não começaram) | `plan-adherence.ts` | — | — |
+| A12 | ~~**Musculação do dia conta como perdida antes de o dia acabar**~~ **resolvida em 21/09** (a regra "hoje ainda está pendente" passou a valer para qualquer esporte) | `plan-adherence.ts` | — | — |
 
 ## 🟡 MÉDIA — atrito, inconsistência ou custo de manutenção
 

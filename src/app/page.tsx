@@ -71,10 +71,17 @@ export default async function HomePage() {
       .select("id, date, name, type, distance_km, duration_seconds, moving_time_seconds, elapsed_time_seconds, avg_hr, avg_pace_seconds_per_km, calories")
       .eq("user_id", user.id).is("deleted_at", null)
       .order("date", { ascending: false }) as unknown as PromiseLike<{ data: Run[] | null }>),
-    // Trinta dias: a semana para os blocos, o mês para "dias treinados (30d)".
+    /*
+     * Cento e oitenta dias, a mesma janela das corridas.
+     *
+     * A semana precisa de sete dias e "dias treinados (30d)" de trinta, mas o
+     * alerta de sobrecarga precisa dos seis meses: sem o histórico de academia,
+     * a carga crônica começa do zero e uma rotina antiga de musculação aparece
+     * como pico novo — o falso positivo exato que a correção de 21/09 elimina.
+     */
     safe<{ id: string; date: string; name: string | null; sport_type: string; duration_seconds: number | null; distance_m: number | null; calories: number | null; avg_hr: number | null }>(
       supabase.from("activities").select("id, date, name, sport_type, duration_seconds, distance_m, calories, avg_hr")
-        .eq("user_id", user.id).is("deleted_at", null).gte("date", athleteDaysAgoStr(30, now)).order("date")),
+        .eq("user_id", user.id).is("deleted_at", null).gte("date", athleteDaysAgoStr(180, now)).order("date")),
     safe<WellnessData>(supabase.from("wellness_data").select("*").eq("user_id", user.id).gte("date", athleteDaysAgoStr(30, now))),
     safe<PerformanceTest>(admin.from("performance_tests").select("*").eq("user_id", user.id).order("test_date", { ascending: false }).limit(1)),
     safe<{ weight_kg: number | null }>(admin.from("body_measurements").select("weight_kg").eq("user_id", user.id).order("date", { ascending: false }).limit(1)),
@@ -107,8 +114,10 @@ export default async function HomePage() {
   const metrics = latestTest
     ? computeMetrics(latestTest.distance_km * 1000, latestTest.time_seconds, latestTest.avg_hr ?? undefined, latestTest.max_hr ?? undefined)
     : null;
+  // Mesmas entradas que a recuperação usa, para o app ter um TSB só.
   const overtraining = detectOvertraining(
-    recentRuns, metrics?.lthr ?? null, metrics?.paces.find(p => p.name === "threshold")?.pace_min_sec ?? null, wellness,
+    recentRuns, metrics?.lthr ?? null, metrics?.paces.find(p => p.name === "threshold")?.pace_min_sec ?? null,
+    wellness, activities,
   );
 
   const tomorrowKey = dayKeyOf(addDays(today, 1));

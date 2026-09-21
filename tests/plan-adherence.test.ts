@@ -6,8 +6,8 @@
  * the plan day, so 8 km run in place of a 3,5 km hill session came back as
  * 100% adherence to a plan that had asked for something else.
  */
-import { describe, expect, it } from "vitest";
-import { computeWeekAdherence } from "@/lib/plan-adherence";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { computeAdherenceHistory, computeWeekAdherence } from "@/lib/plan-adherence";
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 
 const weekStart = "2026-09-14";            // Monday
@@ -79,5 +79,75 @@ describe("a session replaced after the fact", () => {
   it("does not mark a day adapted when nothing was run", () => {
     const week = computeWeekAdherence(weekStart, plan(adapted("equivalent")), runs.slice(0, 1), [])!;
     expect(week.days.find(d => d.day === "Wed")!.status).toBe("missed");
+  });
+});
+
+/**
+ * Dívidas A11 e A12, do HANDOFF — as duas fazem o card mentir sobre a semana
+ * corrente, e agora a IA central repete o número em voz alta.
+ */
+describe("a semana que o card chama de 'esta semana'", () => {
+  afterEach(() => vi.useRealTimers());
+
+  const report = (monday: string, days: WeeklyPlanDay[]) =>
+    ({ period_start: monday, full_report: JSON.stringify({ week_start: monday, generated_at: "x", days }) });
+
+  it("é a que está acontecendo, não a que já foi gerada para a próxima", () => {
+    // Quinta, 17/09. O plano de 21/09 já existe — gerado no domingo, como sempre.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-17T10:00:00"));
+
+    const history = computeAdherenceHistory(
+      [report("2026-09-14", [easy, hills]), report("2026-09-21", [easy, hills])],
+      runs, [], 4,
+    );
+
+    expect(history[0].weekStart).toBe("2026-09-14");
+    expect(history.some(w => w.weekStart === "2026-09-21")).toBe(false);
+  });
+
+  it("uma semana que começa hoje já conta", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-14T06:00:00"));
+    const history = computeAdherenceHistory([report("2026-09-14", [easy, hills])], runs, [], 4);
+    expect(history[0]?.weekStart).toBe("2026-09-14");
+  });
+});
+
+describe("o dia de hoje ainda não acabou", () => {
+  afterEach(() => vi.useRealTimers());
+
+  const strength: WeeklyPlanDay = {
+    day: "Thu", dayPt: "Quinta", sport: "musculacao", type: "strength",
+    label: "Musculação", description: "",
+  };
+  const withStrength: WeeklyPlanData =
+    { week_start: weekStart, generated_at: "x", days: [{ ...easy }, strength] };
+
+  it("musculação de hoje sem registro é pendente, não perdida", () => {
+    // Quinta de manhã: a academia é à noite, como sempre foi.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-17T08:00:00"));
+
+    const week = computeWeekAdherence(weekStart, withStrength, runs, [])!;
+    expect(week.days.find(d => d.day === "Thu")!.status).toBe("upcoming");
+    expect(week.missedCount).toBe(0);
+  });
+
+  it("mas a musculação de ontem sem registro é perdida mesmo", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-18T08:00:00"));
+
+    const week = computeWeekAdherence(weekStart, withStrength, runs, [])!;
+    expect(week.days.find(d => d.day === "Thu")!.status).toBe("missed");
+  });
+
+  it("e com a academia registrada, feita", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-17T22:00:00"));
+
+    const week = computeWeekAdherence(weekStart, withStrength, runs,
+      [{ date: "2026-09-17", sport_type: "WeightTraining" }])!;
+    expect(week.days.find(d => d.day === "Thu")!.status).toBe("done");
   });
 });

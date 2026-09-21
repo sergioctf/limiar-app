@@ -112,9 +112,6 @@ export function computeWeekAdherence(
       else if (actualKm > 0)                   status = "partial";
       else                                     status = isFuture ? "upcoming" : "missed";
 
-      // Today without a run yet: still pending, not missed
-      if (status === "missed" && date === today) status = "upcoming";
-
       /*
        * A session declared different after the fact is neither a miss nor the
        * plan carried out: the day keeps its prescription and the run is shown
@@ -123,6 +120,17 @@ export function computeWeekAdherence(
        */
       if (planned.adaptation?.when === "after" && actualKm > 0) status = "adapted";
     }
+
+    /*
+     * O dia de hoje ainda não acabou — para qualquer esporte (dívida A12).
+     *
+     * Esta regra existia só no ramo da corrida, então uma quinta de musculação
+     * aparecia "Perdido" às oito da manhã de quinta, com a academia marcada
+     * para as oito da noite. O erro custava caro duas vezes: derrubava a
+     * adesão da semana corrente e, desde 20/09, a IA central passou a repetir
+     * esse número em voz alta.
+     */
+    if (status === "missed" && date === today) status = "upcoming";
 
     days.push({
       day: dayKey,
@@ -158,6 +166,12 @@ export function computeWeekAdherence(
 /**
  * Build adherence for the current week + up to `weeksBack` previous weeks
  * from raw coach_reports rows.
+ *
+ * Semanas que ainda não começaram ficam de fora (dívida A11). O plano da
+ * próxima semana costuma ser gerado no domingo, e a lista ordenada por data
+ * entregava **ele** como "esta semana": sete dias "a fazer", adesão nula, e o
+ * topo da página falando de outra semana. Não existe aderir a um plano que
+ * ainda não começou — e agora a IA central também lê daqui.
  */
 export function computeAdherenceHistory(
   weeklyReports: Array<{ period_start: string | null; full_report: string | null }>,
@@ -166,9 +180,10 @@ export function computeAdherenceHistory(
   weeksBack = 4,
 ): WeekAdherence[] {
   const result: WeekAdherence[] = [];
+  const today = todayStr();
 
   const sorted = [...weeklyReports]
-    .filter(r => r.period_start && r.full_report)
+    .filter(r => r.period_start && r.full_report && r.period_start <= today)
     .sort((a, b) => (b.period_start! > a.period_start! ? 1 : -1));
 
   for (const report of sorted.slice(0, weeksBack + 1)) {

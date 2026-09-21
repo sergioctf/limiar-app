@@ -7,7 +7,7 @@
  *   4. Sharp week-over-week volume jump (violates the ~10% rule)
  */
 import type { Run, WellnessData } from "@/types";
-import { computeTrainingLoad, computeRunStreak, weeklyVolumeProgress } from "./training-load";
+import { computeTrainingLoad, computeTrainingStreak, weeklyVolumeProgress, type LoadActivity } from "./training-load";
 
 /** Average a numeric field over wellness rows whose date is within [fromDaysAgo, toDaysAgo). */
 function avgWindow(rows: WellnessData[], field: "hrv_ms" | "resting_hr" | "sleep_seconds", fromDaysAgo: number, toDaysAgo: number): number | null {
@@ -45,6 +45,15 @@ export function detectOvertraining(
   lthr?: number | null,
   thresholdPaceSecKm?: number | null,
   wellness?: WellnessData[] | null,
+  /**
+   * Academia, pedal, natação — tudo que também cansa.
+   *
+   * Saúde e a recuperação do dia já somavam isto na carga desde 16/09; este
+   * alerta, não. O mesmo app mostrava dois TSB para o mesmo dia, e o aviso que
+   * existe justamente para quem está fazendo demais era cego para metade do
+   * que essa pessoa faz.
+   */
+  activities?: LoadActivity[] | null,
 ): OvertrainingAssessment {
   const empty: OvertrainingAssessment = {
     level: "ok", tsb: 0, acwr: 0, signals: [], recommendation: "Carga sob controle.",
@@ -53,7 +62,9 @@ export function detectOvertraining(
   const hasWellness = !!wellness && wellness.length >= 4;
   if ((!runs || runs.length < 5) && !hasWellness) return empty;
 
-  const load = (runs && runs.length >= 5) ? computeTrainingLoad(runs, lthr, thresholdPaceSecKm, 90) : [];
+  const load = (runs && runs.length >= 5)
+    ? computeTrainingLoad(runs, lthr, thresholdPaceSecKm, 90, activities ?? [])
+    : [];
   const latest = load.length > 0 ? load[load.length - 1] : null;
   const tsb = latest ? latest.tsb : 0;
   const acwr = latest && latest.ctl > 0 ? Math.round((latest.atl / latest.ctl) * 100) / 100 : 0;
@@ -94,20 +105,26 @@ export function detectOvertraining(
     });
   }
 
-  // ── 3. Run streak without rest ────────────────────────────────────────────
-  const streak = computeRunStreak(runs);
+  /*
+   * ── 3. Dias seguidos sem descanso ────────────────────────────────────────
+   *
+   * Qualquer treino conta, não só corrida. Quem corre em um dia e puxa ferro
+   * no outro passou doze dias sem descansar — e o sinal, que é sobre descanso,
+   * não via nenhum deles.
+   */
+  const streak = computeTrainingStreak(runs, activities ?? []);
   if (streak >= 14) {
     signals.push({
       id: "streak",
       label: "Muitos dias sem descanso",
-      detail: `${streak} dias seguidos correndo. Um dia de descanso ajuda a consolidar os ganhos.`,
+      detail: `${streak} dias seguidos treinando. Um dia de descanso ajuda a consolidar os ganhos.`,
       severity: "high",
     });
   } else if (streak >= 10) {
     signals.push({
       id: "streak",
       label: "Sequência longa",
-      detail: `${streak} dias seguidos. Considere um dia leve ou de descanso em breve.`,
+      detail: `${streak} dias seguidos treinando. Considere um dia leve ou de descanso em breve.`,
       severity: "caution",
     });
   }

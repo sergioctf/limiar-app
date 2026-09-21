@@ -231,6 +231,35 @@ export function computeRunStreak(runs: Run[]): number {
 }
 
 /**
+ * Dias seguidos treinando — qualquer esporte.
+ *
+ * `computeRunStreak` conta corrida, e é o que a Home mostra como "sequência".
+ * Para o alerta de sobrecarga a pergunta é outra: há quantos dias este corpo
+ * não descansa? Quem corre em um dia e vai para a academia no outro está há
+ * duas semanas sem folga, e o sinal que existe para falar de descanso não via
+ * nenhum desses dias.
+ */
+export function computeTrainingStreak(
+  runs: Run[],
+  activities: Array<{ date: string }> = [],
+): number {
+  const days = new Set<string>([...runs.map(r => r.date), ...activities.map(a => a.date)]);
+  if (days.size === 0) return 0;
+
+  const cursor = new Date();
+  cursor.setHours(0, 0, 0, 0);
+  // Sem treino hoje, a sequência é a que terminou ontem — o dia ainda corre.
+  if (!days.has(localDateStr(cursor))) cursor.setDate(cursor.getDate() - 1);
+
+  let streak = 0;
+  while (days.has(localDateStr(cursor))) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
+/**
  * Sequência em **semanas**: semanas seguidas com pelo menos uma corrida.
  *
  * A sequência em dias media a coisa errada para este atleta (Sérgio, 20/09).

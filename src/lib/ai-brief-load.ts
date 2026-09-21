@@ -60,9 +60,11 @@ export async function loadAthleteBrief(db: Db, admin: Db, userId: string, now: D
       .select("id, date, name, type, distance_km, duration_seconds, moving_time_seconds, elapsed_time_seconds, avg_hr, avg_pace_seconds_per_km, calories")
       .eq("user_id", userId).is("deleted_at", null).gte("date", athleteDaysAgoStr(180, now))
       .order("date", { ascending: false }) as unknown as PromiseLike<{ data: Run[] | null }>),
-    safe<{ id: string; date: string; name: string | null; sport_type: string; duration_seconds: number | null; distance_m: number | null; calories: number | null }>(
-      db.from("activities").select("id, date, name, sport_type, duration_seconds, distance_m, calories")
-        .eq("user_id", userId).is("deleted_at", null).gte("date", athleteDaysAgoStr(120, now)).order("date")),
+    // `avg_hr` entra porque a carga usa a FC quando ela existe (`activityTSS`);
+    // sem ela o mesmo treino de academia pesaria diferente aqui e em Saúde.
+    safe<{ id: string; date: string; name: string | null; sport_type: string; duration_seconds: number | null; distance_m: number | null; calories: number | null; avg_hr: number | null }>(
+      db.from("activities").select("id, date, name, sport_type, duration_seconds, distance_m, calories, avg_hr")
+        .eq("user_id", userId).is("deleted_at", null).gte("date", athleteDaysAgoStr(180, now)).order("date")),
     safe<{ period_start: string | null; full_report: string | null }>(
       admin.from("coach_reports").select("period_start, full_report")
         .eq("user_id", userId).eq("period_type", "week").gte("period_start", athleteDaysAgoStr(150, now))),
@@ -156,6 +158,8 @@ export async function loadAthleteBrief(db: Db, admin: Db, userId: string, now: D
     metrics?.lthr ?? null,
     metrics?.paces.find(p => p.name === "threshold")?.pace_min_sec ?? null,
     recoveryInputs?.rows ?? [],
+    // Academia, pedal e natação também cansam — e a IA repete este número.
+    activities,
   );
 
   const name = profile?.name ?? null;

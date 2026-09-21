@@ -50,7 +50,15 @@ export async function loadRecoveryInputs(db: Db, userId: string, now: Date = new
     // Sixty days: thirty on screen, and thirty before them to judge the first against.
     db.from("wellness_data").select("*").eq("user_id", userId)
       .gte("date", addDays(today, -60)).order("date", { ascending: false }),
-    db.from("runs").select("date, distance_km, duration_seconds, avg_pace_seconds_per_km, avg_hr")
+    /*
+     * `moving_time_seconds` não é detalhe: `estimateTSS` mede a carga pelo
+     * tempo em movimento, porque a FC média e o pace médio do Strava são
+     * calculados sobre ele. Sem esta coluna a função caía no tempo total, e a
+     * carga de Saúde saía inflada por cada semáforo — misturando dois
+     * relógios no mesmo número. Era por isso que o TSB do alerta de sobrecarga
+     * e o da Saúde não batiam (visto em 21/09: −5,1 contra −3,7).
+     */
+    db.from("runs").select("date, distance_km, duration_seconds, moving_time_seconds, elapsed_time_seconds, avg_pace_seconds_per_km, avg_hr")
       .eq("user_id", userId).gte("date", addDays(today, -180)).is("deleted_at", null),
     db.from("performance_tests").select("distance_km, time_seconds, avg_hr, max_hr")
       .eq("user_id", userId).order("test_date", { ascending: false }).limit(1),
