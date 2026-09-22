@@ -115,6 +115,13 @@ export interface WeekContext {
    * kind of hard work is done, and how dense it is.
    */
   cycleWeek?: number;
+  /**
+   * A quarta semana do bloco, mais leve por desenho.
+   *
+   * Muda duas coisas: a semana pode ter menos corridas (em vez de corridas
+   * abaixo do mínimo do atleta), e o recado diz que ela é de recuperação.
+   */
+  isRecovery?: boolean;
   /** 1-based block number, for progression that spans blocks. */
   cycleNumber?: number;
   /**
@@ -193,7 +200,16 @@ export function buildEasyRun(
  * Interval session (I pace). Reps of 3–5 min with jog recovery of similar
  * duration; total quality volume capped at 8% of the week (and 10 km).
  */
-export function buildIntervalRun(ctx: WeekContext): { day: Partial<WeeklyPlanDay>; structure: StructuredWorkout } {
+export function buildIntervalRun(
+  ctx: WeekContext,
+  /**
+   * Quilômetros que a rodagem recusou (ver `distributeWeeklyVolume`).
+   *
+   * Entram como aquecimento e desaquecimento, que é onde volume fácil cabe num
+   * dia de tiro sem mudar o estímulo: as séries continuam as mesmas.
+   */
+  extraKm = 0,
+): { day: Partial<WeeklyPlanDay>; structure: StructuredWorkout } {
   const p = paceLookup(ctx.paces);
   const hrI = hrFor("I", ctx.lthr);
   const hrE = hrFor("E", ctx.lthr);
@@ -217,8 +233,8 @@ export function buildIntervalRun(ctx: WeekContext): { day: Partial<WeeklyPlanDay
   const dense  = kind === "intervals_dense";
   const easyWeek = kind === "strides";
 
-  const warmup = Math.max(1.5, round05(ctx.weeklyKm * 0.06));
-  const cool   = Math.max(1, round05(ctx.weeklyKm * 0.04));
+  const warmup = Math.max(1.5, round05(ctx.weeklyKm * 0.06)) + round05(extraKm * 0.6);
+  const cool   = Math.max(1, round05(ctx.weeklyKm * 0.04)) + round05(extraKm * 0.4);
 
   let blocks: WorkoutBlock[];
   let label: string;
@@ -754,7 +770,15 @@ function pickSpread<T>(list: T[], count: number): T[] {
  * result is that fewer running days push the long run's share up (which is what
  * every low-frequency plan does in practice) instead of silently shrinking the
  * week.
+ *
+ * Com uma corrida leve só, porém, "o que sobra" sobrava tudo nela: a semana de
+ * 21/09 do Sérgio deu rodagem de 9,5 km e longão de 11,5, um dia depois de um
+ * longão de 10,5. A rodagem tinha virado a válvula de escape do volume. Agora
+ * ela tem teto — 70% do longão — e o excedente volta como `surplusKm`, para o
+ * dia de tiro absorver no aquecimento e no desaquecimento. O total da semana
+ * continua fechando; só muda quem carrega o quilômetro.
  */
+const EASY_SHARE_OF_LONG = 0.7;
 export function distributeWeeklyVolume(
   weeklyKm: number,
   easyDays: number,
@@ -764,8 +788,8 @@ export function distributeWeeklyVolume(
   /** Longest run completed in the past year, if any. */
   provenLongRunKm = 0,
   /** The athlete's own floors: what they consider a run at all, and a long run. */
-  floors: { minRunKm?: number | null; minLongRunKm?: number | null } = {},
-): { longKm: number; easyKm: number } {
+  floors: { minRunKm?: number | null; minLongRunKm?: number | null; hasQualityDay?: boolean } = {},
+): { longKm: number; easyKm: number; surplusKm: number } {
   const LONG_WEIGHT = 1.8;
 
   /**
@@ -785,7 +809,7 @@ export function distributeWeeklyVolume(
 
   // No easy days: the long run absorbs everything that isn't the quality work.
   if (easyDays <= 0) {
-    return { longKm: Math.max(5, remainder), easyKm: 0 };
+    return { longKm: Math.max(5, remainder), easyKm: 0, surplusKm: 0 };
   }
 
   const unit = remainder / (easyDays + LONG_WEIGHT);
@@ -841,10 +865,53 @@ export function distributeWeeklyVolume(
     easyKm = (remainder - longKm) / easyDays;
   }
 
+  const cappedEasy = round05(Math.max(1, Math.min(easyKm, remainder / easyDays)));
+
+  /*
+   * A rodagem não passa de 70% do longão — e o que ela recusa vai para o dia de
+   * tiro, não para o ralo. Sem dia de tiro na semana não há quem absorva: aí
+   * uma rodagem longa é melhor do que a semana perder quilômetros em silêncio.
+   */
+  const hasQuality = floors.hasQualityDay ?? qualityKm > 0;
+  const roof = round05(round05(longKm) * EASY_SHARE_OF_LONG);
+  const finalEasy = hasQuality && cappedEasy > roof && roof >= (floors.minRunKm ?? 5)
+    ? roof
+    : cappedEasy;
+
   return {
     longKm: round05(longKm),
-    easyKm: round05(Math.max(1, Math.min(easyKm, remainder / easyDays))),
+    easyKm: finalEasy,
+    surplusKm: Math.max(0, Math.round((cappedEasy - finalEasy) * easyDays * 10) / 10),
   };
+}
+
+/**
+ * Os dias de corrida que o volume da semana consegue pagar.
+ *
+ * A semana de recuperação de 28/09 do Sérgio tinha 14 km, longão com piso de
+ * 8 km e mínimo de 5 km por corrida: sobraram 3 km para cada uma das outras
+ * duas. Três corridas de 3 km não são três treinos — e ele tinha configurado
+ * 5 km como o que considera uma corrida.
+ *
+ * Então a semana tira uma corrida em vez de encurtar todas. Cai a do meio
+ * primeiro (na ordem leve → tiro → longão, é o tiro), porque recuperação corta
+ * intensidade antes de cortar distância, e o longão é o último a sair.
+ */
+export function runDaysForBudget(
+  runDays: WeeklyPlanDay["day"][],
+  input: { weeklyKm: number; longFloorKm: number; minRunKm: number; longRunDay?: WeeklyPlanDay["day"] | null },
+): WeeklyPlanDay["day"][] {
+  const days = [...runDays].sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b));
+  if (days.length <= 1) return days;
+
+  const longDay = input.longRunDay && days.includes(input.longRunDay) ? input.longRunDay : days[days.length - 1];
+  const others = Math.max(0, Math.floor((input.weeklyKm - input.longFloorKm) / Math.max(1, input.minRunKm)));
+  const affordable = Math.max(1, Math.min(days.length, others + 1));
+  if (affordable >= days.length) return days;
+
+  // Mantém as primeiras da semana e o longão: leve → longão é a forma que sobra.
+  const rest = days.filter(d => d !== longDay).slice(0, affordable - 1);
+  return days.filter(d => d === longDay || rest.includes(d));
 }
 
 /**
@@ -876,7 +943,21 @@ export function buildWeekPlan(
         : (prefs.strengthDays ?? []).filter(d => DAY_ORDER.includes(d)))
     : [];
 
-  const allocation = allocateRunSessions(runDays, {
+  /*
+   * Numa semana de recuperação, o volume pode não pagar o mínimo do atleta em
+   * todas as corridas — 14 km com longão de 8 deixava 3 km para cada uma das
+   * outras duas. Aí a semana tira uma corrida em vez de encurtar todas.
+   */
+  const affordableDays = ctx.isRecovery
+    ? runDaysForBudget(runDays, {
+      weeklyKm: ctx.weeklyKm,
+      longFloorKm: Math.max(5, ctx.minLongRunKm ?? 0),
+      minRunKm: ctx.minRunKm ?? 5,
+      longRunDay: prefs.longRunDay ?? null,
+    })
+    : runDays;
+
+  const allocation = allocateRunSessions(affordableDays, {
     longRunDay: prefs.longRunDay ?? null,
     qualityPerWeek: prefs.qualityPerWeek,
     lightDays: prefs.lightDays ?? [],
@@ -884,19 +965,24 @@ export function buildWeekPlan(
 
   // The quality session sets its own size (its caps are physiological), then
   // the rest of the week's volume is divided so the total lands on target.
-  const quality = buildIntervalRun(ctx);
+  let quality = buildIntervalRun(ctx);
   const easyDayCount = Array.from(allocation.values()).filter(k => k === "easy").length;
   // Two quality days means two quality sessions of volume to account for —
   // counting it once let the week overshoot its target by ~30%.
   const qualityDayCount = Array.from(allocation.values()).filter(k => k === "quality").length;
-  const { longKm, easyKm } = distributeWeeklyVolume(
+  const { longKm, easyKm, surplusKm } = distributeWeeklyVolume(
     ctx.weeklyKm,
     easyDayCount,
     qualityDayCount * (quality.day.distance_km ?? 0),
     allocation.size,
     ctx.provenLongRunKm ?? 0,
-    { minRunKm: ctx.minRunKm, minLongRunKm: ctx.minLongRunKm },
+    { minRunKm: ctx.minRunKm, minLongRunKm: ctx.minLongRunKm, hasQualityDay: qualityDayCount > 0 },
   );
+
+  // O que a rodagem recusou vira aquecimento e desaquecimento do dia de tiro.
+  if (surplusKm > 0.4 && qualityDayCount > 0) {
+    quality = buildIntervalRun(ctx, surplusKm / qualityDayCount);
+  }
 
   const easySession = buildEasyRun(ctx, easyKm);
   const long        = buildLongRun(ctx, longKm);
@@ -1273,6 +1359,65 @@ export function planWeeklyVolume(
 }
 
 /**
+ * Quanto a semana pode crescer sobre a anterior.
+ *
+ * A trava adota o que foi corrido ("você demonstrou isto") — e sem teto isso
+ * subiu a semana do Sérgio de 19 para 24,5 km de uma vez, +29%, puxado por uma
+ * troca de treino. A regra dos 10% existe para isso, mas 10% fixo é pouco para
+ * quem vem entregando tudo e é demais para quem está no limite. Então o teto
+ * varia com o desempenho, nos dois sentidos:
+ *
+ *   base 10%  +5% se entregou a semana anterior  +5% se são três seguidas
+ *             +5% com prova marcada              ≥20% em terreno já sustentado
+ *             teto absoluto 25%
+ *
+ * E o corpo tem voto. Carga aguda acima da faixa segura (ACWR > 1,3) ou forma
+ * muito negativa cortam o teto pela metade; risco de lesão (ACWR ≥ 1,5), forma
+ * no chão ou um pedido explícito de aliviar zeram — a semana segura onde está,
+ * sem encolher.
+ */
+export function growthCeiling(input: {
+  raceAhead?: boolean;
+  /** Semanas seguidas entregues (≥100% do plano), contando a última. */
+  deliveredStreak?: number;
+  /** A melhor média de quatro semanas que este atleta já sustentou. */
+  provenWeeklyKm?: number | null;
+  /** O volume que a trava quer adotar. */
+  targetKm?: number;
+  /** Razão aguda:crônica (ATL/CTL) de hoje, quando se sabe. */
+  acwr?: number | null;
+  /** Forma (TSB) de hoje, quando se sabe. */
+  tsb?: number | null;
+  /** O atleta pediu sessões mais leves, ou disse que a semana foi demais. */
+  easedOff?: boolean;
+}): number {
+  const acwr = input.acwr ?? null;
+  const tsb = input.tsb ?? null;
+
+  // Freio de mão: nada de crescer esta semana.
+  if (input.easedOff) return 0;
+  if (acwr != null && acwr >= 1.5) return 0;
+  if (tsb != null && tsb <= -25) return 0;
+
+  let ceiling = 0.10;
+  const streak = input.deliveredStreak ?? 0;
+  if (streak >= 1) ceiling += 0.05;
+  if (streak >= 3) ceiling += 0.05;
+  if (input.raceAhead) ceiling += 0.05;
+
+  // Terreno que este corpo já sustentou volta mais rápido do que foi construído.
+  const proven = input.provenWeeklyKm ?? 0;
+  const target = input.targetKm ?? 0;
+  if (proven > 0 && target > 0 && target <= proven) ceiling = Math.max(ceiling, 0.20);
+
+  ceiling = Math.min(ceiling, 0.25);
+
+  // Meio freio: a carga recente subiu rápido, ou a forma está negativa.
+  const straining = (acwr != null && acwr > 1.3) || (tsb != null && tsb <= -15);
+  return straining ? ceiling / 2 : ceiling;
+}
+
+/**
  * Weekly volume that never slides backwards while the athlete is training.
  *
  * `planWeeklyVolume` reads recent history, so a light week pulls the next week
@@ -1305,6 +1450,11 @@ export function volumeWithRatchet(
      * Growth is fine; shrinking is not.
      */
     alreadyPlannedThisWeekKm?: number | null;
+    /**
+     * Quanto a semana pode crescer sobre a anterior (fração). Ver `growthCeiling`.
+     * Ausente = sem teto, o comportamento antigo.
+     */
+    growthCeiling?: number | null;
   } = {},
 ): number {
   // A week already underway keeps at least what it promised.
@@ -1337,7 +1487,16 @@ export function volumeWithRatchet(
    * costs nothing and buys durability.
    */
   if (completion >= 1) {
-    return keepPromise(Math.round(Math.max(proposedKm, opts.raceAhead ? actual * 1.05 : actual)));
+    const earned = opts.raceAhead ? actual * 1.05 : actual;
+    /*
+     * O teto vive aqui: o atleta demonstrou `actual`, mas adotar tudo de uma
+     * vez foi o salto de 29% que o Sérgio viu. O piso continua sendo a semana
+     * anterior — entregar o plano nunca faz a próxima encolher.
+     */
+    const capped = opts.growthCeiling != null
+      ? Math.min(earned, previous * (1 + opts.growthCeiling))
+      : earned;
+    return keepPromise(Math.round(Math.max(proposedKm, Math.min(earned, Math.max(capped, previous)))));
   }
 
   // Ten per cent short is the week, done. No reason to retreat from it.

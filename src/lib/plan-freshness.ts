@@ -37,8 +37,17 @@ import type { StrengthPrefs } from "@/lib/strength-prefs";
  *   4 → session variety (repetitions, hills, fartlek, progressions) rotating by
  *       block; patient ramp when no race is dated; the 3 km test scheduled as a
  *       session rather than only pushed as a notification.
+ *   5 → a semana cresce com teto, tem forma e respeita o mínimo do atleta
+ *       (Sérgio, 21–22/09). Três coisas: a trava de volume adotava o que foi
+ *       corrido sem limite — uma troca de treino subiu a semana 19 → 24,5 km,
+ *       +29% — e agora tem teto variável conforme o desempenho
+ *       (`growthCeiling`); a rodagem era a válvula de escape do volume e saía
+ *       do tamanho do longão, e agora tem teto de 70% dele, com a sobra indo
+ *       para o aquecimento e o desaquecimento do dia de tiro; e a semana de
+ *       recuperação prescrevia corridas de 3 km para quem configurou 5 km como
+ *       mínimo — agora tira uma corrida em vez de encurtar todas.
  */
-export const PLAN_ENGINE_VERSION = 4;
+export const PLAN_ENGINE_VERSION = 5;
 
 /** One short hash per input, so a mismatch can say which input moved. */
 export interface PlanFingerprint {

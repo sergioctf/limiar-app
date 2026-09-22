@@ -51,3 +51,46 @@ Backup em `Limiar/tmp/backups/2026-09-21_semana-2809_e_notas.json` (as duas nota
 1. **Semana de recuperação sem corrida abaixo do mínimo.** Hoje: 3 + 3 + 8. Proposta: quando o volume da recuperação não paga o seu mínimo em todas as corridas, **tirar uma corrida** — 6 km de rodagem + 8 km de longão (14 km), sem tiro. Recuperação de verdade costuma cortar intensidade antes de cortar distância.
 2. **A rodagem não pode ser a válvula de escape.** Proposta: limitar a rodagem a ~70% do longão e mandar o excedente para aquecimento e desaquecimento do dia de tiro — o que dá ao tiro um formato mais completo (hoje ele tem 3,5 km no total).
 3. **Uma troca não deveria subir o piso da semana seguinte em 29%.** Proposta: a trava adota o que foi executado, mas **até +10%** sobre o planejado quando não há prova marcada — coerente com a política "com calma sem prova marcada".
+
+---
+
+## As três decisões, aplicadas (22/09) — motor 5
+
+Sérgio aprovou as três, com um ajuste na terceira: *"10% acho pouco também, pode ser um pouco mais ou variável dependendo do desempenho do atleta."*
+
+### 1. Teto de crescimento variável (`growthCeiling`)
+
+A trava continua adotando o que foi corrido — mas com teto, e o teto lê o atleta:
+
+| | |
+|---|---|
+| base, sem prova | **10%** |
+| entregou a semana anterior | **+5%** |
+| três semanas seguidas entregues | **+5%** |
+| prova marcada | **+5%** |
+| terreno já sustentado (abaixo da capacidade comprovada) | **no mínimo 20%** |
+| teto absoluto | **25%** |
+
+E o corpo tem voto, nos dois sentidos: ACWR acima de 1,3 ou forma abaixo de −15 **cortam o teto pela metade**; ACWR ≥ 1,5, forma ≤ −25 ou um pedido explícito de aliviar **zeram** — a semana segura onde está, sem encolher.
+
+O piso nunca desce: entregar o plano jamais faz a semana seguinte diminuir.
+
+**No caso real:** 19 planejados, 24,5 corridos, ACWR 1,31 → teto de 10% → **21 km**. Exatamente onde o próprio Sérgio chegou ajustando à mão no chat. Quando o motor e o atleta chegam no mesmo número por caminhos diferentes, a regra provavelmente está certa.
+
+### 2. A rodagem deixou de ser a válvula de escape
+
+Rodagem limitada a **70% do longão**. O que ela recusa não some: volta como `surplusKm` e vira aquecimento e desaquecimento do dia de tiro — volume fácil, no lugar onde cabe, sem mudar as séries. Sem dia de tiro na semana, a rodagem fica com a sobra (melhor do que a semana perder quilômetros em silêncio).
+
+Na semana de 24,5 km: antes **longão 11 / rodagem 10**; agora a rodagem cai para ~7,5 e o tiro ganha 2,5 km de aquecimento e desaquecimento.
+
+### 3. Recuperação não prescreve corrida abaixo do mínimo
+
+`runDaysForBudget`: se o volume não paga o mínimo do atleta em todas as corridas, a semana **tira uma corrida** em vez de encurtar todas. Cai a do meio primeiro — recuperação corta intensidade antes de distância — e o longão é o último a sair.
+
+**A semana de 28/09, regenerada:** era 3 + 3 + 8 em três corridas; virou **5,5 km na segunda + 8,5 km no sábado**, 14 km, quarta livre. Nenhuma corrida abaixo dos 5 km que ele configurou.
+
+### Um quarto achado, no caminho
+
+A trava do recado só olhava quilômetros. Na primeira regeneração o texto disse *"mantenha a sexta-feira livre"* — e sexta tem musculação. A IA agora recebe **a semana inteira, dia a dia**, e a regra ficou explícita: não inventar folga nem mudar o dia de uma sessão. O recado final: *"descanso na quarta-feira… longão de 8,5 km no sábado"* — o que o plano diz.
+
+**Backups:** `Limiar/tmp/backups/2026-09-22_semana-2809_antes-do-motor-novo.json`.

@@ -810,6 +810,8 @@ export async function generateCoachNote(input: {
   isRecovery: boolean;
   /** As corridas que o motor montou. São os únicos números que o recado pode citar. */
   sessions: Array<{ label: string; km: number }>;
+  /** A semana inteira, dia a dia — para o recado não inventar folga onde há treino. */
+  week: Array<{ dayPt: string; label: string; km: number | null }>;
 }): Promise<string | null> {
   const systemPrompt = `
 Você é o treinador do atleta. Escreva UMA mensagem curta (2-3 frases, português do Brasil)
@@ -821,12 +823,15 @@ REGRAS:
 3. Se a semana for de RECUPERAÇÃO, diga isso com todas as letras e explique para que serve.
 4. O PERFIL traz o histórico do atleta; não trate um pedido antigo sobre um dia específico como regra desta semana.
 5. Explique a INTENÇÃO da semana e dê um ponto de atenção prático. Nada de motivação genérica.
-6. Sem markdown, sem emojis, sem listas.
+6. NÃO diga que um dia deve ficar livre, nem mude o dia de uma sessão: a SEMANA MONTADA abaixo
+   já diz o que cada dia tem, e o atleta vai ler as duas coisas lado a lado.
+7. Sem markdown, sem emojis, sem listas.
 `.trim();
 
   const userPrompt = `
 FASE: ${PHASE_PT[input.phase] ?? input.phase}${input.isRecovery ? " — SEMANA DE RECUPERAÇÃO (quarta do bloco, mais leve de propósito)" : ""}
-SEMANA MONTADA: ${input.weeklyKm} km no total — ${input.sessions.map(s => `${s.label} ${s.km} km`).join(", ")}
+SEMANA MONTADA: ${input.weeklyKm} km no total
+${input.week.map(d => `  ${d.dayPt}: ${d.label}${d.km ? ` — ${d.km} km` : ""}`).join("\n")}
 ${input.previousPlannedKm != null ? `SEMANA ANTERIOR: ${input.previousPlannedKm} km planejados` : ""}
 ${input.vdot ? `VDOT: ${input.vdot.toFixed(1)}` : "Sem teste recente"}
 ${input.nextRace ? `PRÓXIMA PROVA: ${input.nextRace.name} em ${input.nextRace.date}` : "Sem prova marcada"}

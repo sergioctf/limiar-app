@@ -11,10 +11,11 @@ import { testStatus, shouldScheduleTest } from "@/lib/test-status";
 import { normalizeSports } from "@/lib/sports";
 import { computeMetrics, paceToString, type TrainingPace } from "@/lib/performance";
 import {
-  buildWeekPlan, planWeeklyVolume, provenCapacity, volumeWithRatchet, normalizePrefs, isLegacyPlanShape, type WeekContext,
+  buildWeekPlan, growthCeiling, planWeeklyVolume, provenCapacity, volumeWithRatchet, normalizePrefs, isLegacyPlanShape, type WeekContext,
 } from "@/lib/workout-builder";
 import { normalizeStrengthPrefs, type StrengthPrefs } from "@/lib/strength-prefs";
 import { prefsForAgenda } from "@/lib/week-fit";
+import { computeTrainingLoad } from "@/lib/training-load";
 import { planFingerprint, planStaleness, type Staleness } from "@/lib/plan-freshness";
 import { readWeek, type ShortfallReason, type WeekReading } from "@/lib/week-reading";
 import { allowedWeekNumbers, fallbackWeekNote, noteRespectsPlan, type WeekNoteFacts } from "@/lib/week-note";
@@ -162,6 +163,52 @@ async function weekVolumes(
     .reduce((s, r) => s + Number(r.distance_km ?? 0), 0);
 
   return { plannedKm: Math.round(plannedKm), actualKm: Math.round(actualKm) };
+}
+
+/**
+ * Semanas seguidas em que o atleta entregou o que foi pedido.
+ *
+ * Alimenta o teto de crescimento (`growthCeiling`): quem vem cumprindo três
+ * semanas seguidas ganha mais margem do que quem entregou uma. Semana ainda em
+ * curso não conta nem quebra — ela não teve chance de ser nada.
+ */
+export function countDeliveredStreak(
+  weeks: Array<{ plannedKm: number; actualKm: number; finished: boolean }>,
+): number {
+  let streak = 0;
+  for (const w of weeks) {
+    if (!w.finished) continue;
+    if (w.plannedKm <= 0 || w.actualKm < w.plannedKm) break;
+    streak++;
+  }
+  return streak;
+}
+
+/** As últimas semanas fechadas, da mais recente para trás, numa consulta só. */
+async function deliveredWeeksBefore(
+  db: DbClient, userId: string, weekStart: string,
+  runs: Array<{ date: string; distance_km: number }>,
+  count = 6,
+): Promise<Array<{ plannedKm: number; actualKm: number; finished: boolean }>> {
+  const mondays = Array.from({ length: count }, (_, i) => mondayMinus(weekStart, i + 1));
+  const { data } = await db.from("coach_reports").select("period_start, full_report")
+    .eq("user_id", userId).eq("period_type", "week").in("period_start", mondays);
+
+  const today = localDateStr(new Date());
+  const byMonday = new Map((data ?? []).map((r: { period_start: string; full_report: string | null }) => [r.period_start, r.full_report]));
+
+  return mondays.map(monday => {
+    let plannedKm = 0;
+    try {
+      for (const d of (JSON.parse((byMonday.get(monday) as string) ?? "{}")?.days ?? [])) {
+        plannedKm += Number(d?.distance_km ?? 0);
+      }
+    } catch { plannedKm = 0; }
+    const end = sundayOf(monday);
+    const actualKm = runs.filter(r => r.date >= monday && r.date <= end)
+      .reduce((sum, r) => sum + Number(r.distance_km ?? 0), 0);
+    return { plannedKm, actualKm, finished: end < today };
+  });
 }
 
 async function previousWeekVolumes(
@@ -413,6 +460,8 @@ async function coachNoteFor(input: {
   nextRace: { name: string; date: string; distance_km: number } | null;
   vdot: number | null; athleteProfile: string | null;
   facts: WeekNoteFacts;
+  /** A semana inteira, dia a dia. */
+  week: Array<{ dayPt: string; label: string; km: number | null }>;
 }): Promise<string> {
   const note = await generateCoachNote({
     weeklyKm: input.facts.weeklyKm,
@@ -423,6 +472,7 @@ async function coachNoteFor(input: {
     previousPlannedKm: input.facts.previousPlannedKm,
     isRecovery: input.facts.isRecovery,
     sessions: input.facts.sessions,
+    week: input.week,
   }).catch(() => null);
 
   return note && noteRespectsPlan(note, allowedWeekNumbers(input.facts))
@@ -742,6 +792,42 @@ export async function ensureWeeklyPlan(
     ? await readPreviousWeek(db, userId, weekStart, runs, previous).catch(() => null)
     : null;
 
+  /*
+   * O voto do corpo no teto de crescimento.
+   *
+   * Mesmas entradas da Saúde e do alerta de sobrecarga (corridas + academia),
+   * para o app continuar com um TSB só. Falhar aqui custa o voto, nunca o plano.
+   */
+  const strain = await (async () => {
+    try {
+      const { data: acts } = await db.from("activities")
+        .select("date, sport_type, duration_seconds, avg_hr")
+        .eq("user_id", userId).is("deleted_at", null)
+        .gte("date", localDateStr(new Date(Date.now() - 180 * 86400_000)));
+      const threshold = trainingPaces?.find(p => p.name === "threshold")?.pace_min_sec ?? null;
+      const load = computeTrainingLoad(runs, lthr, threshold, 90, (acts ?? []) as never);
+      const last = load[load.length - 1];
+      if (!last) return { acwr: null, tsb: null };
+      return {
+        acwr: last.ctl > 0 ? Math.round((last.atl / last.ctl) * 100) / 100 : null,
+        tsb: last.tsb,
+      };
+    } catch { return { acwr: null, tsb: null }; }
+  })();
+
+  const streak = await deliveredWeeksBefore(db, userId, weekStart, runs)
+    .then(countDeliveredStreak).catch(() => 0);
+
+  const ceiling = growthCeiling({
+    raceAhead,
+    deliveredStreak: streak,
+    provenWeeklyKm: proven.weeklyKm,
+    targetKm: previous?.actualKm ?? afterMacro,
+    acwr: strain.acwr,
+    tsb: strain.tsb,
+    easedOff: reading?.noRamp ?? false,
+  });
+
   const ratchetedKm = volumeWithRatchet(afterMacro, {
     previousPlannedKm: previous?.plannedKm ?? null,
     previousActualKm:  reading?.creditedKm ?? previous?.actualKm ?? null,
@@ -750,6 +836,7 @@ export async function ensureWeeklyPlan(
     lighterByDesign:   phase === "taper" || phase === "race" || isRecovery,
     raceAhead,
     alreadyPlannedThisWeekKm,
+    growthCeiling: ceiling,
   });
 
   // The athlete asked for lighter sessions (or said the plan was too big):
@@ -773,6 +860,7 @@ export async function ensureWeeklyPlan(
     targetRaceKm: nextRace?.distance_km ?? null,
     cycleWeek:    cycle.week,
     cycleNumber:  cycle.cycle,
+    isRecovery,
     testDue,
     minRunKm:     prefs.minRunKm ?? 5,
     minLongRunKm: prefs.minLongRunKm ?? null,
@@ -795,6 +883,7 @@ export async function ensureWeeklyPlan(
   const runningDays = days.filter(d => (d.distance_km ?? 0) > 0);
   const aiMessage = await coachNoteFor({
     phase: ctx.phase, nextRace, vdot, athleteProfile,
+    week: days.map(d => ({ dayPt: d.dayPt, label: d.label, km: d.distance_km ?? null })),
     facts: {
       weeklyKm: Math.round(runningDays.reduce((s, d) => s + (d.distance_km ?? 0), 0) * 10) / 10,
       isRecovery,

@@ -1263,6 +1263,16 @@ Detalhes e **três decisões em aberto** em **`docs/semana-2809.md`**.
 - **Dados:** backup em `Limiar/tmp/backups/2026-09-21_semana-2809_e_notas.json`; as duas notas vazadas ganharam prazo (28/09 00:00); a semana de 28/09 foi regenerada (mesmos números, recado honesto).
 - **Em aberto, com o Sérgio:** recuperação com corrida abaixo do mínimo (proposta: tirar uma corrida), rodagem como válvula de escape do volume (proposta: teto de ~70% do longão), e a trava de volume subindo 29% por causa de uma troca (proposta: +10% no máximo sem prova).
 
+## 6.39 Motor 5: a semana cresce com teto, tem forma e respeita o mínimo ✅ (novo, 22/09)
+
+Três decisões do Sérgio, vindas da semana de 21/09 (rodagem de 9,5 km) e da de 28/09 (3 + 3 + 8). Detalhes em **`docs/semana-2809.md`**.
+
+- **Teto de crescimento variável** (`growthCeiling`, em `workout-builder.ts`). A trava adotava o que foi corrido sem limite — uma troca de treino subiu a semana de 19 para 24,5 km, +29%. Agora: base 10%, +5% por semana entregue, +5% com três seguidas, +5% com prova, **mínimo 20% em terreno já sustentado**, teto absoluto 25%. E o corpo vota: ACWR > 1,3 ou TSB ≤ −15 cortam pela metade; ACWR ≥ 1,5, TSB ≤ −25 ou pedido de alívio zeram. O piso nunca desce. **No caso real deu 21 km — onde o próprio Sérgio chegou ajustando à mão.**
+- **A rodagem deixou de ser a válvula de escape.** Teto de 70% do longão; a sobra (`surplusKm`) vira aquecimento e desaquecimento do dia de tiro. Sem dia de tiro, a rodagem fica com ela — melhor do que a semana perder quilômetros em silêncio.
+- **Recuperação não prescreve corrida abaixo do mínimo do atleta** (`runDaysForBudget`): tira uma corrida em vez de encurtar todas, a do meio primeiro. A semana de 28/09 virou 5,5 + 8,5 km em dois dias.
+- **O recado recebe a semana dia a dia.** A trava só olhava km, e o texto inventou "mantenha a sexta-feira livre" com musculação marcada na sexta.
+- **`PLAN_ENGINE_VERSION` 4 → 5**, então planos antigos aparecem como desatualizados e o atleta pode regenerar. A semana de 28/09 do Sérgio já foi regenerada (backups em `Limiar/tmp/backups/`).
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
