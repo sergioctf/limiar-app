@@ -92,3 +92,27 @@ export function athleteMondayStr(d: Date = new Date()): string {
 export function athleteDaysAgoStr(n: number, d: Date = new Date()): string {
   return athleteDateStr(new Date(d.getTime() - n * 86_400_000));
 }
+
+/**
+ * O nome curto do dia, em português.
+ *
+ * O calendário do plano mostrava `MO`, `TU`, `WE` — as duas primeiras letras da
+ * chave interna, que é inglesa. Ninguém escreve a semana assim em português, e
+ * "SA"/"SU" ainda colidem para quem lê rápido (sábado e domingo começam igual
+ * em inglês, não em português).
+ */
+export const DAY_SHORT_PT: Record<string, string> = {
+  Mon: "seg", Tue: "ter", Wed: "qua", Thu: "qui", Fri: "sex", Sat: "sáb", Sun: "dom",
+};
+
+const DAY_ORDER_KEYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/** O dia do mês em que aquele dia da semana cai, dada a segunda-feira. */
+export function dateOfWeekDay(weekStart: string, day: string): number | null {
+  const i = DAY_ORDER_KEYS.indexOf(day);
+  if (i < 0) return null;
+  const d = new Date(`${weekStart}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setDate(d.getDate() + i);
+  return d.getDate();
+}

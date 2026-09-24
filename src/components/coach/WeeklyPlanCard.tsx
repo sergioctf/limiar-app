@@ -10,11 +10,12 @@ import {
 import type { WeeklyPlanData, WeeklyPlanDay, PlanChatMessage } from "@/types";
 import { SPORTS, isRunSession } from "@/lib/sports";
 import { sessionTone } from "@/lib/session-colors";
+import { describeDay } from "@/lib/day-description";
 import { savePlanOffline, loadPlanOffline } from "@/lib/offline-store";
 import { isLegacyPlanShape } from "@/lib/workout-builder";
 import { WorkoutStepsView } from "@/components/coach/WorkoutStepsView";
 import { StrengthSessionView } from "@/components/coach/StrengthSessionView";
-import { localMondayStr, localNextMondayStr } from "@/lib/week";
+import { localMondayStr, localNextMondayStr, DAY_SHORT_PT, dateOfWeekDay } from "@/lib/week";
 import { MoveSessionControl } from "@/components/coach/MoveSessionControl";
 import { AdaptSessionControl } from "@/components/today/AdaptSession";
 import { ShoeHint } from "@/components/coach/ShoeHint";
@@ -554,8 +555,12 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
               {isToday && (
                 <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-brand-400" />
               )}
+              {/* Em português e com a data: "MO" e "TU" eram a chave interna, que é inglesa. */}
               <span className={`text-[10px] font-bold uppercase tracking-wide ${isToday ? "text-brand-400" : "text-surface-400"}`}>
-                {dayKey.slice(0, 2)}
+                {DAY_SHORT_PT[dayKey] ?? dayKey}
+              </span>
+              <span className={`text-[10px] leading-none ${isToday ? "text-brand-400/80" : "text-surface-500"}`}>
+                {dateOfWeekDay(activeWeek, dayKey) ?? ""}
               </span>
               {/* A day can hold two sessions; showing one icon hid the other. */}
               <span className="flex items-center gap-0.5 leading-none">
@@ -606,7 +611,8 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
               <span className="font-medium">{selectedDay.pace}</span>
             </p>
           )}
-          <p className="text-sm text-surface-300 leading-relaxed">{selectedDay.description}</p>
+          {/* Derivado do dia, nunca o texto cru: ver day-description.ts. */}
+          <p className="text-sm text-surface-300 leading-relaxed">{describeDay(selectedDay)}</p>
 
           <ShoeHint day={selectedDay} />
 

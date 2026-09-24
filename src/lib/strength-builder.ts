@@ -39,6 +39,15 @@ export interface StrengthExercisePrescription {
 
 export interface StrengthSession {
   exercises:  StrengthExercisePrescription[];
+  /**
+   * Os músculos deste dia.
+   *
+   * Existe para o texto do dia poder ser derivado da sessão em vez de gravado
+   * junto da corrida — ver `day-description.ts`. Enquanto era gravado, a frase
+   * viajava com a corrida quando ela mudava de dia e passava a nomear a
+   * musculação de outro dia.
+   */
+  muscles:    MuscleGroup[];
   cardio:     CardioAddon | null;
   /** Structured version of the cardio add-on, when there is one. */
   cardioSession?: CardioSession | null;
@@ -424,6 +433,9 @@ export function buildStrengthSession(ctx: StrengthContext): StrengthSession {
 
   return {
     exercises: prescriptions,
+    // Os músculos do dia viajam com a sessão: é deles que o texto do dia é
+    // derivado, em vez de ser gravado junto da corrida (ver day-description.ts).
+    muscles: ctx.day.muscles,
     cardio,
     cardioSession,
     estimatedMinutes: Math.round(usedMinutes + cardioMinutes),

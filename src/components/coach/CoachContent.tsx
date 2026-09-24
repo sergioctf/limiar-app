@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import {
   Brain, ChevronDown, ChevronUp, Award, AlertTriangle,
   TrendingUp, Calendar, CalendarDays, BookOpen, Flag, Layers,
-  Sparkles, Loader2, Activity, FlaskConical, User,
+  Activity, FlaskConical, User,
   Gauge, Dumbbell, Footprints, Target,
 } from "lucide-react";
 import { formatDate, secondsToPaceString } from "@/lib/utils";
@@ -84,9 +84,6 @@ export function CoachContent({ cycleRuns = [], cycleActivities = [], reports, cy
   });
 
   // Full AI analysis state
-  const [analyzing,      setAnalyzing]      = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
-  const [analysisError,  setAnalysisError]  = useState<string | null>(null);
 
   // Derived: latest test + metrics
   const latestTest = tests[0] ?? null;
@@ -133,23 +130,6 @@ export function CoachContent({ cycleRuns = [], cycleActivities = [], reports, cy
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
-  async function handleFullAnalysis() {
-    setAnalyzing(true);
-    setAnalysisError(null);
-    try {
-      const res  = await fetch("/api/coach/full-analysis", { method: "POST" });
-      const data = await res.json();
-      if (res.ok && data.analysis) {
-        setAnalysisResult(data.analysis);
-      } else {
-        setAnalysisError(data.error ?? "Erro ao gerar análise.");
-      }
-    } catch {
-      setAnalysisError("Falha na conexão. Tente novamente.");
-    } finally {
-      setAnalyzing(false);
-    }
-  }
 
   async function handleDeleteTest(id: string) {
     const res = await fetch(`/api/performance-tests/${id}`, { method: "DELETE" });
@@ -386,42 +366,7 @@ export function CoachContent({ cycleRuns = [], cycleActivities = [], reports, cy
                 </Disclosure>
               )}
 
-              <Disclosure
-                title="Análise completa por IA"
-                icon={<Brain className="w-4 h-4" />}
-                summary={analysisResult ? "Análise gerada — toque para reler" : "Usa testes, histórico completo e treinos"}
-              >
-                <div className="space-y-3">
-                  <button
-                    onClick={handleFullAnalysis}
-                    disabled={analyzing}
-                    className="btn-primary w-full"
-                  >
-                    {analyzing ? (
-                      <><Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1.5" />Analisando…</>
-                    ) : (
-                      <><Sparkles className="w-3.5 h-3.5 inline mr-1.5" />{analysisResult ? "Reanalisar" : "Analisar"}</>
-                    )}
-                  </button>
 
-                  {analysisError && (
-                    <Card tone="alert" density="tight">
-                      <p className="text-sm text-red-400">{analysisError}</p>
-                    </Card>
-                  )}
-
-                  {analysisResult ? (
-                    <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
-                      {analysisResult}
-                    </p>
-                  ) : !analyzing && (
-                    <p className="text-xs text-surface-500 leading-relaxed">
-                      Análise profunda com todos os seus dados: VDOT, zonas de FC,
-                      progressão e um plano de 8 semanas.
-                    </p>
-                  )}
-                </div>
-              </Disclosure>
 
               <Disclosure
                 title="Plano de longo prazo"

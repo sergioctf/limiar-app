@@ -1,3 +1,5 @@
+import { describeDay } from "@/lib/day-description";
+import { MUSCLE_LABEL } from "@/lib/exercises";
 import { describe, it, expect } from "vitest";
 import {
   allocateRunSessions, buildWeekPlan, expandToKmSplits, normalizePrefs,
@@ -513,7 +515,14 @@ describe("running and lifting on the same day", () => {
 
   it("tells the athlete the order to do them in", () => {
     const mon = dayOf(plan, "Mon");
-    expect(mon.description).toMatch(/depois/i);
+    /*
+     * A frase deixou de ser gravada na descrição e passou a ser derivada da
+     * sessão do dia (`day-description.ts`), porque gravada ela viajava com a
+     * corrida quando a corrida mudava de dia. A garantia é a mesma; mudou o
+     * lugar onde ela vale.
+     */
+    expect(describeDay(mon)).toMatch(/depois/i);
+    expect(describeDay(mon)).toMatch(new RegExp(MUSCLE_LABEL[mon.strength!.muscles[0]], "i"));
     expect(mon.strength!.notes.some(n => /corra primeiro/i.test(n))).toBe(true);
   });
 

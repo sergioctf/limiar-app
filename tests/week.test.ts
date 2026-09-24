@@ -1,3 +1,4 @@
+import { DAY_SHORT_PT, dateOfWeekDay } from "@/lib/week";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   localDateStr, localMondayStr, localNextMondayStr, localPreviousMondayStr,
@@ -108,5 +109,26 @@ describe("week navigation", () => {
   it("puts Sunday in the week that is ending", () => {
     at("2026-08-09T15:00:00Z");           // Sunday
     expect(localMondayStr()).toBe("2026-08-03");
+  });
+});
+
+describe("o calendário do plano fala português", () => {
+  it("dá o nome curto do dia", () => {
+    expect(DAY_SHORT_PT.Mon).toBe("seg");
+    expect(DAY_SHORT_PT.Sat).toBe("sáb");
+    expect(DAY_SHORT_PT.Sun).toBe("dom");
+  });
+
+  it("dá a data de cada dia a partir da segunda", () => {
+    expect(dateOfWeekDay("2026-09-21", "Mon")).toBe(21);
+    expect(dateOfWeekDay("2026-09-21", "Sun")).toBe(27);
+  });
+
+  it("atravessa a virada do mês", () => {
+    expect(dateOfWeekDay("2026-09-28", "Sat")).toBe(3);
+  });
+
+  it("não inventa data para uma chave que não existe", () => {
+    expect(dateOfWeekDay("2026-09-21", "Xyz")).toBeNull();
   });
 });

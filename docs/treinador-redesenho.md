@@ -135,3 +135,31 @@ Vai para **Configurações**, junto das outras preferências — memória é con
 - **Não reconstruir o que funciona:** adaptação, mover sessão, agenda, estrutura do treino, exportação para o relógio, registro da musculação e troca de exercícios ficam como estão. O problema nunca foi a função, foi a apresentação.
 - **Não criar uma aba "Evolução"** (sugerida na outra revisão): depois que adesão vai para a IA e ciclos/relatórios morrem, sobra só calibração — e uma aba com um assunto é uma aba a menos.
 - **Não mexer em Provas e Metas** nesta rodada.
+
+---
+
+## Fase 1 — Coerência ✅ (24/09)
+
+### 1. O texto do dia deixou de ser gravado
+
+A frase sobre a musculação do dia era **escrita dentro da descrição da corrida** quando o plano nascia. Quando a corrida mudava de dia — e há quatro caminhos para isso — a frase viajava junto: a quinta-feira do Sérgio dizia *"musculação: peito"* com agachamento, terra e búlgaro na sessão. "Peito" era a segunda-feira.
+
+Três dos quatro caminhos removiam a cauda ao mover; o quarto não. Corrigir o quarto só adiaria o problema.
+
+**A correção tira a frase do texto guardado.** A sessão passou a carregar os músculos que treina (`StrengthSession.muscles`), e a frase é derivada dela na hora de mostrar (`day-description.ts`). Uma origem só: se a sessão mudou de lugar, a frase muda junto, porque ela **é** a sessão lida em voz alta. Planos antigos têm a cauda removida na leitura.
+
+De quebra: num dia de musculação sem split configurado, o app dizia "musculação: peito" escolhido de uma **lista rotativa**. Agora diz "sugestão de foco: peito" — é o que de fato é.
+
+### 2. A análise completa por IA foi apagada
+
+O prompt pedia *"plano detalhado para as próximas 8 semanas com sessões específicas"*: uma prescrição escrita por modelo de linguagem, paralela ao plano oficial. É a mesma falha da dívida A2, e some pelo mesmo motivo. Rota `/api/coach/full-analysis` removida.
+
+### 3. Dias em português, com a data
+
+`MO · TU · WE` eram as duas primeiras letras da chave interna, que é inglesa. Agora **seg 22 · ter 23 · qua 24** (`DAY_SHORT_PT`, `dateOfWeekDay`).
+
+### 4. O recado da semana de 21/09 foi reescrito
+
+Dizia *"cerca de 20 km em corridas de 8 km ou mais"* num plano de 6 + 3,5 + 11,5. O plano está em andamento e **não foi tocado** — só o texto, que agora diz 21 km, 6×200 m e o longão de domingo. Backup em `tmp/backups/2026-09-24_recado-2109.json`.
+
+**Testes:** 1.522 passando (12 novos).

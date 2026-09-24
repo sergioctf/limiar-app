@@ -1075,21 +1075,23 @@ export function buildWeekPlan(
       const base = runKind === "easy" ? easySession : runKind === "quality" ? quality : long;
       const runDay = day(d, { ...base.day, sport: "corrida" }, base.structure);
 
+      /*
+       * A frase sobre a musculação do dia NÃO é gravada aqui.
+       *
+       * Ela é derivada da sessão na hora de mostrar (`day-description.ts`).
+       * Gravada, ela viajava com a corrida quando a corrida mudava de dia — e
+       * a quinta-feira do Sérgio dizia "musculação: peito" treinando perna.
+       */
       if (session) {
-        const muscles = dayPlan!.muscles.map(m => MUSCLE_LABEL[m]).join(", ");
-        return {
-          ...runDay,
-          description:
-            `${runDay.description} Depois (idealmente ~6 h depois), musculação: ${muscles.toLowerCase()}.`,
-          strength: session,
-        };
+        return { ...runDay, strength: session };
       }
       if (liftsToday) {
+        // Sem split configurado não há o que prometer: o foco é sugestão, e diz isso.
         const focus = STRENGTH_FOCUS[strengthIndex % STRENGTH_FOCUS.length];
         strengthIndex += 1;
         return {
           ...runDay,
-          description: `${runDay.description} Depois, musculação: ${focus}.`,
+          description: `${runDay.description} Depois, musculação — sugestão de foco: ${focus}.`,
         };
       }
       return runDay;
