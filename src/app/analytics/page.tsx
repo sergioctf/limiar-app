@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/AppShell";
 import { AnalyticsContent } from "@/components/charts/AnalyticsContent";
+import { computeAerobicEfficiency } from "@/lib/aerobic-efficiency";
 import type { Run } from "@/types";
 
 export default async function AnalyticsPage() {
@@ -15,7 +16,11 @@ export default async function AnalyticsPage() {
 
   return (
     <AppShell>
-      <AnalyticsContent runs={(runs ?? []) as Run[]} />
+      <AnalyticsContent
+        runs={(runs ?? []) as Run[]}
+        // Veio do Treinador em 24/09: é uma tendência, e tendência mora aqui.
+        efficiencyTrend={computeAerobicEfficiency((runs ?? []) as Run[])}
+      />
     </AppShell>
   );
 }

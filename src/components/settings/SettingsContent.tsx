@@ -7,7 +7,8 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { TutorialButton } from "@/components/settings/TutorialButton";
 import {
   Activity, CheckCircle2, XCircle, RefreshCw, Link2, Link2Off,
-  User, LogOut, Clock, Check, AlertCircle, Loader2, Bell, Smartphone, Edit2
+  User, LogOut, Clock, Check, AlertCircle, Loader2, Bell, Smartphone, Edit2,
+  Dumbbell, Footprints
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { PushNotificationButton } from "@/components/PushNotificationButton";
@@ -15,6 +16,11 @@ import { NotificationPrefsCard } from "@/components/settings/NotificationPrefsCa
 import { WearableConnections } from "@/components/settings/WearableConnections";
 import { InviteManagerCard } from "@/components/settings/InviteManagerCard";
 import { InstallPWAButton } from "@/components/InstallPWAButton";
+import { StrengthPrefsCard } from "@/components/coach/StrengthPrefsCard";
+import { SplitRebalanceCard } from "@/components/coach/SplitRebalanceCard";
+import { StrengthProgressCard } from "@/components/coach/StrengthProgressCard";
+import { ShoesCard } from "@/components/coach/ShoesCard";
+import { AthleteProfileCard } from "@/components/coach/AthleteProfileCard";
 import { EditProfileModal } from "@/components/profile/EditProfileModal";
 import type { SyncLog } from "@/types";
 
@@ -270,6 +276,44 @@ export function SettingsContent({
       )}
       <WearableConnections />
 
+      </Section>
+
+      {/*
+        A configuração que molda o plano — veio do Treinador em 24/09.
+
+        Musculação, tênis e a memória do treinador são configuração, não treino:
+        moram onde se configura o resto do app, e não no meio da semana.
+      */}
+      <Section title="Treino">
+        <div className="space-y-2">
+          <Disclosure
+            title="Musculação"
+            icon={<Dumbbell className="w-4 h-4" />}
+            summary="Dias, split e progressão de carga"
+          >
+            <div className="space-y-4">
+              <StrengthPrefsCard />
+              <SplitRebalanceCard />
+              <StrengthProgressCard />
+            </div>
+          </Disclosure>
+
+          <Disclosure
+            title="Meus tênis"
+            icon={<Footprints className="w-4 h-4" />}
+            summary="Quilometragem e hora de aposentar"
+          >
+            <ShoesCard />
+          </Disclosure>
+
+          <Disclosure
+            title="O que o treinador sabe sobre você"
+            icon={<User className="w-4 h-4" />}
+            summary="Lesões, preferências e disponibilidade que ele guardou"
+          >
+            <AthleteProfileCard />
+          </Disclosure>
+        </div>
       </Section>
 
       <Section title="Notificações">

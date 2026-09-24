@@ -163,3 +163,25 @@ O prompt pedia *"plano detalhado para as próximas 8 semanas com sessões espec�
 Dizia *"cerca de 20 km em corridas de 8 km ou mais"* num plano de 6 + 3,5 + 11,5. O plano está em andamento e **não foi tocado** — só o texto, que agora diz 21 km, 6×200 m e o longão de domingo. Backup em `tmp/backups/2026-09-24_recado-2109.json`.
 
 **Testes:** 1.522 passando (12 novos).
+
+## Fase 2 — Forma ✅ (24/09)
+
+**Uma camada de abas.** `Plano · Calibração · Provas · Metas`. A camada de dentro ("Zonas & Plano · Testes 3km · Perfil IA · Relatórios") acabou — era ela que colidia com a de fora.
+
+**A aba Plano tem cinco blocos**, nesta ordem: um aviso, a semana, o conselheiro, meus dias de treino, o plano de longo prazo. Eram dezenove.
+
+**Um aviso por vez.** Os seis avisos ficam numa pilha em ordem de urgência — sem teste › teste vencido › plano desatualizado › treino perdido › pergunta da semana › semana padrão — e só o primeiro que tiver o que dizer aparece. Cada um já devolvia `null` quando calado, então quem escolhe é o CSS: `[&>*:not(:first-child)]:hidden`. Sem estado, sem contexto, sem componente novo.
+
+**Calibração virou aba.** O teste de 3 km e tudo que ele calcula — VDOT, ritmos, zonas, previsões, evolução, histórico — estavam em duas telas diferentes, e metade atrás de dois níveis de "abrir".
+
+**Séries e exercícios atrás de um toque.** Abertos, empurravam a semana para fora da tela.
+
+**A faixa do bloco absorveu o card do ciclo.** Ela diz "Semana 2 de 4 do bloco" sempre, e "Semana de recuperação" quando for — um lugar só para a mesma informação.
+
+**Rótulos:** "Plano semanal IA" → **Sua semana** · "Regenerar" → **Refazer do zero**, com aviso do que se perde e visível só onde funciona (próxima semana ou sem plano) · "Mudar meus dias de treino" → **Meus dias de sempre**.
+
+**Mudaram de casa:** eficiência aeróbica → Gráficos · musculação, tênis e "o que o treinador sabe sobre você" → Configurações.
+
+**Morreram:** a aba Relatórios (com a lista de relatórios, os recordes duplicados e os ciclos datados em 2028), `PlanAdherenceCard` (a adesão é leitura da IA), `CycleSummaryCard` e `PersonalRecords`.
+
+**Fica anotado:** a tabela `training_cycles` não é mais lida por ninguém.

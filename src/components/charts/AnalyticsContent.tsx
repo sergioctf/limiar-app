@@ -9,13 +9,18 @@ import { PaceTrendChart } from "./PaceTrendChart";
 import { LongRunProgressChart } from "./LongRunProgressChart";
 import { HeartRateTrendChart } from "./HeartRateTrendChart";
 import { EvolutionChart } from "./EvolutionChart";
+import { AerobicEfficiencyCard } from "@/components/coach/AerobicEfficiencyCard";
+import { Section } from "@/components/ui/Surface";
 import { groupByWeek, groupByMonth, buildPaceTrend } from "@/lib/utils";
+import type { EfficiencyTrend } from "@/lib/aerobic-efficiency";
 import type { Run } from "@/types";
 
 type Tab = "volume" | "pace" | "heart" | "longrun" | "evolution";
 
 interface Props {
   runs: Run[];
+  /** Ritmo × frequência cardíaca ao longo do tempo — veio do Treinador (24/09). */
+  efficiencyTrend?: EfficiencyTrend | null;
 }
 
 /**
@@ -26,7 +31,7 @@ interface Props {
  * Amigos. Eles falam do histórico inteiro; esta tela fala de tendência, e
  * começava com meia tela de coisa que não era gráfico.
  */
-export function AnalyticsContent({ runs }: Props) {
+export function AnalyticsContent({ runs, efficiencyTrend = null }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("volume");
   const [showReport, setShowReport] = useState(false);
 
@@ -127,6 +132,13 @@ export function AnalyticsContent({ runs }: Props) {
           </div>
           <EvolutionChart runs={runs} height={200} />
         </div>
+      )}
+
+      {/* Ritmo × FC ao longo do tempo — veio do Treinador (24/09): é tendência. */}
+      {efficiencyTrend && (
+        <Section title="Eficiência aeróbica" subtitle="Mesmo ritmo com menos batimentos é ganho de forma">
+          <AerobicEfficiencyCard trend={efficiencyTrend} />
+        </Section>
       )}
     </div>
   );

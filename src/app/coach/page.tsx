@@ -4,7 +4,6 @@ import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { AppShell }     from "@/components/layout/AppShell";
 import { CoachContent } from "@/components/coach/CoachContent";
 import { computeAdherenceHistory } from "@/lib/plan-adherence";
-import { computeAerobicEfficiency } from "@/lib/aerobic-efficiency";
 import { loadActiveMacroPlan } from "@/lib/macro-plan";
 import type { PerformanceTest } from "@/types";
 
@@ -35,22 +34,17 @@ export default async function CoachPage() {
     }
   }
 
-  // Last 13 weeks of runs/activities — adherence uses ~5, efficiency uses 12
+  // Treze semanas de corridas e atividades — a adesão usa ~5.
   const windowStart = new Date();
   windowStart.setDate(windowStart.getDate() - 91);
   const sinceStr = localDateStr(windowStart);
 
-  const [{ data: reports }, { data: cycles }, tests, { data: recentRuns }, { data: recentActivities }] = await Promise.all([
+  const [{ data: reports }, tests, { data: recentRuns }, { data: recentActivities }] = await Promise.all([
     admin
       .from("coach_reports")
       .select("*")
       .eq("user_id", user.id)
       .order("report_date", { ascending: false }),
-    admin
-      .from("training_cycles")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("start_date"),
     fetchTests(),
     admin
       .from("runs")
@@ -81,8 +75,6 @@ export default async function CoachPage() {
     4,
   );
 
-  const efficiencyTrend = computeAerobicEfficiency(runRows);
-
   // Long-term macro plan + actual km per week (for progress display)
   const macroPlan = await loadActiveMacroPlan(admin, user.id).catch(() => null);
   const weeklyActualKm: Record<string, number> = {};
@@ -96,14 +88,9 @@ export default async function CoachPage() {
   return (
     <AppShell>
       <CoachContent
-
-        cycleRuns={runRows as unknown as import("@/types").Run[]}
-        cycleActivities={(recentActivities ?? []) as Array<{ date: string; sport_type: string }>}
         reports={reports ?? []}
-        cycles={cycles ?? []}
         tests={tests}
         adherenceHistory={adherenceHistory}
-        efficiencyTrend={efficiencyTrend}
         macroPlan={macroPlan}
         weeklyActualKm={weeklyActualKm}
       />

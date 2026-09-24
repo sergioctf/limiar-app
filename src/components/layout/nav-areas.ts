@@ -33,7 +33,18 @@ export const NAV_AREAS: NavArea[] = [
   { key: "hoje", href: "/", label: "Hoje", icon: Sun, paths: ["/"] },
   {
     key: "treinador", href: "/coach", label: "Treinador", icon: ClipboardList, paths: ["/coach", "/races", "/goals"], width: "max-w-3xl",
-    tabs: [{ href: "/coach", label: "Plano" }, { href: "/races", label: "Provas" }, { href: "/goals", label: "Metas" }],
+    /*
+     * Uma camada de abas só (24/09). Antes havia duas: esta, e outra dentro de
+     * /coach ("Zonas & Plano · Testes 3km · Perfil IA · Relatórios") — cujos
+     * nomes colidiam com os daqui. Calibração subiu para cá; o resto saiu do
+     * Treinador (ver docs/treinador-redesenho.md).
+     */
+    tabs: [
+      { href: "/coach", label: "Plano" },
+      { href: "/coach/calibracao", label: "Calibração" },
+      { href: "/races", label: "Provas" },
+      { href: "/goals", label: "Metas" },
+    ],
   },
   {
     key: "historico", href: "/runs", label: "Histórico", icon: History, paths: ["/runs", "/calendar", "/analytics", "/activities"], width: "max-w-4xl",
