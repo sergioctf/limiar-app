@@ -48,32 +48,48 @@ export default async function CoachPage() {
     fetchTests(),
     admin
       .from("runs")
-      .select("id, date, distance_km, duration_seconds, moving_time_seconds, elapsed_time_seconds, avg_pace_seconds_per_km, avg_hr, type")
+      .select("id, date, name, distance_km, duration_seconds, moving_time_seconds, elapsed_time_seconds, avg_pace_seconds_per_km, avg_hr, calories, type")
       .eq("user_id", user.id)
       .gte("date", sinceStr)
       .is("deleted_at", null),
+    // Duração, distância e nome entram porque a semana agora mostra o que foi
+    // **feito** ao lado do que foi previsto — ver `day-progress.ts`.
     admin
       .from("activities")
-      .select("date, sport_type")
+      .select("id, date, sport_type, name, duration_seconds, distance_m, calories")
       .eq("user_id", user.id)
       .gte("date", sinceStr)
       .is("deleted_at", null),
   ]);
 
   type RunRow = {
-    id: string; date: string; distance_km: number; duration_seconds: number;
-    avg_pace_seconds_per_km: number | null; avg_hr: number | null; type: string;
+    id: string; date: string; name: string | null; distance_km: number; duration_seconds: number;
+    moving_time_seconds: number | null; elapsed_time_seconds: number | null;
+    avg_pace_seconds_per_km: number | null; avg_hr: number | null; calories: number | null; type: string;
+  };
+  type ActivityRow = {
+    id: string; date: string; sport_type: string; name: string | null;
+    duration_seconds: number | null; distance_m: number | null; calories: number | null;
   };
   const runRows = (recentRuns ?? []) as RunRow[];
+  const activityRows = (recentActivities ?? []) as ActivityRow[];
 
   const weeklyReports = ((reports ?? []) as Array<{ period_type: string; period_start: string | null; full_report: string | null }>)
     .filter(r => r.period_type === "week");
-  const adherenceHistory = computeAdherenceHistory(
-    weeklyReports,
-    runRows,
-    (recentActivities ?? []) as Array<{ date: string; sport_type: string }>,
-    4,
-  );
+  const adherenceHistory = computeAdherenceHistory(weeklyReports, runRows, activityRows, 4);
+
+  /*
+    O que foi feito nesta semana e na passada.
+
+    A semana na tela precisa saber o que já aconteceu — "Registrado", "1 de 2",
+    "Sem registro" —, e a passada entra porque a segunda-feira de hoje ainda
+    olha para trás quando o atleta abre o Treinador no domingo à noite.
+  */
+  const weekWindowStart = new Date();
+  weekWindowStart.setDate(weekWindowStart.getDate() - ((weekWindowStart.getDay() + 6) % 7) - 7);
+  const weekSince = localDateStr(weekWindowStart);
+  const doneRuns = runRows.filter(r => r.date >= weekSince);
+  const doneActivities = activityRows.filter(a => a.date >= weekSince);
 
   // Long-term macro plan + actual km per week (for progress display)
   const macroPlan = await loadActiveMacroPlan(admin, user.id).catch(() => null);
@@ -93,6 +109,8 @@ export default async function CoachPage() {
         adherenceHistory={adherenceHistory}
         macroPlan={macroPlan}
         weeklyActualKm={weeklyActualKm}
+        doneRuns={doneRuns}
+        doneActivities={doneActivities}
       />
     </AppShell>
   );

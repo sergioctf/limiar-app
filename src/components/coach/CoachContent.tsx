@@ -38,6 +38,7 @@ import { DefaultWeekNotice } from "@/components/coach/DefaultWeekNotice";
 import { ProactiveAdjustBanner } from "@/components/coach/ProactiveAdjustBanner";
 import { MacroPlanCard } from "@/components/coach/MacroPlanCard";
 import type { WeekAdherence } from "@/lib/plan-adherence";
+import type { DayActivity, DayRun } from "@/lib/day-status";
 import type { CoachReport, MacroPlan, PerformanceTest, WeeklyPlanData } from "@/types";
 
 interface Props {
@@ -46,10 +47,14 @@ interface Props {
   adherenceHistory?: WeekAdherence[];
   macroPlan?: MacroPlan | null;
   weeklyActualKm?: Record<string, number>;
+  /** O que foi registrado nas últimas semanas — a semana mostra o feito ao lado do previsto. */
+  doneRuns?: DayRun[];
+  doneActivities?: DayActivity[];
 }
 
 export function CoachContent({
   reports, tests, adherenceHistory = [], macroPlan = null, weeklyActualKm = {},
+  doneRuns = [], doneActivities = [],
 }: Props) {
   const router = useRouter();
 
@@ -133,6 +138,8 @@ export function CoachContent({
         initialPlan={initialWeeklyPlan}
         initialReportId={latestWeekReport?.id ?? null}
         paces={pacesForPlan}
+        doneRuns={doneRuns}
+        doneActivities={doneActivities}
       />
 
       {/* Lê tudo que está acima e propõe; nunca edita sozinho. */}

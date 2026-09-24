@@ -400,3 +400,87 @@ nome do treino não é mais truncado — quebra em duas linhas.
 **Conferido:** `tsc` limpo, `next build` limpo, **1.536 testes** (4 novos para
 `weekSummaryLine`). Desenho conferido a 1.240 px e a 375 px, com um plano de
 mentira numa página temporária, depois apagada.
+
+## Fase 6 — O realizado, e a separação dos componentes ✅ (24/09)
+
+Duas coisas na mesma passada, porque são a mesma: é o card de sessão que ganha
+o estado, e era ele que precisava sair do arquivo de mil linhas.
+
+### A agenda passou a saber o que você fez
+
+Até aqui a semana mostrava o plano e nunca mudava depois do treino: sábado
+dizia "Longão · 12 km" igual antes e depois de você correr. Uma agenda que não
+sabe o que aconteceu está descrevendo um documento, não a sua semana.
+
+`src/lib/day-progress.ts` lê as sessões de `dayStatus` — **a mesma origem da
+Hoje e da adesão**, de propósito: já houve um tempo em que "treino feito" queria
+dizer três coisas diferentes em três telas, e a mesma terça aparecia concluída
+num card e pendente no outro. O que esta função acrescenta é a leitura do tempo:
+
+| Situação | Como aparece |
+|---|---|
+| Sessão futura, ou hoje ainda sem registro | (nada) |
+| Tudo que o plano pediu tem registro | ✓ **Registrado** |
+| Duas sessões, uma registrada | ◌ **1 de 2 registradas** |
+| Dia que já passou, nada registrado | ⊖ **Sem registro** |
+| Nada marcado, mas treinou | + **1 atividade registrada** |
+
+**Hoje sem registro não é "sem registro".** Dizer isso no sábado de manhã é
+acusar alguém de faltar a um treino que ainda vai acontecer. Só dias que já
+terminaram viram "sem registro" — é a regra que justifica a função existir em
+vez de a tela olhar `allDone`.
+
+**Adaptado é característica, não estado:** um treino pode estar adaptado e ainda
+previsto, ou adaptado e já realizado. Aparece como etiqueta no card.
+
+No card do dia, o realizado fica ao lado do previsto:
+
+```
+Rodagem leve
+6 km · 6:30–6:45/km
+Registrado  Corrida matinal  6,2 km  40 min
+Ver a atividade →
+```
+
+Sem julgamento: 11,7 km num longão de 12 não é falha, e a tela não diz que é.
+Quem avalia cumprimento é o motor, que olha objetivo e contexto — a existência
+de uma corrida não prova que os tiros foram feitos.
+
+E o que o plano não pediu aparece como **"Também registrado neste dia"**: a
+pelada de domingo, a caminhada, o pedal que entrou no lugar de nada. Registro,
+não erro — a semana é do atleta, o plano é uma proposta dentro dela.
+
+**Os dados** vêm do servidor (`/coach/page.tsx` já carregava 13 semanas para a
+adesão; agora as atividades trazem também duração, distância e nome) e descem
+como propriedade até a agenda. A janela é da segunda passada em diante.
+
+### A separação
+
+`WeeklyPlanCard.tsx` tinha ~980 linhas e seis responsabilidades. Agora tem 634
+e uma: **é o dono do plano** — busca, guarda, troca de semana, grava. Não
+desenha sessão nenhuma.
+
+```
+components/coach/week/
+  tone.tsx         cor, ícone e nome de cada tipo de treino
+  WeekHeader.tsx   título, período, ciclo, resumo, abas, refazer
+  WeekFocus.tsx    a frase da semana + "Entender o planejamento"
+  WeekAgenda.tsx   as sete linhas, com o estado de cada dia
+  DayPanel.tsx     o dia aberto: cards + o que foi registrado fora do plano
+  RunCard.tsx      a sessão principal e suas três ações
+  StrengthCard.tsx a musculação
+  DayState.tsx     o estado, sempre com texto e símbolo
+  WeekChat.tsx     a conversa que propõe e espera confirmação
+  WeekSkeleton.tsx carregando
+```
+
+A regra que a divisão não podia quebrar: **o plano continua tendo uma fonte
+só**. Todo o estado ficou no container; o que desce são dados e funções de
+retorno. Dividir arquivos não pode produzir duas cópias do mesmo treino, uma
+delas desatualizada.
+
+**Conferido:** `tsc` limpo, `next build` limpo, **1.546 testes** (10 novos em
+`tests/day-progress.test.ts`, incluindo o caso que importa: hoje sem registro
+é previsto, ontem sem registro é sem registro). Desenho conferido a 1.240 px e
+375 px com uma semana de mentira onde segunda tem corrida feita e musculação
+não, terça é descanso com um pedal extra, e quarta passou em branco.

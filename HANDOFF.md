@@ -22,7 +22,7 @@
 2. **O deploy é feito da máquina local**, com `npx vercel deploy --prod` na pasta. Não há CI, não há deploy a partir do GitHub. O que está em produção é o que estava no disco de Sérgio no momento do último deploy.
 3. **O banco não é reconstruível a partir do repositório.** As tabelas `activities`, `performance_tests` e `races` são usadas intensamente pelo código, mas **não existe DDL delas em nenhum `.sql`**. Foram criadas por rotas `/api/admin/*` que já foram apagadas. Além disso, as migrations 002–027 foram aplicadas **à mão** no SQL Editor do Supabase (não existe runner nem `DATABASE_URL`), e há infraestrutura que vive só no Supabase (job `pg_cron` e segredo no Vault — ver seção 18).
 4. **Possível vazamento de dados entre usuários (crítico, a confirmar no banco).** A migration `002_social.sql` cria a policy `"Authenticated can search profiles"` com `for select using (auth.role() = 'authenticated')`. RLS filtra linhas, não colunas: qualquer usuário logado pode, com a anon key, ler **todas as colunas de todos os perfis** — e-mail, data de nascimento, altura, sexo e o `wellness_token`, que autentica o endpoint público `/api/ingest/wellness`, permitindo gravar dados de saúde no nome de outra pessoa. Não verifiquei se a policy ainda existe em produção. Verifique com `select * from pg_policies where tablename = 'profiles';`. No mesmo nível de risco: **o webhook do Strava aceita eventos forjados** e um POST com `aspect_type: "delete"` apaga (soft delete) a corrida de qualquer usuário pelo ID da atividade (dívida A9).
-5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.536 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
+5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.546 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
 6. **Há usuários reais.** São 7 contas por convite (Sérgio e amigos). O plano da semana é lido e seguido por pessoas. Regra de ouro que custou caro: **nunca reescrever uma semana que já começou** (ver ADR sobre congelamento de semana).
 
 ---
@@ -1298,6 +1298,18 @@ Quinta fase do redesenho, depois de uma revisão da agenda: ela funcionou ("agor
 - **1.536 testes.** Conferido a 1.240 px e a 375 px com um plano de mentira numa página temporária.
 - **Anotado:** aviso de hidratação no modo dev — **anterior a esta fase** (confirmado com o código da fase 4 via `git stash`), vindo de selecionar o dia de hoje num efeito dentro do boundary de Suspense do dev. Não aparece no build de produção.
 
+## 6.42 A semana mostra o realizado, e o card virou dez arquivos ✅ (novo, 24/09)
+
+Sexta fase do redesenho — as duas coisas na mesma passada, porque são a mesma: é o card de sessão que ganha o estado, e era ele que precisava sair do arquivo de mil linhas. Detalhes em **`docs/treinador-redesenho.md`**.
+
+- **`src/lib/day-progress.ts` (novo)** lê as sessões de `dayStatus` — a mesma origem da Hoje e da adesão — e acrescenta a leitura do tempo: **Registrado** · **1 de 2 registradas** · **Sem registro** · **1 atividade registrada** (o que o plano não pediu). A regra que justifica a função existir: **hoje sem registro é previsto, não perdido**; só dias que já terminaram viram "sem registro".
+- **Adaptado é característica, não estado** — etiqueta no card, porque um treino pode estar adaptado e ainda previsto.
+- **No card do dia**, o registrado fica ao lado do previsto ("Longão 12 km" / "Registrado · Corrida · 11,7 km", com link para a atividade), sem julgamento: quem avalia cumprimento é o motor, que olha objetivo e contexto.
+- **Os dados:** `/coach/page.tsx` já carregava 13 semanas de corridas e atividades para a adesão; as atividades passaram a trazer duração, distância e nome, e a janela da semana desce por propriedade até a agenda.
+- **A separação:** `WeeklyPlanCard.tsx` foi de ~980 para 634 linhas e tem uma responsabilidade — **é o dono do plano**. O desenho mora em `components/coach/week/`: `tone`, `WeekHeader`, `WeekFocus`, `WeekAgenda`, `DayPanel`, `RunCard`, `StrengthCard`, `DayState`, `WeekChat`, `WeekSkeleton`.
+- **A regra da divisão:** o plano continua tendo uma fonte só. Todo o estado ficou no container; o que desce são dados e funções de retorno — dividir arquivos não pode criar duas cópias do mesmo treino.
+- **1.546 testes** (10 novos em `tests/day-progress.test.ts`).
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
@@ -1348,7 +1360,7 @@ Celular: Home · Corridas · Provas · Treinador · [Mais: Saúde, Calendário, 
   - Duas fontes de "hoje" (plano e recuperação) calculadas em lugares diferentes, mas pelo mesmo carregador.
   - Em rAF bloqueado (aba oculta), anéis ficam vazios (não é bug do app).
 
-### Treinador `/coach` — redesenhado em 4 fases (20–24/09)
+### Treinador `/coach` — redesenhado em 6 fases (20–24/09)
 - **Objetivo:** a semana, e só a semana. Quem quer calibrar vai para `/coach/calibracao`; quem quer configurar vai para Configurações.
 - **Sem abas.** `CoachContent.tsx` (~156 linhas) tem cinco blocos, nessa ordem:
   1. **um** aviso por vez (`[&>*:not(:first-child)]:hidden`): teste faltando → teste velho → plano desatualizado → ajuste proativo → pergunta da semana → dias padrão;
@@ -1356,11 +1368,19 @@ Celular: Home · Corridas · Provas · Treinador · [Mais: Saúde, Calendário, 
   3. `AdvisorCard` — o conselheiro;
   4. "Meus dias de treino" (disclosure) — `TrainingPrefsCard`, `SportSelector`;
   5. "Plano de longo prazo" (disclosure).
-- **`WeeklyPlanCard` (fase 4):** cabeçalho + abas de semana · avisos (offline, erro, leitura da semana anterior, faixa do bloco com o recado da IA) · **agenda de 7 linhas à esquerda** (`WeekAgenda`) e **o dia aberto à direita** (colado na rolagem no computador) · cards por sessão: treino (séries atrás de "Ver as séries"; *Mover · Adaptar · Perguntar* no pé), musculação (resumo em uma linha, "Ver os exercícios", *Mover*) e descanso · conversa da semana, que **propõe e espera "Aplicar"**.
+- **A semana** é `WeeklyPlanCard.tsx` (634 linhas: estado, busca, gravação — **o dono do plano**) mais `components/coach/week/`, que desenha:
+  - `WeekHeader` — "Sua semana", período, etiqueta do ciclo, **o tamanho da semana** ("3 corridas · 27 km · 2 sessões de musculação"), abas compactas e "Refazer do zero";
+  - `WeekFocus` — uma frase, com a explicação do bloco atrás de "Entender o planejamento";
+  - `WeekAgenda` — sete linhas com o nome do treino, a segunda sessão do dia e **o estado do realizado** (`DayState`);
+  - `DayPanel` — o dia aberto, com `RunCard` (previsto + registrado, estrutura atrás de um toque, *Mover · Adaptar · Perguntar*), `StrengthCard`, o card de descanso e "Também registrado neste dia";
+  - `WeekChat` — a conversa, que **propõe e espera "Aplicar"**;
+  - `WeekSkeleton` — carregando, que não se parece com "sem plano".
+  Entre eles: avisos de offline, erro e semana curta, e o `WeekFitControl` ("Reorganizar esta semana").
+- **Largura:** `max-w-3xl` → `lg:max-w-5xl` → `xl:max-w-[1120px]`; a agenda tem 330 px fixos e o dia fica com o resto. Abaixo de `lg`, uma coluna, e tocar num dia rola o painel para a tela.
 - **`/coach/calibracao`:** teste de 3 km, VDOT/VO₂máx, ritmos, zonas, zonas por esporte, previsões de prova, evolução do VDOT e histórico de testes.
 - **Problemas:**
-  - `WeeklyPlanCard.tsx` tem ~980 linhas e junta responsabilidades diferentes: carregar e trocar semanas, selecionar dias, mostrar sessões, mover/adaptar, conversar e confirmar propostas, e os estados de carregamento. A separação natural é cabeçalho · agenda · painel do dia · card de corrida · card de musculação · conversa — com uma fonte só para o plano, para não nascerem cópias desatualizadas do mesmo treino.
-  - A agenda não mostra o que já foi feito (o card não recebe corridas nem atividades).
+  - O realizado chega pelo servidor: registrar uma corrida e voltar ao Treinador sem recarregar a página mostra a semana como ela estava. A Hoje resolve isso por conta própria.
+  - `WeekFitControl` e `MoveSessionControl` ainda não moraram para `week/` — são de antes da separação e têm estilo próprio.
 
 ### Saúde `/health`
 Descrita em 6.10. **Problemas:** Whoop e ponte nativa aparecem como opções sem uso; energia depende do Atalho.
@@ -2539,7 +2559,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 | Dimensão | Estado | Nota |
 |---|---|---|
 | **Proposta de valor** | Clara: treinador de corrida (e força) que prescreve com ciência, se adapta ao corpo e explica o porquê | 🟢 |
-| **Motor de treino** | Maduro, determinístico, ~1.536 testes, corrigido contra casos reais | 🟢 |
+| **Motor de treino** | Maduro, determinístico, ~1.546 testes, corrigido contra casos reais | 🟢 |
 | **Saúde/recuperação** | Nova (14/09), funcional com Garmin via intervals.icu e sem relógio; score não validado contra desfecho | 🟡 |
 | **UX** | Rica e animada no dashboard e na Saúde; telas antigas inconsistentes; muita navegação (10 itens) | 🟡 |
 | **Usuários** | 7 contas por convite; push chega a 4; **sem métricas de uso** (nenhum analytics) | 🔴 para decidir produto |

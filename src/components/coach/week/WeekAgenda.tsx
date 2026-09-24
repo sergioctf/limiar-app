@@ -1,37 +1,40 @@
 "use client";
 
 /**
- * A semana como agenda — sete linhas, com o nome de cada sessão.
+ * A semana como agenda — sete linhas, com o nome de cada sessão e o que
+ * aconteceu nela.
  *
  * Antes eram sete caixinhas coloridas de 40 px, com o rótulo cortado em seis
  * letras ("Tiros c…") e um emoji. Para saber o que era quinta-feira, tocava-se
  * em quinta-feira. Uma semana que só se entende tocando dia a dia não é uma
  * semana: é um menu.
  *
- * Agora a linha diz o que o dia é — "Corrida leve + musculação" — e a cor volta
- * a ser o que cor deve ser: um marcador ao lado, não uma caixa grande
- * disputando atenção com as outras seis.
+ * E ela não mudava depois do treino: sábado dizia "Longão · 12 km" igual antes
+ * e depois de você correr. Agora cada linha termina com o estado — Registrado,
+ * 1 de 2, Sem registro — que vem de `dayProgress`, que por sua vez lê as mesmas
+ * sessões que a Hoje e a adesão leem.
  *
- * A lista é a mesma no computador e no celular. No computador ela fica à
- * esquerda e o dia aberto à direita, então a semana nunca sai da vista.
- *
- * **Hoje e selecionado são coisas diferentes** e não podem se parecer: hoje é
- * um fato (a etiqueta na data, laranja), selecionado é onde você está olhando
- * (o fundo e a borda). Abrir domingo não pode apagar que quinta é hoje.
+ * Três coisas que a linha diz e não podem se confundir:
+ *   **data** (quando) · **hoje** (etiqueta laranja) · **selecionado** (fundo e
+ *   borda). Abrir domingo não pode apagar que quinta é hoje.
  */
 import { sessionTone } from "@/lib/session-colors";
 import { agendaLine } from "@/lib/week-agenda";
+import type { DayProgress } from "@/lib/day-progress";
 import { DAY_SHORT_PT, dateOfWeekDay } from "@/lib/week";
+import { DayState } from "@/components/coach/week/DayState";
 import type { WeeklyPlanDay } from "@/types";
 
 export function WeekAgenda({
-  days, weekStart, todayKey, selectedDay, onSelect,
+  days, weekStart, todayKey, selectedDay, progressOf, onSelect,
 }: {
   days: WeeklyPlanDay[];
   weekStart: string;
   /** Null na próxima semana: nenhum dia dela é hoje. */
   todayKey: WeeklyPlanDay["day"] | null;
   selectedDay: WeeklyPlanDay | null;
+  /** O que aconteceu naquele dia — null quando a semana ainda nem começou. */
+  progressOf: (day: WeeklyPlanDay) => DayProgress | null;
   onSelect: (day: WeeklyPlanDay) => void;
 }) {
   return (
@@ -42,6 +45,8 @@ export function WeekAgenda({
         const isSelected = selectedDay?.day === day.day;
         const { main, extra, metric } = agendaLine(day);
         const isRest = day.type === "rest";
+        const progress = progressOf(day);
+        const faded = progress?.state === "missed";
 
         return (
           <li key={day.day}>
@@ -51,7 +56,7 @@ export function WeekAgenda({
               aria-current={isSelected ? "true" : undefined}
               className={[
                 // Altura mínima folgada, e mais alta ainda quando o dia tem
-                // duas sessões: a segunda linha não pode espremer a primeira.
+                // duas sessões ou um estado: nada espreme o nome do treino.
                 "flex w-full min-h-[56px] items-center gap-3 rounded-xl border px-3 py-2.5 text-left",
                 "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60",
                 isSelected
@@ -81,22 +86,26 @@ export function WeekAgenda({
 
               <span className="min-w-0 flex-1">
                 {/*
-                  O nome do treino não é cortado.
-
-                  "Tiros curtos 6×200 m" virava "Tiros curtos 6×20…", que é a
-                  informação mais importante da linha perdendo para a largura.
-                  Em duas linhas cabe; em três, aí sim reticências.
+                  O nome do treino não é cortado: "Tiros curtos 6×200 m" virava
+                  "Tiros curtos 6×20…", que é a informação mais importante da
+                  linha perdendo para a largura. Em duas linhas cabe.
                 */}
-                <span className={`block line-clamp-2 text-[15px] font-semibold leading-snug ${isRest ? "text-surface-400" : "text-surface-100"}`}>
+                <span className={[
+                  "block line-clamp-2 text-[15px] font-semibold leading-snug",
+                  isRest ? "text-surface-400" : faded ? "text-surface-400" : "text-surface-100",
+                ].join(" ")}>
                   {main}
                 </span>
                 {extra && (
                   <span className="mt-0.5 block truncate text-xs text-surface-400">+ {extra}</span>
                 )}
+                {progress && <DayState progress={progress} className="mt-1" />}
               </span>
 
               {metric && (
-                <span className="shrink-0 text-[13px] font-medium tabular-nums text-surface-300">{metric}</span>
+                <span className={`shrink-0 text-[13px] font-medium tabular-nums ${faded ? "text-surface-500" : "text-surface-300"}`}>
+                  {metric}
+                </span>
               )}
             </button>
           </li>
