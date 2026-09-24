@@ -1,22 +1,24 @@
 "use client";
 
 /**
- * A semana como agenda — sete linhas, com o nome de cada sessão e o que
- * aconteceu nela.
+ * A semana como agenda — uma linha por sessão, com o que aconteceu nela.
  *
  * Antes eram sete caixinhas coloridas de 40 px, com o rótulo cortado em seis
  * letras ("Tiros c…") e um emoji. Para saber o que era quinta-feira, tocava-se
  * em quinta-feira. Uma semana que só se entende tocando dia a dia não é uma
  * semana: é um menu.
  *
- * E ela não mudava depois do treino: sábado dizia "Longão · 12 km" igual antes
- * e depois de você correr. Agora cada linha termina com o estado — Registrado,
- * 1 de 2, Sem registro — que vem de `dayProgress`, que por sua vez lê as mesmas
- * sessões que a Hoje e a adesão leem.
+ * Depois, cada dia virou uma linha — mas a segunda sessão do dia era um rabicho
+ * cinza embaixo da primeira, sem duração. Agora **cada sessão tem a sua
+ * linha**, com o mesmo peso e a sua própria medida: a musculação de segunda
+ * vale o mesmo que a de quinta, que é o dia inteiro dela.
  *
- * Três coisas que a linha diz e não podem se confundir:
- *   **data** (quando) · **hoje** (etiqueta laranja) · **selecionado** (fundo e
- *   borda). Abrir domingo não pode apagar que quinta é hoje.
+ * E a linha não muda depois do treino — mudava, sim: o estado (`DayState`) vem
+ * de `dayProgress`, que lê as mesmas sessões que a Hoje e a adesão leem.
+ *
+ * Três coisas que a linha diz e não podem se confundir: **data** (quando),
+ * **hoje** (etiqueta laranja) e **selecionado** (fundo e borda). Abrir domingo
+ * não pode apagar que quinta é hoje.
  */
 import { sessionTone } from "@/lib/session-colors";
 import { agendaLine } from "@/lib/week-agenda";
@@ -40,11 +42,9 @@ export function WeekAgenda({
   return (
     <ul className="space-y-0.5">
       {days.map(day => {
-        const tone = sessionTone(day.type);
         const isToday = day.day === todayKey;
         const isSelected = selectedDay?.day === day.day;
-        const { main, extra, metric } = agendaLine(day);
-        const isRest = day.type === "rest";
+        const { sessions, rest } = agendaLine(day);
         const progress = progressOf(day);
         const faded = progress?.state === "missed";
 
@@ -55,19 +55,25 @@ export function WeekAgenda({
               onClick={() => onSelect(day)}
               aria-current={isSelected ? "true" : undefined}
               className={[
-                // Altura mínima folgada, e mais alta ainda quando o dia tem
-                // duas sessões ou um estado: nada espreme o nome do treino.
-                "flex w-full min-h-[56px] items-center gap-3 rounded-xl border px-3 py-2.5 text-left",
+                // O dia cresce com o que tem dentro: duas sessões ocupam duas
+                // linhas inteiras, não uma linha e um rabicho.
+                "flex w-full min-h-[56px] items-stretch gap-3 rounded-xl border px-3 py-2.5 text-left",
                 "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60",
                 isSelected
                   ? "border-brand-500/40 bg-surface-700/70"
                   : "border-transparent hover:bg-surface-700/40",
               ].join(" ")}
             >
-              {/* A cor é um marcador do tipo de treino, não uma caixa. */}
-              <span className={`h-9 w-1 shrink-0 rounded-full ${isRest ? "bg-surface-700" : tone.dot}`} />
+              {/* Uma barra por sessão: a cor diz o tipo de cada treino do dia. */}
+              <span className="flex shrink-0 flex-col justify-center gap-1">
+                {rest
+                  ? <span className="h-9 w-1 rounded-full bg-surface-700" />
+                  : sessions.map((s, i) => (
+                    <span key={i} className={`w-1 flex-1 min-h-[16px] rounded-full ${sessionTone(s.type).dot}`} />
+                  ))}
+              </span>
 
-              <span className="w-[4.25rem] shrink-0">
+              <span className="w-[4.25rem] shrink-0 pt-0.5">
                 <span className={`block text-[13px] font-bold uppercase tracking-wide ${isToday ? "text-brand-400" : "text-surface-300"}`}>
                   {DAY_SHORT_PT[day.day] ?? day.day}
                 </span>
@@ -85,28 +91,28 @@ export function WeekAgenda({
               </span>
 
               <span className="min-w-0 flex-1">
-                {/*
-                  O nome do treino não é cortado: "Tiros curtos 6×200 m" virava
-                  "Tiros curtos 6×20…", que é a informação mais importante da
-                  linha perdendo para a largura. Em duas linhas cabe.
-                */}
-                <span className={[
-                  "block line-clamp-2 text-[15px] font-semibold leading-snug",
-                  isRest ? "text-surface-400" : faded ? "text-surface-400" : "text-surface-100",
-                ].join(" ")}>
-                  {main}
-                </span>
-                {extra && (
-                  <span className="mt-0.5 block truncate text-xs text-surface-400">+ {extra}</span>
+                {rest ? (
+                  <span className="block text-[15px] font-semibold leading-snug text-surface-400">Descanso</span>
+                ) : (
+                  sessions.map((s, i) => (
+                    <span key={i} className={`flex items-baseline justify-between gap-2 ${i > 0 ? "mt-1" : ""}`}>
+                      <span className={`min-w-0 flex-1 truncate text-[15px] font-semibold leading-snug ${
+                        faded ? "text-surface-400" : "text-surface-100"
+                      }`}>
+                        {s.label}
+                      </span>
+                      {s.metric && (
+                        <span className={`shrink-0 text-[13px] font-medium tabular-nums ${
+                          faded ? "text-surface-500" : "text-surface-300"
+                        }`}>
+                          {s.metric}
+                        </span>
+                      )}
+                    </span>
+                  ))
                 )}
                 {progress && <DayState progress={progress} className="mt-1" />}
               </span>
-
-              {metric && (
-                <span className={`shrink-0 text-[13px] font-medium tabular-nums ${faded ? "text-surface-500" : "text-surface-300"}`}>
-                  {metric}
-                </span>
-              )}
             </button>
           </li>
         );

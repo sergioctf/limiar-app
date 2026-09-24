@@ -22,7 +22,7 @@
 2. **O deploy é feito da máquina local**, com `npx vercel deploy --prod` na pasta. Não há CI, não há deploy a partir do GitHub. O que está em produção é o que estava no disco de Sérgio no momento do último deploy.
 3. **O banco não é reconstruível a partir do repositório.** As tabelas `activities`, `performance_tests` e `races` são usadas intensamente pelo código, mas **não existe DDL delas em nenhum `.sql`**. Foram criadas por rotas `/api/admin/*` que já foram apagadas. Além disso, as migrations 002–027 foram aplicadas **à mão** no SQL Editor do Supabase (não existe runner nem `DATABASE_URL`), e há infraestrutura que vive só no Supabase (job `pg_cron` e segredo no Vault — ver seção 18).
 4. **Possível vazamento de dados entre usuários (crítico, a confirmar no banco).** A migration `002_social.sql` cria a policy `"Authenticated can search profiles"` com `for select using (auth.role() = 'authenticated')`. RLS filtra linhas, não colunas: qualquer usuário logado pode, com a anon key, ler **todas as colunas de todos os perfis** — e-mail, data de nascimento, altura, sexo e o `wellness_token`, que autentica o endpoint público `/api/ingest/wellness`, permitindo gravar dados de saúde no nome de outra pessoa. Não verifiquei se a policy ainda existe em produção. Verifique com `select * from pg_policies where tablename = 'profiles';`. No mesmo nível de risco: **o webhook do Strava aceita eventos forjados** e um POST com `aspect_type: "delete"` apaga (soft delete) a corrida de qualquer usuário pelo ID da atividade (dívida A9).
-5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.546 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
+5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.560 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
 6. **Há usuários reais.** São 7 contas por convite (Sérgio e amigos). O plano da semana é lido e seguido por pessoas. Regra de ouro que custou caro: **nunca reescrever uma semana que já começou** (ver ADR sobre congelamento de semana).
 
 ---
@@ -1310,6 +1310,19 @@ Sexta fase do redesenho — as duas coisas na mesma passada, porque são a mesma
 - **A regra da divisão:** o plano continua tendo uma fonte só. Todo o estado ficou no container; o que desce são dados e funções de retorno — dividir arquivos não pode criar duas cópias do mesmo treino.
 - **1.546 testes** (10 novos em `tests/day-progress.test.ts`).
 
+## 6.43 Dez correções na semana, e a musculação ganhou adaptação ✅ (novo, 26/09)
+
+Lista direta do Sérgio depois de usar a agenda com a semana real. Detalhes em **`docs/treinador-redesenho.md`** (fase 7).
+
+- **Cada sessão é uma linha na agenda**, com barra de cor, nome e medida próprios. A musculação era um rabicho cinza ("+ musculação") sem duração quando dividia o dia com a corrida, e um treino de verdade quando estava sozinha.
+- **Tiro, limiar e HIIT aparecem pelo nome do tipo** na agenda ("Tiro"): "Tiros curtos 6×200 m" não cabe em 330 px. O nome inteiro está no card.
+- **Musculação é azul** em `session-colors.ts` — era cinza no mapa e roxa (cor do longão) no card, pintada à mão.
+- **"Mover de dia" e "Adaptar" viraram botões do mesmo tamanho.** `AdaptSessionControl` ganhou `compact`; na Hoje continua largo.
+- **A musculação aberta perdeu os textinhos:** cabeçalho repetido, notas do gerador, explicação do RIR e a dica por exercício. Ficou exercício, séries, RIR, descanso e registrar.
+- **A musculação ganhou "Adaptar"** — `src/lib/strength-adapt.ts` + `AdaptStrengthControl` + **`POST /api/strength/adapt`**: menos tempo (20/30/40/50 min, tirando acessórios antes de cortar séries e nunca o composto principal) ou mais leve hoje (−1 série, +1 RIR). **"Deixar assim para sempre"** grava `sessionMinutes` em `strength_prefs`, e vale só para o tempo.
+- **Tocar no dia aberto fecha o dia**, e no celular a página rola o mínimo (`block: "nearest"` + `scroll-mt-20`) em vez de levar o painel ao topo.
+- **1.560 testes** (13 novos em `tests/strength-adapt.test.ts`).
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
@@ -2559,7 +2572,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 | Dimensão | Estado | Nota |
 |---|---|---|
 | **Proposta de valor** | Clara: treinador de corrida (e força) que prescreve com ciência, se adapta ao corpo e explica o porquê | 🟢 |
-| **Motor de treino** | Maduro, determinístico, ~1.546 testes, corrigido contra casos reais | 🟢 |
+| **Motor de treino** | Maduro, determinístico, ~1.560 testes, corrigido contra casos reais | 🟢 |
 | **Saúde/recuperação** | Nova (14/09), funcional com Garmin via intervals.icu e sem relógio; score não validado contra desfecho | 🟡 |
 | **UX** | Rica e animada no dashboard e na Saúde; telas antigas inconsistentes; muita navegação (10 itens) | 🟡 |
 | **Usuários** | 7 contas por convite; push chega a 4; **sem métricas de uso** (nenhum analytics) | 🔴 para decidir produto |

@@ -32,7 +32,15 @@ export const SESSION_TONES: Record<string, SessionTone> = {
   long_run:  { bg: "bg-purple-500/10",  border: "border-purple-500/30",  text: "text-purple-400",  dot: "bg-purple-500",  label: "Longão" },
   test:      { bg: "bg-pink-500/10",    border: "border-pink-500/30",    text: "text-pink-400",    dot: "bg-pink-500",    label: "Teste" },
   race:      { bg: "bg-brand-500/15",   border: "border-brand-500/40",   text: "text-brand-400",   dot: "bg-brand-500",   label: "Prova" },
-  strength:  { bg: "bg-surface-700/50", border: "border-surface-600/60", text: "text-surface-300", dot: "bg-surface-400", label: "Força" },
+  /*
+    Musculação é azul.
+
+    Era cinza, e no Treinador o card dela vinha pintado de roxo à mão — a mesma
+    cor do longão. Duas coisas muito diferentes com a mesma cor, na mesma tela,
+    é pior do que não ter cor nenhuma (Sérgio, 26/09). Azul não é usado por
+    nenhum tipo de corrida.
+  */
+  strength:  { bg: "bg-blue-500/10", border: "border-blue-500/30", text: "text-blue-300", dot: "bg-blue-400", label: "Musculação" },
   hiit:      { bg: "bg-orange-500/10",  border: "border-orange-500/30",  text: "text-orange-400",  dot: "bg-orange-500",  label: "HIIT" },
 };
 

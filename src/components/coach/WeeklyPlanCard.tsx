@@ -579,25 +579,35 @@ export function WeeklyPlanCard({
             progressOf={(d) => progressByDay[d.day] ?? null}
             onSelect={(d) => {
               /*
-                Tocar no dia que já está aberto não fecha nada. Fechava, e o
-                painel ao lado ficava vazio — um clique no lugar certo parecia
-                um erro.
+                Tocar no dia aberto fecha o dia (Sérgio, 26/09).
+
+                Ficou um tempo sem fechar, para o painel nunca aparecer vazio.
+                Mas quem quer ver a semana inteira precisa de uma saída, e
+                tocar de novo no que está aberto é onde a mão procura.
               */
-              if (selectedDay?.day === d.day) return;
+              if (selectedDay?.day === d.day) { setSelectedDay(null); return; }
               setSelectedDay(d);
               /*
-                No celular a lista e o dia são empilhados: tocar em sábado sem
-                isto deixa o treino abaixo da dobra, e parece que nada
-                aconteceu. No computador o dia já está ao lado.
+                No celular a lista e o dia são empilhados: sem rolar, o treino
+                nasce abaixo da dobra e parece que nada aconteceu. Rola só o
+                necessário para o painel aparecer — `scrollIntoView` levava o
+                topo dele ao topo da tela, o que no celular passava direto pelo
+                começo do treino. No computador o dia já está ao lado.
               */
               if (typeof window !== "undefined" && window.innerWidth < 1024) {
-                setTimeout(() => dayPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+                setTimeout(() => {
+                  // `block: "nearest"` rola o mínimo para o treino aparecer.
+                  // Com `"start"` a página descia até o topo do painel ficar no
+                  // topo da tela, e no celular isso passava do começo do treino
+                  // (Sérgio, 26/09). O respiro vem do `scroll-mt-20` no painel.
+                  dayPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                }, 60);
               }
             }}
           />
         </div>
 
-        <div ref={dayPanelRef}>
+        <div ref={dayPanelRef} className="scroll-mt-20">
           {/* No computador o dia acompanha a rolagem: a semana nunca sai da vista. */}
           <div className="lg:sticky lg:top-24">
             <DayPanel

@@ -124,7 +124,7 @@ export function RunCard({
         nome: mudar de dia, trocar por outro, perguntar. Antes estavam
         espalhadas em alturas diferentes conforme o dia.
       */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-surface-700/50 pt-2.5">
+      <div className="flex flex-wrap items-center gap-2 border-t border-surface-700/50 pt-2.5">
         {/* Só uma corrida pode ser movida como "a corrida". */}
         {isRunSession(session) && (
           <MoveSessionControl
@@ -135,7 +135,7 @@ export function RunCard({
             onMoved={onPlanChanged}
           />
         )}
-        {canAdapt && <AdaptSessionControl day={session} onChanged={onDayChanged} />}
+        {canAdapt && <AdaptSessionControl day={session} onChanged={onDayChanged} compact />}
         {/*
           A mesma conversa, com o assunto já posto. "Uma identidade, várias
           portas": o treinador é um só, e cada porta diz o que acontece ao
@@ -144,9 +144,9 @@ export function RunCard({
         <button
           type="button"
           onClick={() => onAsk(session)}
-          className="inline-flex min-h-[44px] items-center gap-1.5 text-xs text-surface-400 transition-colors hover:text-brand-300"
+          className="inline-flex min-h-[38px] items-center gap-1.5 px-1 text-xs text-surface-400 transition-colors hover:text-brand-300"
         >
-          <MessageCircle className="h-3.5 w-3.5" /> Perguntar sobre este treino
+          <MessageCircle className="h-3.5 w-3.5" /> Perguntar
         </button>
       </div>
     </div>

@@ -83,6 +83,7 @@ export function DayPanel({
           sharesDayWithRun={!!main}
           done={doneFor("musculacao")}
           onPlanChanged={onPlanChanged}
+          onAsk={onAsk}
         />
       )}
 

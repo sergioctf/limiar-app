@@ -52,12 +52,20 @@ export function MoveSessionControl({
   }
 
   if (!open) {
+    /*
+      Um botão, não um link cinza de 11 px.
+
+      Mover a sessão é a coisa que o atleta mais faz nesta tela — a vida muda de
+      dia o tempo todo — e estava escrita menor do que o aviso de tênis
+      (Sérgio, 26/09). Mesmo desenho de "Adaptar", porque são o mesmo tipo de
+      decisão: mexer nesta sessão.
+    */
     return (
       <button
         onClick={() => setOpen(true)}
-        className="text-[11px] text-surface-500 hover:text-brand-300 inline-flex items-center gap-1 transition-colors"
+        className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-surface-600 px-2.5 text-xs font-medium text-surface-300 transition-colors hover:border-brand-500/60 hover:text-brand-300"
       >
-        <CalendarDays className="w-3 h-3" /> Mover para outro dia
+        <CalendarDays className="h-3.5 w-3.5" /> Mover de dia
       </button>
     );
   }

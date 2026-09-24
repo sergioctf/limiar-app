@@ -484,3 +484,61 @@ delas desatualizada.
 é previsto, ontem sem registro é sem registro). Desenho conferido a 1.240 px e
 375 px com uma semana de mentira onde segunda tem corrida feita e musculação
 não, terça é descanso com um pedal extra, e quarta passou em branco.
+
+## Fase 7 — Dez correções do Sérgio ✅ (26/09)
+
+Lista direta, depois de usar a agenda com a semana real.
+
+**Na agenda**
+
+- **Cada sessão é uma linha, no mesmo estilo.** A musculação aparecia como um
+  rabicho cinza ("+ musculação") embaixo da corrida, sem duração — enquanto num
+  dia só dela virava treino de verdade, com "50 min" ao lado. A mesma sessão não
+  pode valer menos por dividir o dia. O dia agora cresce com o que tem dentro, e
+  cada sessão tem a sua barra de cor, o seu nome e a sua medida.
+- **O tiro tem nome curto.** "Tiros curtos 6×200 m" não cabe em 330 px, e o que
+  a lista responde é "que tipo de dia é esse?". Tiro, limiar e HIIT aparecem
+  pelo nome do tipo; o nome inteiro está no card, a um toque.
+
+**Cores**
+
+- **Musculação é azul** (`session-colors.ts`). Era cinza no mapa e roxa no card
+  do Treinador — pintada à mão, na mesma cor do longão. Duas coisas diferentes
+  com a mesma cor, na mesma tela.
+
+**Botões**
+
+- **"Mover de dia" virou botão**, com borda, em vez de um link cinza de 11 px.
+  É a coisa que mais se faz nesta tela: a vida muda de dia o tempo todo.
+- **"Adaptar" ficou do mesmo tamanho.** Era uma caixa da largura inteira entre
+  dois links pequenos — o `AdaptSessionControl` ganhou `compact`, e na Hoje
+  continua largo, que é onde ele é a ação da tela.
+
+**Musculação**
+
+- **Os textinhos saíram.** O bloco abria repetindo "Sessão de força · ~51 min",
+  fechava com as notas do gerador e um parágrafo explicando RIR, e cada
+  exercício carregava uma linha de dica. Ficou o que se usa de pé na academia:
+  exercício, séries, RIR, descanso, registrar. O que é RIR está no `title` da
+  etiqueta.
+- **Voltou o adaptar** — e agora existe de verdade, o que nunca houve para a
+  musculação. `AdaptStrengthControl` + `/api/strength/adapt` + `strength-adapt.ts`:
+  - **menos tempo** (20/30/40/50 min): saem os acessórios do fim, nunca o
+    composto principal, e só então caem séries. Meia hora de agachamento e
+    terra é um treino; meia hora de rosca e abdominal é uma visita à academia.
+  - **mais leve hoje**: uma série a menos, uma repetição a mais em reserva.
+  - **"Deixar assim para sempre"** grava a duração em `strength_prefs`, e só
+    vale para o tempo: "mais leve" é sobre hoje, e um dia ruim não deve mudar
+    como o atleta treina.
+
+**Comportamento**
+
+- **Tocar no dia aberto fecha o dia.** Tinha deixado de fechar para o painel
+  nunca aparecer vazio; quem quer ver a semana inteira precisa de uma saída.
+- **No celular a página desce menos.** `scrollIntoView` com `block: "start"`
+  levava o topo do painel ao topo da tela e passava do começo do treino; agora
+  é `"nearest"` com `scroll-mt-20`, que rola o mínimo necessário.
+
+**Conferido:** `tsc` limpo, `next build` limpo, **1.560 testes** (13 novos em
+`tests/strength-adapt.test.ts`, os da agenda reescritos para as linhas por
+sessão). Desenho conferido a 1.240 px e 375 px.

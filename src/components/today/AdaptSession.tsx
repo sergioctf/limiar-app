@@ -10,6 +10,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { SlidersHorizontal } from "lucide-react";
 import {
   ADAPT_REASONS, VERDICT_LABEL, isAdaptable,
   type AdaptOption, type AdaptReason, type ProposalEvaluation,
@@ -241,7 +242,19 @@ export function AdaptSessionSheet({ day, onClose, onAdapted }: {
 }
 
 /** The entry point: a button on today's session, or the adapted state with undo. */
-export function AdaptSessionControl({ day, onChanged }: { day: WeeklyPlanDay; onChanged?: (day: WeeklyPlanDay) => void }) {
+export function AdaptSessionControl({ day, onChanged, compact = false }: {
+  day: WeeklyPlanDay;
+  onChanged?: (day: WeeklyPlanDay) => void;
+  /**
+   * Botão pequeno, ao lado de "Mover de dia".
+   *
+   * Na Hoje este controle é a ação da tela e ocupa a largura inteira. Dentro do
+   * card da semana ele fica ao lado de outras duas ações, e uma caixa larga
+   * entre dois botões pequenos é exatamente o que o Sérgio chamou de feio
+   * (26/09).
+   */
+  compact?: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   // Screens that hold the plan in state update it; the rest re-read from the server.
@@ -283,6 +296,11 @@ export function AdaptSessionControl({ day, onChanged }: { day: WeeklyPlanDay; on
             <button type="button" className="min-h-[44px] text-surface-400" disabled={busy} onClick={undo}>Desfazer</button>
           </span>
         </div>
+      ) : compact ? (
+        <button type="button" onClick={() => setOpen(true)}
+          className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-surface-600 px-2.5 text-xs font-medium text-surface-300 transition-colors hover:border-brand-500/60 hover:text-brand-300">
+          <SlidersHorizontal className="h-3.5 w-3.5" /> Adaptar
+        </button>
       ) : (
         <button type="button" onClick={() => setOpen(true)}
           className="flex w-full items-center justify-center min-h-[44px] rounded-xl border border-surface-600 text-sm text-surface-300 hover:border-brand-400">

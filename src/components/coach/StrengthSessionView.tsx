@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Dumbbell, Info, Timer, Repeat2, Flame, ClipboardList, TrendingDown, Replace } from "lucide-react";
+import { Timer, Repeat2, Flame, ClipboardList, TrendingDown, Replace } from "lucide-react";
 import { StrengthLogger } from "@/components/coach/StrengthLogger";
 import { ExerciseImage } from "@/components/coach/ExerciseImage";
 import { ExerciseSwap } from "@/components/coach/ExerciseSwap";
@@ -76,16 +76,20 @@ export function StrengthSessionView({ session, date, day, weekStart }: {
   }
 
   return (
-    <div className="bg-surface-800/60 border border-surface-700 rounded-xl p-3 mt-1 space-y-2.5">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] text-surface-500 uppercase tracking-wide flex items-center gap-1.5">
-          <Dumbbell className="w-3.5 h-3.5" /> Sessão de força
-        </p>
-        <span className="text-[10px] text-surface-500 flex items-center gap-1">
-          <Timer className="w-3 h-3" /> ~{session.estimatedMinutes} min
-        </span>
-      </div>
+    /*
+      Só a sessão.
 
+      Este bloco abria com "Sessão de força · ~51 min", repetindo o que o card
+      acima já diz, e fechava com dois parágrafos cinzas — as notas do gerador
+      e a explicação do que é RIR — mais uma linha de dica embaixo de cada
+      exercício. Quatro textos pequenos em volta dos números que alguém procura
+      entre duas séries. "Estão sujando muito a tela" (Sérgio, 26/09).
+
+      O que ficou é o que se usa de pé na academia: o exercício, as séries, a
+      carga em reserva, o descanso e o botão de registrar. O significado do RIR
+      está no `title` da própria etiqueta.
+    */
+    <div className="bg-surface-800/60 border border-surface-700 rounded-xl p-3 mt-1 space-y-2.5">
       {/*
         A deload week cuts sets by design. Left as a grey footnote under the
         exercise list, that reads as the plan losing volume for no reason — so
@@ -143,15 +147,16 @@ export function StrengthSessionView({ session, date, day, weekStart }: {
                     ? `${ex.reps[0]}-${ex.reps[1]}s`
                     : ex.reps[0] === ex.reps[1] ? ex.reps[0] : `${ex.reps[0]}-${ex.reps[1]}`}
                 </span>
-                <span className="text-[11px] text-surface-400 flex items-center gap-1">
+                <span
+                  className="text-[11px] text-surface-400 flex items-center gap-1"
+                  title="Repetições em reserva: quantas você ainda conseguiria fazer ao parar a série."
+                >
                   <Flame className="w-3 h-3 text-orange-400" /> RIR {ex.rir}
                 </span>
                 <span className="text-[11px] text-surface-500 flex items-center gap-1">
                   <Repeat2 className="w-3 h-3" /> {ex.restSeconds}s
                 </span>
               </div>
-
-              <p className="text-[10px] text-surface-500 leading-snug mt-0.5">{ex.cue}</p>
             </div>
 
             {canSwap && (
@@ -184,27 +189,12 @@ export function StrengthSessionView({ session, date, day, weekStart }: {
       {/* Cardio after the lifting */}
       {session.cardio?.position === "depois" && <CardioRow cardio={session.cardio} session={session.cardioSession} />}
 
-      {session.notes.length > 0 && (
-        <div className="space-y-1 pt-1.5 border-t border-surface-700/50">
-          {session.notes.map((n, i) => (
-            <p key={i} className="text-[10px] text-surface-500 flex items-start gap-1.5">
-              <Info className="w-3 h-3 shrink-0 mt-0.5 text-surface-500" />{n}
-            </p>
-          ))}
-        </div>
-      )}
-
       <button
         onClick={() => setLogging(true)}
         className="w-full flex items-center justify-center gap-2 text-xs font-semibold rounded-lg py-2 bg-surface-700 text-surface-300 hover:text-brand-300 hover:bg-surface-600 transition-colors active:scale-[0.99]"
       >
         <ClipboardList className="w-3.5 h-3.5" /> Registrar treino
       </button>
-
-      <p className="text-[10px] text-surface-500 leading-relaxed">
-        RIR = repetições em reserva: quantas você ainda conseguiria fazer ao parar a série.
-        RIR 2 significa parar com 2 repetições sobrando.
-      </p>
 
       {logging && (
         <StrengthLogger
