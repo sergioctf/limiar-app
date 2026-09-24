@@ -10,12 +10,13 @@ import {
 import type { WeeklyPlanData, WeeklyPlanDay, PlanChatMessage } from "@/types";
 import { SPORTS, isRunSession } from "@/lib/sports";
 import { sessionTone } from "@/lib/session-colors";
-import { describeDay } from "@/lib/day-description";
+import { stripStrengthTail, strengthSummary } from "@/lib/day-description";
+import { WeekAgenda } from "@/components/coach/WeekAgenda";
 import { savePlanOffline, loadPlanOffline } from "@/lib/offline-store";
 import { isLegacyPlanShape } from "@/lib/workout-builder";
 import { WorkoutStepsView } from "@/components/coach/WorkoutStepsView";
 import { StrengthSessionView } from "@/components/coach/StrengthSessionView";
-import { localMondayStr, localNextMondayStr, DAY_SHORT_PT, dateOfWeekDay } from "@/lib/week";
+import { localMondayStr, localNextMondayStr, dateOfWeekDay } from "@/lib/week";
 import { MoveSessionControl } from "@/components/coach/MoveSessionControl";
 import { AdaptSessionControl } from "@/components/today/AdaptSession";
 import { ShoeHint } from "@/components/coach/ShoeHint";
@@ -48,7 +49,10 @@ function formatWeekRange(mondayStr: string): string {
 // esta tela usa esse desenho.
 
 interface TypeStyle {
-  bg: string; border: string; text: string; dot: string; icon: React.ReactNode;
+  bg: string; border: string; text: string; dot: string;
+  /** Como chamar esse tipo em uma palavra: "Rodagem", "Tiro", "Longão". */
+  label: string;
+  icon: React.ReactNode;
 }
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
@@ -179,6 +183,8 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
   const [chatLoading,  setChatLoading]  = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  /** O painel do dia — no celular ele entra na tela quando um dia é tocado. */
+  const dayPanelRef = useRef<HTMLDivElement>(null);
 
   // Auto-select TODAY's day when the current week loads; for next week, the
   // first training day (there is no "today" to highlight there).
@@ -454,32 +460,64 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
   }
 
   // ── Plan loaded ──────────────────────────────────────────────────────────
+  //
+  // A semana como agenda, e o dia ao lado dela.
+  //
+  // Até 24/09 esta tela era uma pilha: sete caixinhas de 40 px com o rótulo
+  // cortado, e abaixo delas o dia aberto, os controles, a musculação e o chat —
+  // cada um numa altura diferente, todos do mesmo tamanho visual. O Sérgio
+  // resumiu: "confuso, não dinâmico, cheio e pouco user friendly".
+  //
+  // Nada saiu. O que mudou foi onde as coisas moram: a semana à esquerda (e no
+  // topo, no celular) com o nome de cada sessão; o dia selecionado à direita,
+  // em cards — um por sessão, porque duas sessões num dia são dois treinos; e
+  // dentro de cada card, uma ação principal (ver as séries) e as outras abaixo,
+  // com o escopo no nome.
 
-  const todayKey = getTodayDayKey();
-  const selStyle = selectedDay ? typeStyle(selectedDay.type) : null;
+  const todayKey = isNextWeek ? null : getTodayDayKey();
+  const DAY_ORDER: WeeklyPlanDay["day"][] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const dayIndex = (d: WeeklyPlanDay["day"]) => DAY_ORDER.indexOf(d);
+
+  /** O treino do dia que não é a musculação — corrida, pedal, natação, o que for. */
+  const mainSession = selectedDay
+    && selectedDay.type !== "rest"
+    && selectedDay.type !== "strength"
+    && selectedDay.sport !== "musculacao"
+    ? selectedDay : null;
+  const mainTone = mainSession ? typeStyle(mainSession.type) : null;
+
+  /** Adaptar vale para a semana que está sendo vivida, de hoje em diante. */
+  const canAdapt = !!mainSession && isRunSession(mainSession) && !isNextWeek
+    && !!todayKey && dayIndex(mainSession.day) >= dayIndex(todayKey);
+
+  /** Uma sessão mudou de dia: o plano inteiro volta, e o dia aberto segue junto. */
+  const onPlanChanged = (p: WeeklyPlanData) => {
+    setPlans(prev => ({ ...prev, [activeWeek]: p }));
+    setSelectedDay(p.days.find(x => x.day === selectedDay?.day) ?? null);
+  };
 
   return (
-    <div className="card p-5 space-y-4">
+    <div className="card space-y-4 p-5">
 
-      {/* Header — no prominent regenerate button (to not waste calls) */}
+      {/* ── Cabeçalho ──────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-brand-500/20 flex items-center justify-center">
-            <CalendarDays className="w-5 h-5 text-brand-400" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500/20">
+            <CalendarDays className="h-5 w-5 text-brand-400" />
           </div>
           <div>
-            <h2 className="font-bold text-surface-100">Plano semanal IA</h2>
+            {/* "Sua semana": o plano é do motor (Daniels/Friel), a IA só escreve o recado. */}
+            <h2 className="font-bold text-surface-100">Sua semana</h2>
             <p className="text-xs text-surface-500">{formatWeekRange(plan.week_start)}</p>
           </div>
         </div>
         {/*
           Refazer do zero é a ação mais destrutiva desta tela, e era a menos
           explicada: chamava-se "Regenerar", tinha só um tooltip, e na semana
-          em andamento — que é congelada — ela falha de propósito e joga o
-          atleta para a próxima semana. Agora diz o nome do que faz, avisa o
-          que se perde, e só aparece onde funciona.
+          em andamento — que é congelada — ela falha de propósito. Agora diz o
+          nome do que faz, avisa o que se perde, e só aparece onde funciona.
         */}
-        {(isNextWeek || !plan) && (
+        {isNextWeek && (
           <button
             onClick={() => {
               if (plan && !confirm(
@@ -488,11 +526,11 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
               handleGenerate(true);
             }}
             disabled={generating}
-            className="flex items-center gap-1 text-[11px] text-surface-500 hover:text-surface-400 transition-colors min-h-[44px] py-1 px-2 rounded-lg hover:bg-surface-700/50"
+            className="flex min-h-[44px] items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-surface-500 transition-colors hover:bg-surface-700/50 hover:text-surface-400"
           >
             {generating
-              ? <Loader2 className="w-3 h-3 animate-spin" />
-              : <RotateCcw className="w-3 h-3" />}
+              ? <Loader2 className="h-3 w-3 animate-spin" />
+              : <RotateCcw className="h-3 w-3" />}
             <span className="hidden sm:inline">Refazer do zero</span>
           </button>
         )}
@@ -500,349 +538,343 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
 
       {weekTabs}
 
-      {daysShortcut}
-
-      {/* "Esta semana só consigo terça, quinta e sábado" — the week reorganised, explained, confirmed. */}
-      <WeekFitControl
-        key={`fit-${activeWeek}-${plan.rearrangement?.at ?? "none"}`}
-        week={activeWeek}
-        plan={plan}
-        isNextWeek={isNextWeek}
-        todayKey={todayKey}
-        onChanged={(next) => {
-          if (!next) return;
-          setPlans(prev => ({ ...prev, [activeWeek]: next }));
-          setSelectedDay(null);
-        }}
-      />
-
+      {/* ── O que esta semana tem de diferente ─────────────────────────── */}
       {offlineWeek === activeWeek && (
-        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-3 py-2 flex items-center gap-2">
-          <WifiOff className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
+        <div className="flex items-center gap-2 rounded-xl border border-yellow-500/20 bg-yellow-500/10 px-3 py-2">
+          <WifiOff className="h-3.5 w-3.5 shrink-0 text-yellow-400" />
           <p className="text-[11px] text-yellow-300">
             Plano salvo no aparelho — sem conexão, alterações não serão salvas agora.
           </p>
         </div>
       )}
 
-      {/* Errors belong next to the action that caused them — a failure loading
-          another week shouldn't surface under an unrelated workout. */}
+      {/* Erros ficam junto da ação que os causou. */}
       {genError && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-start justify-between gap-2">
+        <div className="flex items-start justify-between gap-2 rounded-xl border border-red-500/20 bg-red-500/10 p-3">
           <p className="text-sm text-red-400">{genError}</p>
           <button
             onClick={() => setGenError(null)}
             aria-label="Dispensar"
-            className="text-red-400/70 hover:text-red-300 shrink-0"
+            className="shrink-0 text-red-400/70 hover:text-red-300"
           >
-            <X className="w-4 h-4" />
+            <X className="h-4 w-4" />
           </button>
         </div>
       )}
 
       {/*
-        How the week before this one entered it. The athlete should never have to
-        guess why the volume moved — or why it did not, after a week that work
-        or weather broke.
+        Como a semana anterior entrou nesta. O atleta não deveria ter que
+        adivinhar por que o volume mudou — nem por que não mudou, depois de uma
+        semana que o trabalho ou a chuva quebraram.
       */}
       {plan.week_reading && plan.week_reading.status === "short" && (
-        <div className="border border-surface-700 rounded-xl px-4 py-3">
+        <div className="rounded-xl border border-surface-700 px-4 py-3">
           <p className="text-sm font-medium text-surface-200">{plan.week_reading.headline}</p>
-          <p className="text-sm text-surface-400 leading-relaxed mt-1">{plan.week_reading.detail}</p>
+          <p className="mt-1 text-sm leading-relaxed text-surface-400">{plan.week_reading.detail}</p>
         </div>
       )}
 
       {/*
-        A semana de recuperação diz o que é.
+        Onde a semana está no bloco e o recado do treinador, num bloco só —
+        são a mesma pergunta: por que esta semana é assim.
 
-        A de 28/09 do Sérgio saiu com 14 km em 3 + 3 + 8, e nada na tela dizia
-        que era a quarta semana do bloco, mais leve de propósito — ele leu como
-        plano quebrado. Um número pequeno sem explicação parece erro; com ela,
-        parece o que é.
+        A de 28/09 do Sérgio saiu com 14 km em 3 + 3 + 8 e nada dizia que era a
+        quarta semana do bloco, mais leve de propósito. Um número pequeno sem
+        explicação parece erro.
       */}
-      {plan.cycle && (
+      {(plan.cycle || plan.ai_message) && (
         <div className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 ${
-          plan.cycle.isRecovery
+          plan.cycle?.isRecovery
             ? "border-cyan-500/25 bg-cyan-500/10"
-            : "border-surface-700 bg-surface-800/60"
+            : "border-brand-500/20 bg-brand-500/8"
         }`}>
-          <Moon className={`mt-0.5 h-4 w-4 shrink-0 ${plan.cycle.isRecovery ? "text-cyan-300" : "text-surface-500"}`} />
-          <div>
-            <p className="text-sm font-semibold text-surface-100">
-              {plan.cycle.isRecovery
-                ? "Semana de recuperação"
-                : `Semana ${plan.cycle.week} de 4 do bloco`}
-            </p>
-            <p className="mt-0.5 text-xs leading-relaxed text-surface-400">
-              {plan.cycle.isRecovery
-                ? "A quarta do bloco, mais leve de propósito: é quando o corpo absorve as três semanas anteriores. Na próxima, o volume volta a subir."
-                : "O bloco tem quatro semanas: três subindo e uma de recuperação, que é onde o ganho se fixa."}
-            </p>
+          {plan.cycle?.isRecovery
+            ? <Moon className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" />
+            : <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand-400" />}
+          <div className="min-w-0">
+            {plan.cycle && (
+              <p className="text-sm font-semibold text-surface-100">
+                {plan.cycle.isRecovery
+                  ? "Semana de recuperação"
+                  : `Semana ${plan.cycle.week} de 4 do bloco`}
+              </p>
+            )}
+            {plan.cycle?.isRecovery && (
+              <p className="mt-0.5 text-xs leading-relaxed text-surface-400">
+                A quarta do bloco, mais leve de propósito: é quando o corpo absorve as três
+                semanas anteriores. Na próxima, o volume volta a subir.
+              </p>
+            )}
+            {plan.ai_message && (
+              <p className={`text-sm leading-relaxed text-surface-300 ${plan.cycle ? "mt-1.5" : ""}`}>
+                {plan.ai_message}
+              </p>
+            )}
+            {!plan.ai_message && plan.cycle && !plan.cycle.isRecovery && (
+              <p className="mt-0.5 text-xs leading-relaxed text-surface-400">
+                O bloco tem quatro semanas: três subindo e uma de recuperação, que é onde o
+                ganho se fixa.
+              </p>
+            )}
           </div>
         </div>
       )}
 
-      {/* AI proactive message */}
-      {plan.ai_message && (
-        <div className="bg-brand-500/8 border border-brand-500/20 rounded-xl px-4 py-3 flex items-start gap-2.5">
-          <Sparkles className="w-4 h-4 text-brand-400 mt-0.5 shrink-0" />
-          <p className="text-sm text-surface-300 leading-relaxed">{plan.ai_message}</p>
-        </div>
-      )}
-
-      {/* 7-day grid */}
-      <div className="grid grid-cols-7 gap-1">
-        {plan.days.filter((day): day is WeeklyPlanDay => !!day && !!day.day).map((day) => {
-          const dayKey     = day.day;
-          const label      = day.label ?? "";
-          const s          = typeStyle(day.type);
-          const isSelected = selectedDay?.day === dayKey;
-          const isToday    = dayKey === todayKey && !isNextWeek;
-          const shortLabel = label.length > 7 ? label.slice(0, 6) + "…" : label;
-
-          return (
-            <button
-              key={dayKey}
-              onClick={() => setSelectedDay(isSelected ? null : day)}
-              className={[
-                "relative flex flex-col items-center gap-0.5 py-2.5 px-0.5 rounded-xl border transition-colors duration-100 active:opacity-80",
-                s.bg, s.border,
-                isSelected ? "ring-2 ring-brand-400/60 shadow-sm shadow-brand-500/20" : "",
-              ].join(" ")}
-            >
-              {/* Today indicator dot */}
-              {isToday && (
-                <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-brand-400" />
-              )}
-              {/* Em português e com a data: "MO" e "TU" eram a chave interna, que é inglesa. */}
-              <span className={`text-[10px] font-bold uppercase tracking-wide ${isToday ? "text-brand-400" : "text-surface-400"}`}>
-                {DAY_SHORT_PT[dayKey] ?? dayKey}
-              </span>
-              <span className={`text-[10px] leading-none ${isToday ? "text-brand-400/80" : "text-surface-500"}`}>
-                {dateOfWeekDay(activeWeek, dayKey) ?? ""}
-              </span>
-              {/* A day can hold two sessions; showing one icon hid the other. */}
-              <span className="flex items-center gap-0.5 leading-none">
-                {day.sport
-                  ? <span className="text-[11px] leading-none" aria-hidden>{SPORTS[day.sport].emoji}</span>
-                  : <div className={`w-2 h-2 rounded-full shrink-0 ${s.dot}`} />}
-                {day.strength && day.sport !== "musculacao" && (
-                  <span className="text-[11px] leading-none" aria-hidden>{SPORTS.musculacao.emoji}</span>
-                )}
-              </span>
-              <span className={`text-[10px] font-semibold ${s.text} text-center leading-tight hidden xs:block`}>
-                {shortLabel}
-              </span>
-              {/* On mobile: only show metric if selected, always on sm+ */}
-              {day.distance_km != null && (
-                <span className={`text-[10px] text-surface-500 font-medium ${isSelected ? "block" : "hidden sm:block"}`}>
-                  {day.distance_km}km
-                </span>
-              )}
-              {day.distance_km == null && day.duration_min != null && (
-                <span className={`text-[10px] text-surface-500 ${isSelected ? "block" : "hidden sm:block"}`}>
-                  {day.duration_min}m
-                </span>
-              )}
-            </button>
-          );
-        })}
+      {/* ── Mudar a semana inteira ─────────────────────────────────────── */}
+      {/* "Esta semana só consigo terça, quinta e sábado" — a semana reorganizada,
+          explicada, confirmada. Ao lado, os dias de sempre, que valem para todas. */}
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+        <WeekFitControl
+          key={`fit-${activeWeek}-${plan.rearrangement?.at ?? "none"}`}
+          week={activeWeek}
+          plan={plan}
+          isNextWeek={isNextWeek}
+          todayKey={todayKey ?? "Mon"}
+          onChanged={(next) => {
+            if (!next) return;
+            setPlans(prev => ({ ...prev, [activeWeek]: next }));
+            setSelectedDay(null);
+          }}
+        />
+        <button
+          onClick={() => document.getElementById("training-prefs")?.scrollIntoView({ behavior: "smooth", block: "center" })}
+          className="flex min-h-[44px] items-center gap-1.5 text-[11px] text-surface-400 transition-colors hover:text-brand-300"
+        >
+          <CalendarDays className="h-3.5 w-3.5" /> Meus dias de sempre
+        </button>
       </div>
 
-      {/* Selected day detail */}
-      {selectedDay && selStyle && (
-        <div className={`${selStyle.bg} border ${selStyle.border} rounded-xl p-4 space-y-2.5 transition-all`}>
-          <div className="flex items-center gap-2">
-            <span className={selStyle.text}>
-              {selectedDay.sport ? <span className="text-base" aria-hidden>{SPORTS[selectedDay.sport].emoji}</span> : selStyle.icon}
-            </span>
-            <span className={`font-bold text-sm ${selStyle.text}`}>
-              {selectedDay.dayPt} — {selectedDay.label}
-            </span>
-            <div className="ml-auto flex items-center gap-2 text-xs text-surface-400">
-              {selectedDay.distance_km != null && <span>{selectedDay.distance_km} km</span>}
-              {selectedDay.duration_min != null && <span>{selectedDay.duration_min} min</span>}
-            </div>
-          </div>
-          {selectedDay.pace && (
-            <p className="text-xs text-surface-400">
-              <span className="text-surface-500">Ritmo: </span>
-              <span className="font-medium">{selectedDay.pace}</span>
-            </p>
-          )}
-          {/* Derivado do dia, nunca o texto cru: ver day-description.ts. */}
-          <p className="text-sm text-surface-300 leading-relaxed">{describeDay(selectedDay)}</p>
-
-          <ShoeHint day={selectedDay} />
-
-          {/*
-            A mesma conversa, com o assunto já posto.
-
-            "Uma identidade, várias portas": o treinador é um só, e cada porta
-            diz o que vai acontecer ao abri-la. Esta explica; a da semana
-            propõe e espera confirmação.
-          */}
-          <button
-            type="button"
-            onClick={() => {
-              setChatInput(`Sobre o treino de ${selectedDay.dayPt.toLowerCase()} (${selectedDay.label}): `);
-              setShowChat(true);
-              setTimeout(() => chatInputRef.current?.focus(), 50);
-            }}
-            className="flex min-h-[44px] items-center gap-1.5 text-[11px] text-surface-400 transition-colors hover:text-brand-300"
-          >
-            <MessageCircle className="h-3.5 w-3.5" /> Perguntar sobre este treino
-          </button>
-
-          {/* Only a run can be moved as "a corrida" — offering it on a pilates
-              day promised something the plan editor cannot do. */}
-          {isRunSession(selectedDay) && (
-            <MoveSessionControl
-              week={activeWeek}
-              day={selectedDay.day}
-              session="corrida"
-              label={selectedDay.label}
-              onMoved={(p: WeeklyPlanData) => {
-                setPlans(prev => ({ ...prev, [activeWeek]: p }));
-                setSelectedDay(p.days.find(x => x.day === selectedDay.day) ?? null);
-              }}
-            />
-          )}
-
-          {/* Adapting is for the week being lived, today or later. */}
-          {isRunSession(selectedDay) && !isNextWeek
-            && ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(selectedDay.day)
-               >= ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(todayKey) && (
-            <AdaptSessionControl
-              day={selectedDay}
-              onChanged={(next: WeeklyPlanDay) => {
-                if (!plan) return;
-                const updated = { ...plan, days: plan.days.map(d => d.day === next.day ? next : d) };
-                setPlans(prev => ({ ...prev, [activeWeek]: updated }));
-                setSelectedDay(next);
-              }}
-            />
-          )}
-
-          {/* On a lifting-only day this IS the session, so it belongs here.
-              When a run shares the day it gets its own card below instead. */}
-          {selectedDay.strength && selectedDay.sport === "musculacao" && (
-            <>
-              <MoveSessionControl
-                week={activeWeek}
-                day={selectedDay.day}
-                session="musculacao"
-                label="Musculação"
-                onMoved={(p: WeeklyPlanData) => {
-                setPlans(prev => ({ ...prev, [activeWeek]: p }));
-                setSelectedDay(p.days.find(x => x.day === selectedDay.day) ?? null);
-              }}
-              />
-              <Disclosure
-                title="Ver os exercícios"
-                summary={`${selectedDay.strength.exercises.length} exercícios · ~${selectedDay.strength.estimatedMinutes} min`}
-              >
-                <StrengthSessionView
-                  session={selectedDay.strength}
-                  day={selectedDay.day}
-                  weekStart={activeWeek}
-                />
-              </Disclosure>
-            </>
-          )}
-
-          {/*
-            As séries ficam atrás de um toque (Sérgio, 23/09).
-
-            Abertas, um treino de tiros ou uma sessão de musculação empurravam o
-            resto da semana para longe — quem abriu o dia para ver o que era
-            perdia o calendário de vista.
-          */}
-          {selectedDay.structure && selectedDay.structure.blocks.length > 0 && (
-            <Disclosure
-              title="Ver as séries"
-              summary={`${selectedDay.structure.blocks.length} blocos · exportar para o relógio`}
-            >
-              <WorkoutStepsView
-                structure={selectedDay.structure}
-                label={selectedDay.label}
-                sport={selectedDay.sport}
-              />
-            </Disclosure>
-          )}
-        </div>
-      )}
-
-      {/*
-        The lifting session gets its own card.
-        Two sessions on one day are two workouts, not a footnote inside the run
-        — buried under the running detail, the athlete simply did not see it.
-      */}
-      {selectedDay?.strength && selectedDay.sport !== "musculacao" && (
-        <div className="bg-purple-500/5 border border-purple-500/20 rounded-xl p-4 space-y-2.5">
-          <div className="flex items-center gap-2">
-            <span className="text-base" aria-hidden>{SPORTS.musculacao.emoji}</span>
-            <span className="font-bold text-sm text-purple-300">
-              {selectedDay.dayPt} — Musculação
-            </span>
-            <span className="ml-auto text-xs text-surface-400">
-              ~{selectedDay.strength.estimatedMinutes} min
-            </span>
-          </div>
-          <p className="text-xs text-surface-400 leading-relaxed">
-            Segunda sessão do dia. Corra primeiro e levante depois, com ~6 h entre as duas.
-          </p>
-          <MoveSessionControl
-            week={activeWeek}
-            day={selectedDay.day}
-            session="musculacao"
-            label="Musculação"
-            onMoved={(p: WeeklyPlanData) => {
-                setPlans(prev => ({ ...prev, [activeWeek]: p }));
-                setSelectedDay(p.days.find(x => x.day === selectedDay.day) ?? null);
-              }}
-          />
-          <StrengthSessionView
-            session={selectedDay.strength}
-            day={selectedDay.day}
+      {/* ── A semana, e o dia aberto ao lado dela ──────────────────────── */}
+      <div className="grid gap-4 lg:grid-cols-12">
+        <div className="lg:col-span-5">
+          <WeekAgenda
+            days={plan.days.filter((d): d is WeeklyPlanDay => !!d && !!d.day)}
             weekStart={activeWeek}
+            todayKey={todayKey}
+            selectedDay={selectedDay}
+            onSelect={(d) => {
+              const closing = selectedDay?.day === d.day;
+              setSelectedDay(closing ? null : d);
+              /*
+                No celular a lista e o dia são empilhados: tocar em sábado sem
+                isto deixa o treino três dedos abaixo da dobra, e parece que
+                nada aconteceu. No computador o dia já está ao lado — não há
+                para onde rolar.
+              */
+              if (!closing && typeof window !== "undefined" && window.innerWidth < 1024) {
+                setTimeout(() => dayPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+              }
+            }}
           />
         </div>
-      )}
 
-      {/* Chat toggle */}
+        <div className="lg:col-span-7" ref={dayPanelRef}>
+          {/* No computador o dia acompanha a rolagem: a semana nunca sai da vista. */}
+          <div className="space-y-3 lg:sticky lg:top-24">
+            {!selectedDay ? (
+              <div className="flex min-h-[120px] items-center justify-center rounded-xl border border-dashed border-surface-700 px-4 text-center">
+                <p className="text-sm text-surface-500">Toque num dia para ver o treino.</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs font-semibold uppercase tracking-wider text-surface-500">
+                  {selectedDay.dayPt} {dateOfWeekDay(activeWeek, selectedDay.day) ?? ""}
+                  {selectedDay.day === todayKey && <span className="ml-1.5 text-brand-400">· hoje</span>}
+                </p>
+
+                {/* ── A sessão principal do dia ─────────────────────────── */}
+                {mainSession && mainTone && (
+                  <div className={`space-y-3 rounded-xl border p-4 ${mainTone.bg} ${mainTone.border}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className={`flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide ${mainTone.text}`}>
+                          {mainSession.sport
+                            ? <span aria-hidden>{SPORTS[mainSession.sport].emoji}</span>
+                            : mainTone.icon}
+                          {mainTone.label}
+                        </p>
+                        <p className="mt-0.5 text-base font-bold leading-tight text-surface-100">
+                          {mainSession.label}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right text-xs text-surface-400">
+                        {mainSession.distance_km != null && (
+                          <p className="text-sm font-semibold tabular-nums text-surface-200">
+                            {mainSession.distance_km} km
+                          </p>
+                        )}
+                        {mainSession.duration_min != null && (
+                          <p className="tabular-nums">{mainSession.duration_min} min</p>
+                        )}
+                        {mainSession.pace && <p className="mt-0.5">{mainSession.pace}</p>}
+                      </div>
+                    </div>
+
+                    {/* Derivado do dia, nunca o texto cru: ver day-description.ts.
+                        A musculação sai daqui — ela tem card próprio logo abaixo. */}
+                    <p className="text-sm leading-relaxed text-surface-300">
+                      {stripStrengthTail(mainSession.description ?? "")}
+                    </p>
+
+                    <ShoeHint day={mainSession} />
+
+                    {/*
+                      As séries ficam atrás de um toque (Sérgio, 23/09): abertas,
+                      um treino de tiros empurrava o resto da semana para longe.
+                    */}
+                    {mainSession.structure && mainSession.structure.blocks.length > 0 && (
+                      <Disclosure
+                        title="Ver as séries"
+                        summary={`${mainSession.structure.blocks.length} blocos · exportar para o relógio`}
+                      >
+                        <WorkoutStepsView
+                          structure={mainSession.structure}
+                          label={mainSession.label}
+                          sport={mainSession.sport}
+                        />
+                      </Disclosure>
+                    )}
+
+                    {/*
+                      As três coisas que se pode fazer com um treino, juntas e
+                      com o escopo no nome: mudar de dia, trocar por outro,
+                      perguntar. Antes estavam espalhadas em alturas diferentes.
+                    */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-surface-700/50 pt-2.5">
+                      {/* Só uma corrida pode ser movida como "a corrida". */}
+                      {isRunSession(mainSession) && (
+                        <MoveSessionControl
+                          week={activeWeek}
+                          day={mainSession.day}
+                          session="corrida"
+                          label={mainSession.label}
+                          onMoved={onPlanChanged}
+                        />
+                      )}
+                      {canAdapt && (
+                        <AdaptSessionControl
+                          day={mainSession}
+                          onChanged={(next: WeeklyPlanDay) => {
+                            if (!plan) return;
+                            const updated = { ...plan, days: plan.days.map(d => d.day === next.day ? next : d) };
+                            setPlans(prev => ({ ...prev, [activeWeek]: updated }));
+                            setSelectedDay(next);
+                          }}
+                        />
+                      )}
+                      {/*
+                        A mesma conversa, com o assunto já posto. "Uma
+                        identidade, várias portas": o treinador é um só, e cada
+                        porta diz o que acontece ao abri-la.
+                      */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setChatInput(`Sobre o treino de ${mainSession.dayPt.toLowerCase()} (${mainSession.label}): `);
+                          setShowChat(true);
+                          setTimeout(() => chatInputRef.current?.focus(), 50);
+                        }}
+                        className="inline-flex min-h-[44px] items-center gap-1 text-[11px] text-surface-500 transition-colors hover:text-brand-300"
+                      >
+                        <MessageCircle className="h-3 w-3" /> Perguntar sobre este treino
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/*
+                  A musculação tem card próprio, sempre.
+
+                  Duas sessões num dia são dois treinos, não um rodapé dentro da
+                  corrida — enterrada no detalhe dela, o atleta não via que existia.
+                */}
+                {selectedDay.strength && (
+                  <div className="space-y-3 rounded-xl border border-purple-500/20 bg-purple-500/5 p-4">
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-purple-300">
+                        <span aria-hidden>{SPORTS.musculacao.emoji}</span> Musculação
+                      </p>
+                      {/* "peito · 4 exercícios · ~51 min" — o que é a sessão, em uma linha. */}
+                      <p className="mt-0.5 text-sm text-surface-300">{strengthSummary(selectedDay.strength)}</p>
+                    </div>
+
+                    {mainSession && (
+                      <p className="text-xs leading-relaxed text-surface-400">
+                        Segunda sessão do dia. Corra primeiro e levante depois, com ~6 h entre as duas.
+                      </p>
+                    )}
+
+                    <Disclosure
+                      title="Ver os exercícios"
+                      summary={`${selectedDay.strength.exercises.length} exercícios · registrar as séries`}
+                    >
+                      <StrengthSessionView
+                        session={selectedDay.strength}
+                        day={selectedDay.day}
+                        weekStart={activeWeek}
+                      />
+                    </Disclosure>
+
+                    <div className="border-t border-surface-700/50 pt-2.5">
+                      <MoveSessionControl
+                        week={activeWeek}
+                        day={selectedDay.day}
+                        session="musculacao"
+                        label="Musculação"
+                        onMoved={onPlanChanged}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Um dia sem sessão também é parte do plano — e diz por quê. */}
+                {!mainSession && !selectedDay.strength && (
+                  <div className="rounded-xl border border-surface-700 bg-surface-800/60 p-4">
+                    <p className="flex items-center gap-1.5 text-sm font-semibold text-surface-200">
+                      <Moon className="h-3.5 w-3.5 text-surface-500" /> {selectedDay.label}
+                    </p>
+                    <p className="mt-1 text-sm leading-relaxed text-surface-400">
+                      {stripStrengthTail(selectedDay.description ?? "")}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Conversar sobre esta semana ─────────────────────────────────── */}
       <button
         onClick={() => setShowChat(v => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-surface-700/50 hover:bg-surface-700 transition-colors text-sm"
+        className="flex w-full items-center justify-between rounded-xl bg-surface-700/50 px-4 py-3 text-sm transition-colors hover:bg-surface-700"
       >
-        <span className="flex items-center gap-2 text-surface-400 hover:text-surface-200 transition-colors">
-          <MessageCircle className="w-4 h-4" />
+        <span className="flex items-center gap-2 text-surface-400 transition-colors hover:text-surface-200">
+          <MessageCircle className="h-4 w-4" />
           <span>Conversar sobre esta semana</span>
           {chatMessages.length > 0 && (
-            <span className="bg-brand-500/20 text-brand-400 text-xs px-1.5 py-0.5 rounded-full font-medium">
+            <span className="rounded-full bg-brand-500/20 px-1.5 py-0.5 text-xs font-medium text-brand-400">
               {chatMessages.length}
             </span>
           )}
         </span>
         {showChat
-          ? <ChevronUp className="w-4 h-4 text-surface-500" />
-          : <ChevronDown className="w-4 h-4 text-surface-500" />}
+          ? <ChevronUp className="h-4 w-4 text-surface-500" />
+          : <ChevronDown className="h-4 w-4 text-surface-500" />}
       </button>
 
-      {/* Chat interface */}
       {showChat && (
         <div className="space-y-3">
 
-          {/* Message history */}
           {chatMessages.length > 0 && (
-            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+            <div className="max-h-52 space-y-2 overflow-y-auto pr-1">
               {chatMessages.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div className={[
-                    "max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed",
+                    "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
                     msg.role === "user"
-                      ? "bg-brand-500/20 text-surface-100 rounded-br-sm"
-                      : "bg-surface-700 text-surface-300 rounded-bl-sm",
+                      ? "rounded-br-sm bg-brand-500/20 text-surface-100"
+                      : "rounded-bl-sm bg-surface-700 text-surface-300",
                   ].join(" ")}>
                     {msg.content}
                   </div>
@@ -851,11 +883,11 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
 
               {chatLoading && (
                 <div className="flex justify-start">
-                  <div className="bg-surface-700 px-3.5 py-2.5 rounded-2xl rounded-bl-sm">
-                    <div className="flex gap-1 items-center">
-                      <span className="w-1.5 h-1.5 bg-surface-400 rounded-full animate-bounce [animation-delay:0ms]" />
-                      <span className="w-1.5 h-1.5 bg-surface-400 rounded-full animate-bounce [animation-delay:150ms]" />
-                      <span className="w-1.5 h-1.5 bg-surface-400 rounded-full animate-bounce [animation-delay:300ms]" />
+                  <div className="rounded-2xl rounded-bl-sm bg-surface-700 px-3.5 py-2.5">
+                    <div className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-surface-400 [animation-delay:0ms]" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-surface-400 [animation-delay:150ms]" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-surface-400 [animation-delay:300ms]" />
                     </div>
                   </div>
                 </div>
@@ -873,7 +905,7 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
             o oposto do que a ADR-05 pede.
           */}
           {pending && (
-            <div className="rounded-xl border border-brand-500/30 bg-brand-500/5 p-3 space-y-2.5">
+            <div className="space-y-2.5 rounded-xl border border-brand-500/30 bg-brand-500/5 p-3">
               <ul className="space-y-1">
                 {pending.changes.map((c, i) => (
                   <li key={i} className="flex gap-2 text-xs leading-relaxed text-surface-300">
@@ -882,17 +914,16 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
                 ))}
               </ul>
               <div className="flex gap-2">
-                <button onClick={applyPending} disabled={chatLoading} className="btn-primary flex-1 text-xs py-1.5">
+                <button onClick={applyPending} disabled={chatLoading} className="btn-primary flex-1 py-1.5 text-xs">
                   {chatLoading ? "Aplicando…" : "Aplicar"}
                 </button>
-                <button onClick={() => setPending(null)} disabled={chatLoading} className="btn-ghost flex-1 text-xs py-1.5">
+                <button onClick={() => setPending(null)} disabled={chatLoading} className="btn-ghost flex-1 py-1.5 text-xs">
                   Agora não
                 </button>
               </div>
             </div>
           )}
 
-          {/* Input row */}
           <div className="flex gap-2">
             <input
               type="text"
@@ -903,20 +934,20 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
               }}
               placeholder="Ex: na quinta não vou conseguir correr 8 km"
-              className="flex-1 bg-surface-700 border border-surface-600 rounded-xl px-3.5 py-2.5 text-sm text-surface-200 placeholder:text-surface-500 focus:outline-none focus:border-brand-500 transition-colors"
+              className="flex-1 rounded-xl border border-surface-600 bg-surface-700 px-3.5 py-2.5 text-sm text-surface-200 transition-colors placeholder:text-surface-500 focus:border-brand-500 focus:outline-none"
               disabled={chatLoading}
             />
             <button
               onClick={handleSendMessage}
               disabled={!chatInput.trim() || chatLoading}
-              className="shrink-0 w-10 h-10 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-500 transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <Send className="w-4 h-4 text-white" />
+              <Send className="h-4 w-4 text-white" />
             </button>
           </div>
 
-          <p className="text-[11px] text-surface-500 text-center">
-            Peça ajustes — o plano é salvo automaticamente quando mudado
+          <p className="text-center text-[11px] text-surface-500">
+            Peça um ajuste e o treinador propõe — nada muda até você tocar em Aplicar
           </p>
         </div>
       )}

@@ -216,3 +216,87 @@ Na tela, a resposta vira uma lista do que mudaria, com **Aplicar** e **Agora nã
 O campo de texto também mudou de exemplo: era *"remove o treino de quinta, adiciona musculação"* — um comando — e virou *"na quinta não vou conseguir correr 8 km"*, que é como alguém fala com um treinador.
 
 **Testes:** 1.527 passando. Cinco novos garantem a promessa da fase: propor não grava, pergunta não vira proposta, aplicar sem edições é recusado, e o que é salvo sai do plano do banco — não do que passou pela rede.
+
+## Fase 4 — A semana vira agenda ✅ (24/09)
+
+### O veredito que iniciou esta fase
+
+> "Além de corrigir problemas e deixar UM POUCO menos crowded, não melhoramos NADA
+> no treinador, que apesar de ter muito conteúdo, e bom, ainda está muito confuso,
+> não dinâmico, cheio e pouco user friendly." — Sérgio, 24/09
+
+Ele estava certo, e o diagnóstico é preciso: as três primeiras fases tiraram
+coisas da tela (relatórios, cards duplicados, adesão) e consertaram defeitos
+(o "peito" viajando de dia, o chat gravando sem perguntar). Nenhuma delas mexeu
+no **desenho**. A tela continuava sendo uma pilha vertical onde tudo tem o mesmo
+peso, e a semana continuava sendo sete caixinhas de 40 px com o rótulo cortado
+em seis letras.
+
+A regra desta fase foi a dele: *"não podemos perder features, só expor elas
+melhor e adicionar se necessário ou interessante"*. Nada saiu.
+
+### A semana como agenda
+
+`WeekAgenda.tsx` (novo) troca as sete caixinhas por sete linhas:
+
+```
+▌ SEG 21     Rodagem leve              6 km
+             + musculação
+▌ TER 22     Descanso
+▌ QUA 23     Tiros de 1 km             9 km
+▌ QUI 24 hoje  Musculação             50 min
+```
+
+O que mudou de verdade: **o dia diz o que é sem ser tocado.** Antes, para saber
+o que era quinta-feira, tocava-se em quinta-feira — uma semana que só se entende
+dia a dia não é uma semana, é um menu. E a segunda sessão do dia, que ficava
+escondida atrás de um segundo emoji de 11 px, virou uma linha em texto:
+*"+ musculação"*.
+
+A cor voltou a ser marcador (uma barra de 4 px) em vez de caixa. Sete caixas
+coloridas lado a lado competiam entre si; nenhuma ganhava.
+
+A frase de cada dia mora em `src/lib/week-agenda.ts` (`agendaLine`), que lê as
+sessões de `plannedSessionsOf` — a mesma origem que a Hoje e a adesão usam. Um
+dia com corrida e musculação é dois treinos em toda tela, ou em nenhuma.
+
+### O dia ao lado da semana
+
+No computador (`lg:`), a semana fica à esquerda e o dia aberto à direita, colado
+na rolagem: **a semana nunca sai da vista enquanto se explora um treino**. No
+celular a lista fica em cima e o dia embaixo — e tocar num dia rola o painel
+para a tela, porque sem isso o treino nasce abaixo da dobra e parece que nada
+aconteceu.
+
+### Cada sessão é um card
+
+O dia deixou de ser um bloco de texto com controles pendurados embaixo:
+
+- **card do treino** — tipo e nome, distância/ritmo à direita, a descrição já sem
+  a cauda de musculação, o tênis, **Ver as séries** atrás de um toque, e embaixo
+  de uma linha divisória as três ações: *Mover para outro dia · Adaptar este
+  treino · Perguntar sobre este treino*.
+- **card da musculação** — sempre separado, com o resumo em uma linha
+  (`strengthSummary`: "peito, costas · 4 exercícios · ~51 min"), **Ver os
+  exercícios** e *Mover para outro dia*.
+- **card de descanso** — o dia sem treino também diz por que é assim.
+
+Antes, as mesmas ações apareciam em alturas diferentes conforme o dia tivesse
+ou não séries, musculação ou adaptação disponível. Agora a posição é fixa: o que
+se pode fazer com um treino está sempre no pé do card dele.
+
+### Rótulos que dizem a ação
+
+"Minha agenda desta semana" → **Reorganizar esta semana**. O primeiro nomeia uma
+tela; o segundo diz o que acontece ao tocar.
+
+### O que foi conferido
+
+`tsc` limpo, `next build` limpo, **1.532 testes passando** (5 novos, em
+`tests/week-agenda.test.ts`: o nome inteiro do treino em vez de seis letras, a
+segunda sessão do dia, a medida certa num dia só de musculação, descanso sem
+medida, e tempo quando não há distância).
+
+O desenho foi conferido na tela, com um plano de mentira numa página temporária
+(corrida + musculação na segunda, tiros na quarta, musculação sozinha na quinta,
+longão no sábado), no computador e no celular. A página foi apagada depois.

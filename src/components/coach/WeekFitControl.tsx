@@ -119,7 +119,9 @@ export function WeekFitControl({
           onClick={() => { setOpen(true); reset(); setDays(initial); }}
           className="flex items-center gap-1.5 min-h-[44px] text-[11px] text-surface-400 hover:text-brand-300 transition-colors"
         >
-          <CalendarClock className="w-3.5 h-3.5" /> Minha agenda {isNextWeek ? "da próxima semana" : "desta semana"}
+          {/* O nome diz o que acontece ao tocar: antes era "Minha agenda desta
+              semana", que descreve uma tela, não uma ação. */}
+          <CalendarClock className="w-3.5 h-3.5" /> Reorganizar {isNextWeek ? "a próxima semana" : "esta semana"}
         </button>
       ) : (
         <div className="rounded-2xl border border-surface-600 bg-surface-900/60 p-3 space-y-3">

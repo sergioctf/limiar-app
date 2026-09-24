@@ -60,3 +60,20 @@ export function describeDay(day: Pick<WeeklyPlanDay, "description" | "strength" 
   const tail = strengthTail(day);
   return tail ? `${base} ${tail}`.trim() : base;
 }
+
+/** "peito · 4 exercícios · ~51 min" — a sessão de força resumida em uma linha. */
+export function strengthSummary(session: NonNullable<WeeklyPlanDay["strength"]>): string {
+  const muscles = ((session as { muscles?: MuscleGroup[] }).muscles ?? [])
+    .map(m => MUSCLE_LABEL[m])
+    .filter(Boolean)
+    .join(", ")
+    .toLowerCase();
+
+  const parts = [
+    muscles || null,
+    `${session.exercises.length} ${session.exercises.length === 1 ? "exercício" : "exercícios"}`,
+    session.estimatedMinutes ? `~${session.estimatedMinutes} min` : null,
+  ].filter(Boolean);
+
+  return parts.join(" · ");
+}
