@@ -14,6 +14,10 @@
  *
  * A lista é a mesma no computador e no celular. No computador ela fica à
  * esquerda e o dia aberto à direita, então a semana nunca sai da vista.
+ *
+ * **Hoje e selecionado são coisas diferentes** e não podem se parecer: hoje é
+ * um fato (a etiqueta na data, laranja), selecionado é onde você está olhando
+ * (o fundo e a borda). Abrir domingo não pode apagar que quinta é hoje.
  */
 import { sessionTone } from "@/lib/session-colors";
 import { agendaLine } from "@/lib/week-agenda";
@@ -31,7 +35,7 @@ export function WeekAgenda({
   onSelect: (day: WeeklyPlanDay) => void;
 }) {
   return (
-    <ul className="space-y-1">
+    <ul className="space-y-0.5">
       {days.map(day => {
         const tone = sessionTone(day.type);
         const isToday = day.day === todayKey;
@@ -46,36 +50,53 @@ export function WeekAgenda({
               onClick={() => onSelect(day)}
               aria-current={isSelected ? "true" : undefined}
               className={[
-                "flex w-full min-h-[52px] items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors",
+                // Altura mínima folgada, e mais alta ainda quando o dia tem
+                // duas sessões: a segunda linha não pode espremer a primeira.
+                "flex w-full min-h-[56px] items-center gap-3 rounded-xl border px-3 py-2.5 text-left",
+                "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60",
                 isSelected
-                  ? "border-brand-500/50 bg-surface-700/60"
-                  : "border-transparent bg-surface-800/60 hover:border-surface-700 hover:bg-surface-700/40",
+                  ? "border-brand-500/40 bg-surface-700/70"
+                  : "border-transparent hover:bg-surface-700/40",
               ].join(" ")}
             >
-              {/* A cor é um marcador, não uma caixa. */}
-              <span className={`h-8 w-1 shrink-0 rounded-full ${isRest ? "bg-surface-700" : tone.dot}`} />
+              {/* A cor é um marcador do tipo de treino, não uma caixa. */}
+              <span className={`h-9 w-1 shrink-0 rounded-full ${isRest ? "bg-surface-700" : tone.dot}`} />
 
-              <span className="w-14 shrink-0">
-                <span className={`block text-xs font-bold uppercase tracking-wide ${isToday ? "text-brand-400" : "text-surface-400"}`}>
+              <span className="w-[4.25rem] shrink-0">
+                <span className={`block text-[13px] font-bold uppercase tracking-wide ${isToday ? "text-brand-400" : "text-surface-300"}`}>
                   {DAY_SHORT_PT[day.day] ?? day.day}
                 </span>
-                <span className={`block text-[11px] leading-none ${isToday ? "text-brand-400/80" : "text-surface-500"}`}>
-                  {dateOfWeekDay(weekStart, day.day) ?? ""}
-                  {isToday && <span className="ml-1 font-semibold">hoje</span>}
+                <span className="mt-0.5 flex items-baseline gap-1">
+                  <span className={`text-xs ${isToday ? "text-brand-400" : "text-surface-500"}`}>
+                    {dateOfWeekDay(weekStart, day.day) ?? ""}
+                  </span>
+                  {/* Hoje é uma etiqueta, não uma cor a ser adivinhada. */}
+                  {isToday && (
+                    <span className="rounded bg-brand-500/20 px-1 py-px text-[10px] font-bold uppercase tracking-wide text-brand-300">
+                      hoje
+                    </span>
+                  )}
                 </span>
               </span>
 
               <span className="min-w-0 flex-1">
-                <span className={`block truncate text-sm font-semibold ${isRest ? "text-surface-500" : "text-surface-100"}`}>
+                {/*
+                  O nome do treino não é cortado.
+
+                  "Tiros curtos 6×200 m" virava "Tiros curtos 6×20…", que é a
+                  informação mais importante da linha perdendo para a largura.
+                  Em duas linhas cabe; em três, aí sim reticências.
+                */}
+                <span className={`block line-clamp-2 text-[15px] font-semibold leading-snug ${isRest ? "text-surface-400" : "text-surface-100"}`}>
                   {main}
                 </span>
                 {extra && (
-                  <span className="block truncate text-[11px] text-surface-500">+ {extra}</span>
+                  <span className="mt-0.5 block truncate text-xs text-surface-400">+ {extra}</span>
                 )}
               </span>
 
               {metric && (
-                <span className="shrink-0 text-xs tabular-nums text-surface-400">{metric}</span>
+                <span className="shrink-0 text-[13px] font-medium tabular-nums text-surface-300">{metric}</span>
               )}
             </button>
           </li>

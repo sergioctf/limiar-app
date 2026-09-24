@@ -12,6 +12,7 @@ import { SPORTS, isRunSession } from "@/lib/sports";
 import { sessionTone } from "@/lib/session-colors";
 import { stripStrengthTail, strengthSummary } from "@/lib/day-description";
 import { WeekAgenda } from "@/components/coach/WeekAgenda";
+import { weekSummaryLine } from "@/lib/week-agenda";
 import { savePlanOffline, loadPlanOffline } from "@/lib/offline-store";
 import { isLegacyPlanShape } from "@/lib/workout-builder";
 import { WorkoutStepsView } from "@/components/coach/WorkoutStepsView";
@@ -71,6 +72,24 @@ const TYPE_ICONS: Record<string, React.ReactNode> = {
 function typeStyle(type: string): TypeStyle {
   const tone = sessionTone(type);
   return { ...tone, icon: TYPE_ICONS[type] ?? TYPE_ICONS.easy };
+}
+
+/**
+ * O nome do botão que abre o passo a passo, conforme o treino.
+ *
+ * Um sistema que chama "série" o que é uma rodagem contínua parece inacabado,
+ * mesmo quando o conteúdo por trás está certo.
+ */
+const SERIES_TYPES = new Set(["intervals", "tempo", "hiit", "test", "race"]);
+
+function structureTitle(type: string): string {
+  return SERIES_TYPES.has(type) ? "Ver as séries" : "Ver a estrutura";
+}
+
+function structureSummary(blocks: number): string {
+  return blocks > 1
+    ? `${blocks} blocos · exportar para o relógio`
+    : "Passo a passo · exportar para o relógio";
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -175,6 +194,8 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
   const [generating,   setGenerating]   = useState(false);
   const [genError,     setGenError]     = useState<string | null>(null);
   const [showChat,     setShowChat]     = useState(false);
+  /** "Entender o planejamento" — a aula sobre o bloco, quando ela é procurada. */
+  const [showPlanning, setShowPlanning] = useState(false);
   const [chatMessages, setChatMessages] = useState<PlanChatMessage[]>([]);
   /** A proposta do chat esperando confirmação — nada gravado até "Aplicar". */
   const [pending, setPending] = useState<{ edits: unknown[]; changes: string[] } | null>(null);
@@ -343,8 +364,15 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
 
   // ── Week switcher (this week / next week) ────────────────────────────────
 
+  /*
+    Um controle de navegação, não o protagonista da tela.
+
+    Era uma barra da largura inteira do card, do mesmo tamanho visual do plano
+    que ela serve para escolher. Agora ocupa o que precisa e fica no canto do
+    cabeçalho, onde se procura uma troca de contexto.
+  */
   const weekTabs = (
-    <div className="flex gap-1 bg-surface-700 rounded-xl p-1">
+    <div className="inline-flex gap-0.5 rounded-xl bg-surface-800 p-0.5">
       {[
         { key: currentMonday, label: "Esta semana" },
         { key: nextMonday,    label: "Próxima" },
@@ -352,8 +380,10 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
         <button
           key={w.key}
           onClick={() => setActiveWeek(w.key)}
-          className={`flex-1 min-h-[44px] py-1.5 px-3 rounded-lg text-[11px] font-semibold transition-colors duration-100 ${
-            activeWeek === w.key ? "bg-surface-600 text-surface-100 shadow-sm" : "text-surface-400 hover:text-surface-200"
+          className={`min-h-[40px] rounded-[10px] px-3 text-xs font-semibold transition-colors duration-100 ${
+            activeWeek === w.key
+              ? "bg-surface-600 text-surface-100 shadow-sm"
+              : "text-surface-400 hover:text-surface-200"
           }`}
         >
           {w.label}
@@ -392,6 +422,36 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
     </div>
   );
 
+  /*
+    ── Carregando ≠ sem plano ────────────────────────────────────────────────
+
+    Trocar de semana passava pelo estado vazio enquanto a busca acontecia: por
+    um instante a tela dizia "sem plano gerado ainda" e "antes de gerar o
+    plano", oferecendo um botão de gerar para uma semana que talvez já tivesse
+    plano. Agora o espaço da agenda fica reservado, com sete linhas cinzas.
+  */
+  if (!plan && loadingWeek) {
+    return (
+      <div className="space-y-5" aria-busy="true">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold leading-tight text-surface-100">Sua semana</h2>
+            <p className="mt-1 text-sm text-surface-500">{formatWeekRange(activeWeek)}</p>
+          </div>
+          {weekTabs}
+        </div>
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,330px)_minmax(0,1fr)] xl:gap-8">
+          <div className="space-y-0.5 rounded-2xl bg-surface-800/40 p-1.5">
+            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(d => (
+              <div key={d} className="h-[56px] animate-pulse rounded-xl bg-surface-700/30" />
+            ))}
+          </div>
+          <div className="h-40 animate-pulse rounded-2xl bg-surface-800/40" />
+        </div>
+      </div>
+    );
+  }
+
   // ── Empty state (no plan for the selected week) ──────────────────────────
 
   if (!plan) {
@@ -426,11 +486,7 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
           </div>
         )}
 
-        {loadingWeek ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="w-5 h-5 animate-spin text-surface-500" />
-          </div>
-        ) : (
+        {(
           <div className="text-center py-6 space-y-4">
             <div className="text-surface-500">
               <CalendarDays className="w-8 h-8 mx-auto mb-3 opacity-30" />
@@ -490,6 +546,9 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
   const canAdapt = !!mainSession && isRunSession(mainSession) && !isNextWeek
     && !!todayKey && dayIndex(mainSession.day) >= dayIndex(todayKey);
 
+  /** "3 corridas · 21 km · 2 sessões de musculação" — o tamanho da semana, de relance. */
+  const weekSummary = weekSummaryLine(plan.days ?? []);
+
   /** Uma sessão mudou de dia: o plano inteiro volta, e o dia aberto segue junto. */
   const onPlanChanged = (p: WeeklyPlanData) => {
     setPlans(prev => ({ ...prev, [activeWeek]: p }));
@@ -497,46 +556,65 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
   };
 
   return (
-    <div className="card space-y-4 p-5">
+    /*
+      Sem a caixa grande em volta de tudo.
 
-      {/* ── Cabeçalho ──────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500/20">
-            <CalendarDays className="h-5 w-5 text-brand-400" />
-          </div>
-          <div>
-            {/* "Sua semana": o plano é do motor (Daniels/Friel), a IA só escreve o recado. */}
-            <h2 className="font-bold text-surface-100">Sua semana</h2>
-            <p className="text-xs text-surface-500">{formatWeekRange(plan.week_start)}</p>
-          </div>
+      O card envolvia cabeçalho, abas, avisos, agenda, cards do dia e conversa
+      — e dentro dele quase tudo era outra caixa. Caixa dentro de caixa não
+      hierarquiza nada: o espaço entre os blocos faz esse trabalho melhor, e
+      sobram bordas só para o que precisa mesmo de destaque (propostas, avisos).
+    */
+    <div className="space-y-5">
+
+      {/* ── Cabeçalho: diz o tamanho da semana, não só o período ────────── */}
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+        <div className="min-w-0">
+          {/* "Sua semana": o plano é do motor (Daniels/Friel), a IA só escreve o recado. */}
+          <h2 className="text-xl font-bold leading-tight text-surface-100">Sua semana</h2>
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-surface-400">
+            <span>{formatWeekRange(plan.week_start)}</span>
+            {plan.cycle && (
+              <span className={`rounded-md px-1.5 py-0.5 text-xs font-semibold ${
+                plan.cycle.isRecovery ? "bg-cyan-500/15 text-cyan-300" : "bg-surface-700 text-surface-300"
+              }`}>
+                {plan.cycle.isRecovery ? "Recuperação" : `Semana ${plan.cycle.week} de 4`}
+              </span>
+            )}
+          </p>
+          {/* Somar sete dias de cabeça para saber se a semana é grande não é trabalho do atleta. */}
+          {weekSummary && (
+            <p className="mt-1.5 text-sm font-medium text-surface-200">{weekSummary}</p>
+          )}
         </div>
-        {/*
-          Refazer do zero é a ação mais destrutiva desta tela, e era a menos
-          explicada: chamava-se "Regenerar", tinha só um tooltip, e na semana
-          em andamento — que é congelada — ela falha de propósito. Agora diz o
-          nome do que faz, avisa o que se perde, e só aparece onde funciona.
-        */}
-        {isNextWeek && (
-          <button
-            onClick={() => {
-              if (plan && !confirm(
-                "Refazer a semana do zero?\n\nO plano atual é descartado — adaptações, trocas de dia e a agenda desta semana se perdem.",
-              )) return;
-              handleGenerate(true);
-            }}
-            disabled={generating}
-            className="flex min-h-[44px] items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-surface-500 transition-colors hover:bg-surface-700/50 hover:text-surface-400"
-          >
-            {generating
-              ? <Loader2 className="h-3 w-3 animate-spin" />
-              : <RotateCcw className="h-3 w-3" />}
-            <span className="hidden sm:inline">Refazer do zero</span>
-          </button>
-        )}
-      </div>
 
-      {weekTabs}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {weekTabs}
+          {/*
+            Refazer do zero é a ação mais destrutiva desta tela, e era a menos
+            explicada: chamava-se "Regenerar", tinha só um tooltip, e na semana
+            em andamento — que é congelada — ela falha de propósito. Agora diz o
+            nome do que faz, avisa o que se perde, e só aparece onde funciona.
+          */}
+          {isNextWeek && (
+            <button
+              onClick={() => {
+                if (plan && !confirm(
+                  "Refazer a semana do zero?\n\nO plano atual é descartado — adaptações, trocas de dia e a agenda desta semana se perdem.",
+                )) return;
+                handleGenerate(true);
+              }}
+              disabled={generating}
+              title="Refazer do zero"
+              className="flex min-h-[44px] items-center gap-1.5 rounded-lg px-2.5 text-xs text-surface-400 transition-colors hover:bg-surface-700/50 hover:text-surface-200"
+            >
+              {generating
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <RotateCcw className="h-3.5 w-3.5" />}
+              <span className="hidden sm:inline">Refazer do zero</span>
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* ── O que esta semana tem de diferente ─────────────────────────── */}
       {offlineWeek === activeWeek && (
@@ -575,46 +653,57 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
       )}
 
       {/*
-        Onde a semana está no bloco e o recado do treinador, num bloco só —
-        são a mesma pergunta: por que esta semana é assim.
+        O foco da semana: uma frase, sem caixa.
 
-        A de 28/09 do Sérgio saiu com 14 km em 3 + 3 + 8 e nada dizia que era a
-        quarta semana do bloco, mais leve de propósito. Um número pequeno sem
-        explicação parece erro.
+        Era um bloco com borda, fundo, título e dois parágrafos — a explicação
+        do bloco de quatro semanas repetida toda segunda-feira, empurrando a
+        agenda para baixo. O recado do treinador fica; a aula sobre
+        periodização vai para trás de "Entender o planejamento", que é onde se
+        procura uma explicação quando se quer uma.
       */}
       {(plan.cycle || plan.ai_message) && (
-        <div className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 ${
-          plan.cycle?.isRecovery
-            ? "border-cyan-500/25 bg-cyan-500/10"
-            : "border-brand-500/20 bg-brand-500/8"
-        }`}>
+        <div className="flex items-start gap-2.5">
           {plan.cycle?.isRecovery
             ? <Moon className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" />
             : <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand-400" />}
-          <div className="min-w-0">
-            {plan.cycle && (
-              <p className="text-sm font-semibold text-surface-100">
-                {plan.cycle.isRecovery
-                  ? "Semana de recuperação"
-                  : `Semana ${plan.cycle.week} de 4 do bloco`}
-              </p>
-            )}
-            {plan.cycle?.isRecovery && (
-              <p className="mt-0.5 text-xs leading-relaxed text-surface-400">
-                A quarta do bloco, mais leve de propósito: é quando o corpo absorve as três
-                semanas anteriores. Na próxima, o volume volta a subir.
-              </p>
-            )}
-            {plan.ai_message && (
-              <p className={`text-sm leading-relaxed text-surface-300 ${plan.cycle ? "mt-1.5" : ""}`}>
-                {plan.ai_message}
-              </p>
-            )}
-            {!plan.ai_message && plan.cycle && !plan.cycle.isRecovery && (
-              <p className="mt-0.5 text-xs leading-relaxed text-surface-400">
-                O bloco tem quatro semanas: três subindo e uma de recuperação, que é onde o
-                ganho se fixa.
-              </p>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm leading-relaxed text-surface-300">
+              {plan.ai_message
+                ?? (plan.cycle?.isRecovery
+                  ? "Semana mais leve de propósito: é ela que faz as três anteriores virarem ganho."
+                  : "Três semanas subindo e uma de recuperação — é assim que o bloco funciona.")}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowPlanning(v => !v)}
+              className="mt-1 min-h-[36px] text-xs font-medium text-surface-400 transition-colors hover:text-brand-300"
+            >
+              {showPlanning ? "Mostrar menos" : "Entender o planejamento"}
+            </button>
+            {showPlanning && (
+              <div className="mt-1 space-y-2 border-l border-surface-700 pl-3 text-xs leading-relaxed text-surface-400">
+                <p>
+                  {plan.cycle?.isRecovery
+                    ? "Esta é a quarta semana do bloco, mais leve de propósito: é quando o corpo absorve as três anteriores. Na próxima, o volume volta a subir."
+                    : `O bloco tem quatro semanas: três subindo e uma de recuperação, que é onde o ganho se fixa.${
+                        plan.cycle ? ` Esta é a ${plan.cycle.week}ª.` : ""}`}
+                </p>
+                {/*
+                  Como a semana anterior entrou nesta. O atleta não deveria ter
+                  que adivinhar por que o volume mudou — nem por que não mudou,
+                  depois de uma semana que o trabalho ou a chuva quebraram.
+                */}
+                {plan.week_reading && plan.week_reading.status !== "short" && (
+                  <p>
+                    <span className="text-surface-300">{plan.week_reading.headline}</span>{" "}
+                    {plan.week_reading.detail}
+                  </p>
+                )}
+                <p>
+                  Os ritmos vêm do seu teste de 3 km (VDOT) e as zonas do seu limiar; o volume
+                  sobe com teto, e nunca por causa de uma semana só.
+                </p>
+              </div>
             )}
           </div>
         </div>
@@ -636,39 +725,56 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
             setSelectedDay(null);
           }}
         />
+        {/* A rotina de sempre é outra conversa — acesso secundário, não concorrente. */}
         <button
           onClick={() => document.getElementById("training-prefs")?.scrollIntoView({ behavior: "smooth", block: "center" })}
-          className="flex min-h-[44px] items-center gap-1.5 text-[11px] text-surface-400 transition-colors hover:text-brand-300"
+          className="flex min-h-[44px] items-center gap-1.5 text-xs text-surface-500 transition-colors hover:text-brand-300"
         >
           <CalendarDays className="h-3.5 w-3.5" /> Meus dias de sempre
         </button>
       </div>
 
-      {/* ── A semana, e o dia aberto ao lado dela ──────────────────────── */}
-      <div className="grid gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-5">
+      {/*
+        ── A semana, e o dia aberto ao lado dela ─────────────────────────
+
+        A agenda tem largura fixa (~330 px): é uma lista de sete linhas curtas,
+        e esticá-la só afasta o nome do treino da sua distância. O que sobra
+        fica com o dia, que é quem tem texto, séries e exercícios para mostrar.
+        Abaixo de `lg`, uma coluna só — comprimir os dois lados é pior do que
+        empilhar.
+      */}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,330px)_minmax(0,1fr)] xl:gap-8">
+        {/* Uma superfície discreta segura a lista; as linhas não têm borda cada uma. */}
+        <div className="rounded-2xl bg-surface-800/40 p-1.5">
           <WeekAgenda
             days={plan.days.filter((d): d is WeeklyPlanDay => !!d && !!d.day)}
             weekStart={activeWeek}
             todayKey={todayKey}
             selectedDay={selectedDay}
             onSelect={(d) => {
-              const closing = selectedDay?.day === d.day;
-              setSelectedDay(closing ? null : d);
+              /*
+                Tocar no dia que já está aberto não fecha nada.
+
+                Fechava, e o painel ao lado ficava vazio com "Toque num dia para
+                ver o treino" — um clique no lugar certo parecia um erro. Um
+                dia sempre selecionado é o estado previsível.
+              */
+              if (selectedDay?.day === d.day) return;
+              setSelectedDay(d);
               /*
                 No celular a lista e o dia são empilhados: tocar em sábado sem
                 isto deixa o treino três dedos abaixo da dobra, e parece que
                 nada aconteceu. No computador o dia já está ao lado — não há
                 para onde rolar.
               */
-              if (!closing && typeof window !== "undefined" && window.innerWidth < 1024) {
+              if (typeof window !== "undefined" && window.innerWidth < 1024) {
                 setTimeout(() => dayPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
               }
             }}
           />
         </div>
 
-        <div className="lg:col-span-7" ref={dayPanelRef}>
+        <div ref={dayPanelRef}>
           {/* No computador o dia acompanha a rolagem: a semana nunca sai da vista. */}
           <div className="space-y-3 lg:sticky lg:top-24">
             {!selectedDay ? (
@@ -682,50 +788,62 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
                   {selectedDay.day === todayKey && <span className="ml-1.5 text-brand-400">· hoje</span>}
                 </p>
 
-                {/* ── A sessão principal do dia ─────────────────────────── */}
+                {/*
+                  ── A sessão principal do dia ───────────────────────────
+
+                  A ordem é a da pergunta que se faz olhando o card: o que é,
+                  quanto, em que ritmo, e só então por quê. A descrição vinha
+                  antes dos números e ganhava mais espaço que eles.
+
+                  A cor virou etiqueta em vez de fundo. Verde já quer dizer
+                  "rodagem" aqui; se amanhã também quiser dizer "concluído",
+                  nenhuma das duas coisas fica clara — e nada essencial deve
+                  depender só de cor.
+                */}
                 {mainSession && mainTone && (
-                  <div className={`space-y-3 rounded-xl border p-4 ${mainTone.bg} ${mainTone.border}`}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className={`flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide ${mainTone.text}`}>
-                          {mainSession.sport
-                            ? <span aria-hidden>{SPORTS[mainSession.sport].emoji}</span>
-                            : mainTone.icon}
-                          {mainTone.label}
-                        </p>
-                        <p className="mt-0.5 text-base font-bold leading-tight text-surface-100">
-                          {mainSession.label}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right text-xs text-surface-400">
+                  <div className="space-y-3 rounded-2xl border border-surface-700 bg-surface-800/60 p-4">
+                    <div>
+                      <p className={`flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide ${mainTone.text}`}>
+                        <span className={`h-2 w-2 rounded-full ${mainTone.dot}`} aria-hidden />
+                        {mainSession.sport
+                          ? <span aria-hidden>{SPORTS[mainSession.sport].emoji}</span>
+                          : mainTone.icon}
+                        {mainTone.label}
+                      </p>
+                      <h3 className="mt-1 text-lg font-bold leading-tight text-surface-100">
+                        {mainSession.label}
+                      </h3>
+                      {/* Os números que o atleta procura primeiro, numa linha só. */}
+                      <p className="mt-1 flex flex-wrap items-baseline gap-x-2 text-sm text-surface-300">
                         {mainSession.distance_km != null && (
-                          <p className="text-sm font-semibold tabular-nums text-surface-200">
-                            {mainSession.distance_km} km
-                          </p>
+                          <span className="font-semibold tabular-nums text-surface-100">{mainSession.distance_km} km</span>
                         )}
                         {mainSession.duration_min != null && (
-                          <p className="tabular-nums">{mainSession.duration_min} min</p>
+                          <span className="font-semibold tabular-nums text-surface-100">{mainSession.duration_min} min</span>
                         )}
-                        {mainSession.pace && <p className="mt-0.5">{mainSession.pace}</p>}
-                      </div>
+                        {mainSession.pace && (
+                          <><span className="text-surface-600">·</span><span className="tabular-nums">{mainSession.pace}</span></>
+                        )}
+                      </p>
                     </div>
 
                     {/* Derivado do dia, nunca o texto cru: ver day-description.ts.
                         A musculação sai daqui — ela tem card próprio logo abaixo. */}
-                    <p className="text-sm leading-relaxed text-surface-300">
+                    <p className="text-sm leading-relaxed text-surface-400">
                       {stripStrengthTail(mainSession.description ?? "")}
                     </p>
 
-                    <ShoeHint day={mainSession} />
-
                     {/*
-                      As séries ficam atrás de um toque (Sérgio, 23/09): abertas,
+                      A estrutura fica atrás de um toque (Sérgio, 23/09): aberta,
                       um treino de tiros empurrava o resto da semana para longe.
+
+                      O nome muda com o treino, porque "Ver as séries · 1 blocos"
+                      numa rodagem contínua é errado duas vezes.
                     */}
                     {mainSession.structure && mainSession.structure.blocks.length > 0 && (
                       <Disclosure
-                        title="Ver as séries"
-                        summary={`${mainSession.structure.blocks.length} blocos · exportar para o relógio`}
+                        title={structureTitle(mainSession.type)}
+                        summary={structureSummary(mainSession.structure.blocks.length)}
                       >
                         <WorkoutStepsView
                           structure={mainSession.structure}
@@ -734,6 +852,8 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
                         />
                       </Disclosure>
                     )}
+
+                    <ShoeHint day={mainSession} compact />
 
                     {/*
                       As três coisas que se pode fazer com um treino, juntas e
@@ -774,9 +894,9 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
                           setShowChat(true);
                           setTimeout(() => chatInputRef.current?.focus(), 50);
                         }}
-                        className="inline-flex min-h-[44px] items-center gap-1 text-[11px] text-surface-500 transition-colors hover:text-brand-300"
+                        className="inline-flex min-h-[44px] items-center gap-1.5 text-xs text-surface-400 transition-colors hover:text-brand-300"
                       >
-                        <MessageCircle className="h-3 w-3" /> Perguntar sobre este treino
+                        <MessageCircle className="h-3.5 w-3.5" /> Perguntar sobre este treino
                       </button>
                     </div>
                   </div>
@@ -789,13 +909,16 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
                   corrida — enterrada no detalhe dela, o atleta não via que existia.
                 */}
                 {selectedDay.strength && (
-                  <div className="space-y-3 rounded-xl border border-purple-500/20 bg-purple-500/5 p-4">
+                  <div className="space-y-3 rounded-2xl border border-surface-700 bg-surface-800/60 p-4">
                     <div className="min-w-0">
-                      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-purple-300">
+                      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-purple-300">
+                        <span className="h-2 w-2 rounded-full bg-purple-400" aria-hidden />
                         <span aria-hidden>{SPORTS.musculacao.emoji}</span> Musculação
                       </p>
                       {/* "peito · 4 exercícios · ~51 min" — o que é a sessão, em uma linha. */}
-                      <p className="mt-0.5 text-sm text-surface-300">{strengthSummary(selectedDay.strength)}</p>
+                      <p className="mt-1 text-[15px] font-semibold text-surface-100">
+                        {strengthSummary(selectedDay.strength)}
+                      </p>
                     </div>
 
                     {mainSession && (
@@ -829,9 +952,9 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
 
                 {/* Um dia sem sessão também é parte do plano — e diz por quê. */}
                 {!mainSession && !selectedDay.strength && (
-                  <div className="rounded-xl border border-surface-700 bg-surface-800/60 p-4">
-                    <p className="flex items-center gap-1.5 text-sm font-semibold text-surface-200">
-                      <Moon className="h-3.5 w-3.5 text-surface-500" /> {selectedDay.label}
+                  <div className="rounded-2xl border border-surface-700/60 bg-surface-800/40 p-4">
+                    <p className="flex items-center gap-1.5 text-[15px] font-semibold text-surface-200">
+                      <Moon className="h-4 w-4 text-surface-500" /> {selectedDay.label}
                     </p>
                     <p className="mt-1 text-sm leading-relaxed text-surface-400">
                       {stripStrengthTail(selectedDay.description ?? "")}

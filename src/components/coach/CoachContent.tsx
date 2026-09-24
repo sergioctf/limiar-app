@@ -85,7 +85,16 @@ export function CoachContent({
   }, [latestWeekReport]);
 
   return (
-    <div className="mx-auto max-w-3xl animate-fade-in space-y-5">
+    /*
+      A largura acompanha o que a tela passou a mostrar.
+
+      `max-w-3xl` (768 px) servia uma coluna só. Depois que a semana virou
+      agenda + detalhe lado a lado, os dois lados passaram a dividir a largura
+      de um: nome de treino cortado, explicação em cinco linhas, ações
+      espremidas. Em `xl` a página vai a ~1.120 px, que é onde a agenda cabe
+      inteira com folga e o detalhe ainda tem espaço para as séries.
+    */
+    <div className="mx-auto w-full max-w-3xl animate-fade-in space-y-6 lg:max-w-5xl xl:max-w-[1120px]">
       {/*
         UM aviso por vez, o mais urgente.
 

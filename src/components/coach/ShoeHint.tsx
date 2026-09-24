@@ -15,7 +15,7 @@ type ShoeWithWear = Shoe & { wear: Wear };
  * of reading their Wednesday session is an interruption, not a feature — the
  * invitation lives in the shoe card instead.
  */
-export function ShoeHint({ day }: { day: WeeklyPlanDay }) {
+export function ShoeHint({ day, compact = false }: { day: WeeklyPlanDay; compact?: boolean }) {
   const [shoes, setShoes] = useState<ShoeWithWear[]>([]);
   const [daysToRace, setDaysToRace] = useState<number | null>(null);
 
@@ -40,6 +40,26 @@ export function ShoeHint({ day }: { day: WeeklyPlanDay }) {
   // Mileage already came from the server with the shoe; recomputing it here from
   // an empty run list would report zero for every pair.
   const wear = shoes.find(s => s.id === suggestion.shoe.id)?.wear;
+
+  /*
+    Dentro do card do treino, o tênis é uma linha, não um quadro.
+
+    A caixa com o porquê competia com a descrição da sessão: dois parágrafos
+    permanentes para "calce o Novablast". O motivo continua acessível ao passar
+    o mouse, e o aviso de desgaste — que é o que realmente muda uma decisão —
+    continua visível.
+  */
+  if (compact) {
+    return (
+      <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-surface-400" title={suggestion.reason}>
+        <Footprints className="h-3.5 w-3.5 shrink-0 text-brand-400" />
+        <span className="font-medium text-surface-300">{suggestion.shoe.name}</span>
+        <span className="text-surface-500">· {SHOE_META[suggestion.shoe.category].label}</span>
+        {wear && wear.status === "trocar" && <span className="text-red-400">· {wear.note}</span>}
+        {wear && wear.status === "atencao" && <span className="text-yellow-400">· {wear.note}</span>}
+      </p>
+    );
+  }
 
   return (
     <div className="rounded-xl bg-surface-700/30 p-3 space-y-1">

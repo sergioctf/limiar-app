@@ -300,3 +300,103 @@ medida, e tempo quando não há distância).
 O desenho foi conferido na tela, com um plano de mentira numa página temporária
 (corrida + musculação na segunda, tiros na quarta, musculação sozinha na quinta,
 longão no sábado), no computador e no celular. A página foi apagada depois.
+
+## Fase 5 — Proporção, hierarquia e legibilidade ✅ (24/09)
+
+A agenda funcionou ("agora consigo entender a semana sem abrir cada dia"), mas
+a apresentação ainda não. O diagnóstico central de uma segunda revisão estava
+certo e era simples de verificar: **a tela ganhou duas colunas e continuou com
+768 px**.
+
+### A largura
+
+`CoachContent` era `max-w-3xl` — a largura de uma coluna só. Agenda e detalhe
+dividiam entre si o espaço que antes servia para um. Daí o nome de treino
+cortado ("Tiros curtos 6×20…"), a explicação em cinco linhas e as ações
+espremidas.
+
+Agora: `max-w-3xl` → `lg:max-w-5xl` → `xl:max-w-[1120px]`. A agenda tem largura
+fixa (`minmax(0,330px)`), porque é uma lista de linhas curtas e esticá-la só
+afasta o nome do treino da sua distância; o resto fica com o dia. Abaixo de
+`lg`, uma coluna — comprimir os dois lados é pior do que empilhar.
+
+### A caixa que envolvia tudo
+
+O `card p-5` do `WeeklyPlanCard` saiu. Ele continha cabeçalho, abas, avisos,
+agenda, cards e conversa — e dentro dele quase tudo era outra caixa. O espaço
+entre os blocos hierarquiza melhor do que uma borda por agrupamento. Sobraram
+bordas onde elas significam alguma coisa: cards de sessão, propostas e avisos.
+
+### O cabeçalho passou a dizer o tamanho da semana
+
+```
+Sua semana
+21 a 27 de set · Semana 1 de 4
+3 corridas · 27 km · 2 sessões de musculação
+```
+
+O resumo (`weekSummaryLine`) sai das mesmas sessões que a agenda mostra, então
+lista e cabeçalho não podem discordar. As abas de semana viraram um controle
+compacto no canto — eram uma barra da largura inteira, do mesmo peso visual do
+plano que servem para escolher.
+
+### A introdução virou uma frase
+
+O bloco com borda, título e dois parágrafos — a aula sobre o ciclo de quatro
+semanas repetida toda segunda — virou uma linha com o recado do treinador e um
+**"Entender o planejamento"**, que abre a explicação do bloco, a leitura da
+semana anterior e de onde vêm os ritmos.
+
+### Os cards do dia
+
+Ordem nova, na ordem em que as perguntas aparecem: **o que é → quanto e em que
+ritmo → por quê → ver a estrutura → tênis → ações**. Antes a descrição vinha
+antes dos números e ocupava mais espaço que eles.
+
+O fundo colorido saiu (verde de rodagem, roxo de musculação): superfície
+neutra, cor só no marcador e na etiqueta do tipo. Se amanhã o verde também
+quiser dizer "concluído", nenhuma das duas coisas ficaria clara — e nada
+essencial deve depender só de cor.
+
+O tênis virou uma linha (`<ShoeHint compact>`) em vez de um quadro com dois
+parágrafos permanentes; o motivo continua no `title`, e o aviso de desgaste,
+que é o que muda uma decisão, continua visível.
+
+**E o nome do botão passou a depender do treino:** "Ver as séries" para tiro,
+limiar e HIIT; "Ver a estrutura" para corrida contínua; "Ver os exercícios"
+para musculação. O resumo não diz mais "1 blocos".
+
+### A agenda
+
+Nome do treino a 15 px (era 13), segunda sessão e data a 12 px (eram 11),
+métrica a 13 px com peso médio, linhas de 56 px. **Hoje e selecionado deixaram
+de se parecer:** hoje é uma etiqueta laranja junto da data, selecionado é fundo
+e borda. Abrir domingo não apaga mais a informação de que quinta é hoje. E o
+nome do treino não é mais truncado — quebra em duas linhas.
+
+### Comportamento
+
+- Tocar no dia que já está aberto **não fecha mais** o painel. Fechava, e um
+  clique no lugar certo parecia um erro.
+- **Carregando ≠ sem plano.** Trocar de semana passava pelo estado vazio
+  ("sem plano gerado ainda", "antes de gerar o plano") antes de a resposta
+  chegar, oferecendo gerar uma semana que talvez já tivesse plano. Agora o
+  espaço da agenda fica reservado com sete linhas cinzas.
+
+### O que ficou de fora, e por quê
+
+- **"rodízio leve"** não existe no código: o rótulo do motor é "Rodagem leve"
+  (`plan-suggestion.ts`, `session-swap.ts`). Não havia o que corrigir.
+- **FC alvo no card** depende de derivar zona por sessão; fica para quando o
+  realizado entrar, que é quando a comparação faz sentido.
+- **Conselheiro contextual** — a inconsistência observada (sugestão falando de
+  quinta com os tiros na sexta) precisa ser reproduzida antes de redesenhar a
+  apresentação. Anotado.
+- **Aviso dev de hidratação:** existe e **é anterior a estas mudanças**
+  (confirmado com o código da fase 4 via `git stash`). Vem de selecionar o dia
+  de hoje num efeito, dentro do boundary de Suspense do modo dev. Não aparece
+  no build de produção.
+
+**Conferido:** `tsc` limpo, `next build` limpo, **1.536 testes** (4 novos para
+`weekSummaryLine`). Desenho conferido a 1.240 px e a 375 px, com um plano de
+mentira numa página temporária, depois apagada.

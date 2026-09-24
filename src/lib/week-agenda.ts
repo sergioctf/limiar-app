@@ -43,3 +43,34 @@ export function agendaLine(day: WeeklyPlanDay): AgendaLine {
     metric: metric ?? null,
   };
 }
+
+/**
+ * A semana em uma linha: "3 corridas · 21 km · 2 sessões de musculação".
+ *
+ * O cabeçalho dizia o período e mais nada — "Sua semana, 21 a 27 de set" —
+ * enquanto o atleta tinha que somar os sete dias de cabeça para saber se a
+ * semana era grande ou pequena. Os números saem das mesmas sessões que a
+ * agenda mostra, então resumo e lista nunca discordam.
+ *
+ * A distância vai arredondada: o total da semana é uma ordem de grandeza,
+ * não uma medição (decisão do Sérgio, 20/09).
+ */
+export function weekSummaryLine(days: WeeklyPlanDay[]): string | null {
+  let runs = 0, km = 0, strength = 0, others = 0;
+
+  for (const day of days) {
+    for (const s of plannedSessionsOf(day)) {
+      if (s.sport === "musculacao") { strength++; continue; }
+      if (s.sport === "corrida") { runs++; km += day.distance_km ?? 0; continue; }
+      others++;
+    }
+  }
+
+  const parts: string[] = [];
+  if (runs > 0) parts.push(`${runs} ${runs === 1 ? "corrida" : "corridas"}`);
+  if (km > 0) parts.push(`${Math.round(km)} km`);
+  if (strength > 0) parts.push(`${strength} ${strength === 1 ? "sessão" : "sessões"} de musculação`);
+  if (others > 0) parts.push(`${others} ${others === 1 ? "treino" : "treinos"} de outro esporte`);
+
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
