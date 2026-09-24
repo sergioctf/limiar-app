@@ -172,6 +172,9 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
   const [genError,     setGenError]     = useState<string | null>(null);
   const [showChat,     setShowChat]     = useState(false);
   const [chatMessages, setChatMessages] = useState<PlanChatMessage[]>([]);
+  /** A proposta do chat esperando confirmação — nada gravado até "Aplicar". */
+  const [pending, setPending] = useState<{ edits: unknown[]; changes: string[] } | null>(null);
+  const chatInputRef = useRef<HTMLInputElement>(null);
   const [chatInput,    setChatInput]    = useState("");
   const [chatLoading,  setChatLoading]  = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
@@ -248,6 +251,35 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
     }
   }
 
+  /** Aplica a proposta que está na tela. O servidor refaz a conta. */
+  async function applyPending() {
+    if (!pending || chatLoading) return;
+    setChatLoading(true);
+    try {
+      const res = await fetch("/api/coach/weekly-plan/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apply: true, week: activeWeek, edits: pending.edits }),
+      });
+      const data = await res.json();
+      setPending(null);
+      setChatMessages(prev => [...prev, {
+        role: "assistant" as const,
+        content: (data.assistantMessage ?? data.error ?? "Não consegui aplicar.") as string,
+        timestamp: new Date().toISOString(),
+      }]);
+      if (data.updatedPlan) setPlan(data.updatedPlan as WeeklyPlanData);
+    } catch {
+      setChatMessages(prev => [...prev, {
+        role: "assistant" as const,
+        content: "Erro de conexão. Tente novamente.",
+        timestamp: new Date().toISOString(),
+      }]);
+    } finally {
+      setChatLoading(false);
+    }
+  }
+
   async function handleSendMessage() {
     const msg = chatInput.trim();
     if (!msg || !plan || chatLoading) return;
@@ -278,9 +310,13 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
           content: data.assistantMessage as string,
           timestamp: new Date().toISOString(),
         }]);
-        if (data.updatedPlan) {
-          setPlan(data.updatedPlan as WeeklyPlanData);
-        }
+        /*
+         * A resposta é uma PROPOSTA: nada foi gravado. Fica pendente até o
+         * atleta tocar em "Aplicar" — e aí o servidor refaz as mesmas edições
+         * sobre o plano guardado (ADR-05).
+         */
+        const edits = (data.edits ?? []) as unknown[];
+        setPending(edits.length > 0 ? { edits, changes: (data.changes ?? []) as string[] } : null);
       } else {
         setChatMessages(prev => [...prev, {
           role: "assistant" as const,
@@ -639,6 +675,25 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
 
           <ShoeHint day={selectedDay} />
 
+          {/*
+            A mesma conversa, com o assunto já posto.
+
+            "Uma identidade, várias portas": o treinador é um só, e cada porta
+            diz o que vai acontecer ao abri-la. Esta explica; a da semana
+            propõe e espera confirmação.
+          */}
+          <button
+            type="button"
+            onClick={() => {
+              setChatInput(`Sobre o treino de ${selectedDay.dayPt.toLowerCase()} (${selectedDay.label}): `);
+              setShowChat(true);
+              setTimeout(() => chatInputRef.current?.focus(), 50);
+            }}
+            className="flex min-h-[44px] items-center gap-1.5 text-[11px] text-surface-400 transition-colors hover:text-brand-300"
+          >
+            <MessageCircle className="h-3.5 w-3.5" /> Perguntar sobre este treino
+          </button>
+
           {/* Only a run can be moved as "a corrida" — offering it on a pilates
               day promised something the plan editor cannot do. */}
           {isRunSession(selectedDay) && (
@@ -762,7 +817,7 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
       >
         <span className="flex items-center gap-2 text-surface-400 hover:text-surface-200 transition-colors">
           <MessageCircle className="w-4 h-4" />
-          <span>Ajustar com o treinador</span>
+          <span>Conversar sobre esta semana</span>
           {chatMessages.length > 0 && (
             <span className="bg-brand-500/20 text-brand-400 text-xs px-1.5 py-0.5 rounded-full font-medium">
               {chatMessages.length}
@@ -809,16 +864,45 @@ export function WeeklyPlanCard({ initialPlan, initialReportId, paces }: Props) {
             </div>
           )}
 
+          {/*
+            A proposta, antes de qualquer alteração.
+
+            Até 24/09 a mudança já estava salva quando o atleta lia sobre ela.
+            O modelo nunca escreveu o plano — ele escolhe de um vocabulário
+            fixo e o motor aplica —, mas descobrir a mudança depois de feita é
+            o oposto do que a ADR-05 pede.
+          */}
+          {pending && (
+            <div className="rounded-xl border border-brand-500/30 bg-brand-500/5 p-3 space-y-2.5">
+              <ul className="space-y-1">
+                {pending.changes.map((c, i) => (
+                  <li key={i} className="flex gap-2 text-xs leading-relaxed text-surface-300">
+                    <span className="text-surface-600">·</span>{c}
+                  </li>
+                ))}
+              </ul>
+              <div className="flex gap-2">
+                <button onClick={applyPending} disabled={chatLoading} className="btn-primary flex-1 text-xs py-1.5">
+                  {chatLoading ? "Aplicando…" : "Aplicar"}
+                </button>
+                <button onClick={() => setPending(null)} disabled={chatLoading} className="btn-ghost flex-1 text-xs py-1.5">
+                  Agora não
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Input row */}
           <div className="flex gap-2">
             <input
               type="text"
+              ref={chatInputRef}
               value={chatInput}
               onChange={e => setChatInput(e.target.value)}
               onKeyDown={e => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
               }}
-              placeholder="Ex: remove o treino de quinta, adiciona musculação…"
+              placeholder="Ex: na quinta não vou conseguir correr 8 km"
               className="flex-1 bg-surface-700 border border-surface-600 rounded-xl px-3.5 py-2.5 text-sm text-surface-200 placeholder:text-surface-500 focus:outline-none focus:border-brand-500 transition-colors"
               disabled={chatLoading}
             />

@@ -13,7 +13,7 @@
 import type { Run, WeeklyPlanData, WeeklyPlanDay, PlanDayType, StructuredWorkout, PlanChatMessage, AthleteNoteCategory, MacroPlanData, MacroPlanWeek, MacroRaceType } from "@/types";
 import { secondsToPaceString, secondsToReadable } from "@/lib/utils";
 import { SPORTS, ALL_SPORTS, DEFAULT_SPORTS, toSportKey, type SportKey, type PrimarySport } from "@/lib/sports";
-import { normalizePlanEdits, applyPlanEdits } from "@/lib/plan-edit";
+import { normalizePlanEdits, applyPlanEdits, type PlanEdit } from "@/lib/plan-edit";
 
 export const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -643,7 +643,17 @@ export async function processPlanFeedback(
   chatHistory: PlanChatMessage[],
   recentRuns: Run[],
   athleteProfile?: string | null,
-): Promise<{ updatedPlan: WeeklyPlanData | null; assistantMessage: string } | null> {
+): Promise<{
+  /** Como a semana ficaria — para mostrar, nunca para gravar. */
+  updatedPlan: WeeklyPlanData | null;
+  assistantMessage: string;
+  /** As edições normalizadas: é o que o app devolve no "Aplicar". */
+  edits: PlanEdit[];
+  /** Uma linha por mudança que de fato aconteceria. */
+  changes: string[];
+  /** O que foi entendido mas não cabe, e por quê. */
+  rejected: string[];
+} | null> {
   // The model translates the request into structured edits; it never rewrites
   // the plan. Asking it for a whole seven-day plan is how the chat ended up
   // confirming changes it had not made.
@@ -705,24 +715,33 @@ MENSAGEM DO ATLETA: ${userMessage}
     const reply = typeof parsed.message === "string" ? parsed.message : "";
 
     if (edits.length === 0) {
-      return { updatedPlan: null, assistantMessage: reply || "Entendi." };
+      // Uma pergunta, não um pedido: responde e não propõe nada.
+      return { updatedPlan: null, assistantMessage: reply || "Entendi.", edits: [], changes: [], rejected: [] };
     }
 
     const { plan, changes, rejected } = applyPlanEdits(currentPlan, edits);
 
-    // The confirmation is written from what actually landed, never from what
-    // the model said it would do.
+    // A proposta é escrita a partir do que o motor calculou que aconteceria,
+    // nunca do que o modelo disse que faria.
     if (changes.length === 0) {
       const why = rejected.length > 0 ? ` ${rejected.join(" ")}` : "";
       return {
-        updatedPlan: null,
-        assistantMessage: `Não mudei nada no plano.${why} Se não era isso, me diga o dia e a distância.`,
+        updatedPlan: null, edits, changes, rejected,
+        assistantMessage: `Não há o que mudar no plano.${why} Se não era isso, me diga o dia e a distância.`,
       };
     }
 
+    /*
+     * Proposta, não aviso de mudança feita: nada é gravado aqui. O plano só
+     * muda quando o atleta confirma, e aí o servidor refaz estas mesmas
+     * edições sobre o plano guardado (ADR-05, ver a rota do chat).
+     */
     const summary = changes.map(c => `• ${c}`).join("\n");
-    const caveat = rejected.length > 0 ? `\n\nNão apliquei: ${rejected.join(" ")}` : "";
-    return { updatedPlan: plan, assistantMessage: `Plano atualizado:\n${summary}${caveat}` };
+    const caveat = rejected.length > 0 ? `\n\nNão dá para: ${rejected.join(" ")}` : "";
+    return {
+      updatedPlan: plan, edits, changes, rejected,
+      assistantMessage: `Posso deixar assim:\n${summary}${caveat}`,
+    };
   } catch (err) {
     console.error("[AI] Failed to parse plan feedback JSON:", err, "\nRaw:", raw);
     return null;

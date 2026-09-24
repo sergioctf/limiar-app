@@ -1,18 +1,27 @@
 /**
- * POST /api/coach/weekly-plan/chat
- * Processa feedback do atleta sobre o plano semanal.
+ * POST /api/coach/weekly-plan/chat — conversar sobre a semana.
  *
- * Fase 3 — Coach Memory:
- * 1. Carrega perfil do atleta (athlete_notes) como contexto para a IA
- * 2. Salva mensagens em coach_chat_messages
- * 3. Extrai novas notas da conversa e salva em athlete_notes
- * 4. Persiste plano atualizado em coach_reports (como antes)
+ * Duas chamadas, e a diferença entre elas é a Fase 3 inteira:
  *
- * Body: { message, currentPlan, chatHistory, reportId? }
+ *   { message, currentPlan }      → **propõe**: traduz o pedido em edições
+ *                                   estruturadas, calcula o que mudaria e
+ *                                   devolve. Nada é salvo.
+ *   { apply: true, edits, week }  → **aplica**: refaz as edições sobre o plano
+ *                                   como ele está agora, e salva.
+ *
+ * Até 24/09 havia uma chamada só, que aplicava direto. O modelo nunca escreveu
+ * o plano — ele escolhe de um vocabulário fixo (`plan-edit.ts`) e o motor
+ * aplica —, mas o atleta descobria a mudança depois de feita. A ADR-05 diz o
+ * contrário: propõe, ele confirma.
+ *
+ * No aplicar, o servidor **não confia no plano que o navegador mostrou**: ele
+ * carrega o plano salvo e reaplica as edições ali. O que entra no banco é o que
+ * o motor produz a partir do estado real, não o que passou pela rede.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { processPlanFeedback, extractAthleteNotes } from "@/lib/ai";
+import { normalizePlanEdits, applyPlanEdits } from "@/lib/plan-edit";
 import { noteExpiry, stillValidFilter, weekStartsAt } from "@/lib/athlete-notes";
 import type { WeeklyPlanData, PlanChatMessage } from "@/types";
 
@@ -34,13 +43,26 @@ async function loadAthleteProfile(
 
     if (!data || data.length === 0) return null;
 
-    const lines = data.map((n: { category: string; content: string }) =>
-      `[${n.category}] ${n.content}`
-    );
-    return lines.join("\n");
+    return data.map((n: { category: string; content: string }) => `[${n.category}] ${n.content}`).join("\n");
   } catch {
     return null;
   }
+}
+
+/** O plano guardado para aquela semana — a única versão em que se confia. */
+async function loadStoredPlan(
+  admin: ReturnType<typeof createAdminClient>, userId: string, weekStart: string,
+): Promise<{ id: string; plan: WeeklyPlanData } | null> {
+  const { data } = await admin
+    .from("coach_reports").select("id, full_report")
+    .eq("user_id", userId).eq("period_type", "week").eq("period_start", weekStart)
+    .limit(1);
+  const row = data?.[0];
+  if (!row?.full_report) return null;
+  try {
+    const plan = JSON.parse(row.full_report as string) as WeeklyPlanData;
+    return Array.isArray(plan.days) ? { id: row.id as string, plan } : null;
+  } catch { return null; }
 }
 
 export async function POST(request: NextRequest) {
@@ -49,31 +71,65 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json().catch(() => null);
+  const admin = createAdminClient();
+
+  // ── Aplicar o que foi proposto e confirmado ───────────────────────────────
+  if (body?.apply === true) {
+    const week = typeof body.week === "string" ? body.week : null;
+    const edits = normalizePlanEdits(body.edits);
+    if (!week || edits.length === 0) {
+      return NextResponse.json({ error: "Nada para aplicar." }, { status: 400 });
+    }
+
+    const stored = await loadStoredPlan(admin, user.id, week);
+    if (!stored) return NextResponse.json({ error: "Plano desta semana não encontrado." }, { status: 404 });
+
+    const { plan, changes, rejected } = applyPlanEdits(stored.plan, edits);
+    if (changes.length === 0) {
+      return NextResponse.json({
+        applied: false,
+        assistantMessage:
+          `O plano mudou desde a proposta e não há mais o que aplicar.${rejected.length ? ` ${rejected.join(" ")}` : ""}`,
+      });
+    }
+
+    const { data: written, error } = await admin.from("coach_reports")
+      .update({ full_report: JSON.stringify(plan), updated_at: new Date().toISOString() })
+      .eq("id", stored.id).eq("user_id", user.id).select("id");
+
+    if (error || !written?.length) {
+      return NextResponse.json({
+        applied: false,
+        assistantMessage: "Não consegui salvar a mudança. Recarregue a página e tente de novo.",
+      });
+    }
+
+    return NextResponse.json({
+      applied: true,
+      updatedPlan: plan,
+      changes,
+      rejected,
+      assistantMessage: `Feito:\n${changes.map(c => `• ${c}`).join("\n")}`,
+    });
+  }
+
+  // ── Propor ────────────────────────────────────────────────────────────────
   if (!body?.message || !body?.currentPlan) {
     return NextResponse.json({ error: "Missing message or currentPlan" }, { status: 400 });
   }
 
-  const admin = createAdminClient();
+  const currentPlan = body.currentPlan as WeeklyPlanData;
   const reportId = body.reportId as string | undefined;
+  const athleteProfile = await loadAthleteProfile(admin, user.id, currentPlan?.week_start ?? null);
 
-  // ── 1. Load athlete profile for AI context ────────────────────────────────
-  const athleteProfile = await loadAthleteProfile(
-    admin, user.id, (body.currentPlan as WeeklyPlanData)?.week_start ?? null,
-  );
-
-  // ── 2. Recent runs for AI context ────────────────────────────────────────
   const { data: recentRuns } = await admin
-    .from("runs")
-    .select("*")
-    .eq("user_id", user.id)
-    .is("deleted_at", null)
-    .order("date", { ascending: false })
-    .limit(10);
+    .from("runs").select("*")
+    .eq("user_id", user.id).is("deleted_at", null)
+    .order("date", { ascending: false }).limit(10);
 
-  // ── 3. Process with AI ───────────────────────────────────────────────────
   const result = await processPlanFeedback(
     body.message as string,
-    body.currentPlan as WeeklyPlanData,
+    currentPlan,
     (body.chatHistory ?? []) as PlanChatMessage[],
     recentRuns ?? [],
     athleteProfile,
@@ -83,83 +139,44 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "AI processing failed" }, { status: 422 });
   }
 
-  // ── 4. Save messages to DB ────────────────────────────────────────────────
   try {
     await admin.from("coach_chat_messages").insert([
-      {
-        user_id:   user.id,
-        report_id: reportId ?? null,
-        role:      "user",
-        content:   body.message as string,
-      },
-      {
-        user_id:   user.id,
-        report_id: reportId ?? null,
-        role:      "assistant",
-        content:   result.assistantMessage,
-      },
+      { user_id: user.id, report_id: reportId ?? null, role: "user", content: body.message as string },
+      { user_id: user.id, report_id: reportId ?? null, role: "assistant", content: result.assistantMessage },
     ]);
   } catch {
-    // Non-critical — don't fail the request if messages table doesn't exist yet
+    // Não crítico — a conversa vale mesmo sem o registro.
   }
 
-  // ── 5. Extract & save athlete notes asynchronously ───────────────────────
-  // Fire-and-forget: don't await so we don't slow down the response.
-  //
-  // A conversa é sobre a semana deste plano: agenda e preferência ditas aqui
-  // vencem com ela (ver athlete-notes.ts — "essa segunda" não é toda segunda).
-  const chatWeek = (body.currentPlan as WeeklyPlanData)?.week_start ?? null;
+  /*
+   * A memória guarda o que ele disse, não o que vai ser aplicado: agenda e
+   * preferência ditas aqui valem só para a semana desta conversa.
+   */
+  const chatWeek = currentPlan?.week_start ?? null;
   extractAthleteNotes(body.message as string, result.assistantMessage)
     .then(async (notes) => {
       if (notes.length === 0) return;
       try {
         await admin.from("athlete_notes").insert(
           notes.map(n => ({
-            user_id:    user.id,
-            category:   n.category,
-            content:    n.content,
-            source:     "chat",
-            active:     true,
-            expires_at: noteExpiry(n.category, chatWeek),
-          }))
+            user_id: user.id, category: n.category, content: n.content,
+            source: "chat", active: true, expires_at: noteExpiry(n.category, chatWeek),
+          })),
         );
-      } catch {
-        // Graceful fallback if table doesn't exist yet
-      }
+      } catch { /* tabela ausente num projeto antigo */ }
     })
     .catch(() => {});
 
-  // ── 6. Persist, and confirm the write actually landed ────────────────────
-  //
-  // An UPDATE that matches no row returns no error. With a stale reportId the
-  // app told the athlete their plan had changed and silently kept the old one.
-  if (result.updatedPlan) {
-    const weekStart = (result.updatedPlan as WeeklyPlanData).week_start;
-    const patch = {
-      full_report: JSON.stringify(result.updatedPlan),
-      updated_at: new Date().toISOString(),
-    };
-
-    const write = reportId
-      ? admin.from("coach_reports").update(patch)
-          .eq("id", reportId).eq("user_id", user.id).select("id")
-      : admin.from("coach_reports").update(patch)
-          .eq("user_id", user.id).eq("period_type", "week").eq("period_start", weekStart)
-          .select("id");
-
-    const { data: written, error } = await write;
-
-    if (error || !written || written.length === 0) {
-      // Say so rather than claim a change that isn't in the database.
-      return NextResponse.json({
-        updatedPlan: null,
-        assistantMessage:
-          "Entendi o pedido, mas não consegui salvar a mudança no plano desta semana. " +
-          "Recarregue a página e tente de novo — se persistir, use Regenerar.",
-        saveFailed: true,
-      });
-    }
-  }
-
-  return NextResponse.json(result);
+  /*
+   * A proposta volta sem nada gravado. `edits` são as edições já normalizadas —
+   * é isso que o app devolve no "Aplicar", para o servidor refazer a conta
+   * sobre o plano guardado.
+   */
+  return NextResponse.json({
+    assistantMessage: result.assistantMessage,
+    edits: result.edits,
+    changes: result.changes,
+    rejected: result.rejected,
+    preview: result.updatedPlan,
+  });
 }

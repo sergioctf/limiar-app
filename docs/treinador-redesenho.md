@@ -185,3 +185,34 @@ Dizia *"cerca de 20 km em corridas de 8 km ou mais"* num plano de 6 + 3,5 + 11,5
 **Morreram:** a aba Relatórios (com a lista de relatórios, os recordes duplicados e os ciclos datados em 2028), `PlanAdherenceCard` (a adesão é leitura da IA), `CycleSummaryCard` e `PersonalRecords`.
 
 **Fica anotado:** a tabela `training_cycles` não é mais lida por ninguém.
+
+## Fase 3 — Conversa ✅ (24/09)
+
+### O que eu tinha entendido errado
+
+Eu descrevi o chat como "edita o plano por IA". **Não era isso.** O modelo nunca escreveu o plano: ele traduz o pedido para um vocabulário fixo de edições (`plan-edit.ts` — mudar distância, virar descanso, trocar dois dias, mover uma sessão, escalar a semana), o motor aplica, e a confirmação é escrita a partir do que de fato mudou. Isso já estava certo.
+
+O que estava errado era outra coisa, e menor: **ele aplicava sem perguntar.** O atleta lia sobre a mudança depois de ela já estar salva.
+
+### Propor e confirmar
+
+A rota do chat passou a ter duas chamadas:
+
+- `{ message, currentPlan }` → **propõe**. Calcula o que mudaria e devolve as edições. **Nada é gravado.**
+- `{ apply: true, week, edits }` → **aplica**. Carrega o plano **guardado**, refaz as mesmas edições ali e salva.
+
+O servidor não confia no plano que o navegador mostrou — o mesmo padrão da agenda da semana. Se o plano mudou entre a proposta e o "Aplicar", ele diz isso em vez de gravar em cima.
+
+Na tela, a resposta vira uma lista do que mudaria, com **Aplicar** e **Agora não**.
+
+### Uma identidade, várias portas
+
+| Onde | Botão | O que faz |
+|---|---|---|
+| no treino | **Perguntar sobre este treino** | abre a conversa com o assunto já posto |
+| na semana | **Conversar sobre esta semana** | propõe → você confirma |
+| na sugestão | **Aplicar / Manter como está** | já existia no conselheiro |
+
+O campo de texto também mudou de exemplo: era *"remove o treino de quinta, adiciona musculação"* — um comando — e virou *"na quinta não vou conseguir correr 8 km"*, que é como alguém fala com um treinador.
+
+**Testes:** 1.527 passando. Cinco novos garantem a promessa da fase: propor não grava, pergunta não vira proposta, aplicar sem edições é recusado, e o que é salvo sai do plano do banco — não do que passou pela rede.
