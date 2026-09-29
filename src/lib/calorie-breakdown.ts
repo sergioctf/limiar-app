@@ -6,6 +6,7 @@
  * presenting them identically is what makes an estimate look like a fact. So
  * every line carries how it was obtained, and the UI says so.
  */
+import { trainingSeconds } from "@/lib/run-time";
 import { activityCalories, toSportKey, SPORTS, type SportKey } from "@/lib/sports";
 
 export interface CalorieLine {
@@ -61,7 +62,7 @@ export function calorieBreakdown(
   for (const r of runs) {
     const measured = r.calories && r.calories > 0 ? r.calories : null;
     const kcal = measured ?? activityCalories(
-      { sport_type: "Run", duration_seconds: r.duration_seconds, calories: null }, weightKg,
+      { sport_type: "Run", duration_seconds: trainingSeconds({ ...r, duration_seconds: r.duration_seconds ?? 0 }), calories: null }, weightKg,
     );
     if (kcal <= 0) continue;
     lines.push({
@@ -70,7 +71,7 @@ export function calorieBreakdown(
       emoji:  SPORTS.corrida.emoji,
       kcal,
       source: measured ? "medido" : "estimado",
-      detail: r.distance_km ? `${r.distance_km} km` : minutes(r.duration_seconds),
+      detail: r.distance_km ? `${r.distance_km} km` : minutes(trainingSeconds({ ...r, duration_seconds: r.duration_seconds ?? 0 })),
     });
   }
 

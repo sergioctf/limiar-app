@@ -1,6 +1,7 @@
 /**
  * Monthly Report — aggregates a single month of runs into a printable summary.
  */
+import { trainingSeconds } from "@/lib/run-time";
 import type { Run } from "@/types";
 
 export interface MonthlyReportData {
@@ -59,7 +60,8 @@ export function buildMonthlyReport(runs: Run[], monthKey: string): MonthlyReport
 
   const totalKm = monthRuns.reduce((s, r) => s + r.distance_km, 0);
   const prevTotalKm = prevRuns.reduce((s, r) => s + r.distance_km, 0);
-  const durationSeconds = monthRuns.reduce((s, r) => s + r.duration_seconds, 0);
+  // O relógio esquecido ligado não vira "200 h treinadas no mês" — ver run-time.ts.
+  const durationSeconds = monthRuns.reduce((s, r) => s + trainingSeconds(r), 0);
   const elevationM = monthRuns.reduce((s, r) => s + (r.elevation_gain_m ?? 0), 0);
   const calories = monthRuns.reduce((s, r) => s + (r.calories ?? 0), 0);
 

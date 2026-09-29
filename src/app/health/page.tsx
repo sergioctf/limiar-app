@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/AppShell";
 import { HealthScreen, type HealthScreenData } from "@/components/health/screen/HealthScreen";
+import { HealthLocked } from "@/components/health/HealthLocked";
+import { hasHealthDevice } from "@/lib/health-access";
 import { bmrMifflin, energyForDay, calorieTarget, macrosFor, ageFromBirth, type CalorieGoal, type Sex } from "@/lib/nutrition";
 import { loadRecoveryInputs } from "@/lib/recovery-load";
 import {
@@ -17,6 +19,32 @@ export default async function HealthPage() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth");
+
+  /*
+    Sem relógio, não há Saúde — há um convite para conectar um.
+
+    A seção inteira é feita de medições (HRV, sono, repouso, energia). Quem não
+    conectou nada via um questionário manual no lugar dos sensores e um número
+    de "disposição" que vinha só da carga de treino. Decisão do Sérgio, 29/09,
+    depois de ver um usuário novo se perder exatamente aqui.
+  */
+  const admin = createAdminClient();
+  const [{ data: conn }, { data: whoop }, { data: tokenRow }, { count: measured }] = await Promise.all([
+    admin.from("intervals_connections").select("user_id").eq("user_id", user.id).maybeSingle(),
+    admin.from("whoop_connections").select("user_id").eq("user_id", user.id).maybeSingle(),
+    supabase.from("profiles").select("wellness_token").eq("id", user.id).maybeSingle(),
+    admin.from("wellness_data").select("date", { count: "exact", head: true })
+      .eq("user_id", user.id).neq("source", "checkin"),
+  ]);
+
+  if (!hasHealthDevice({
+    intervals: !!conn,
+    whoop: !!whoop,
+    wellnessToken: tokenRow?.wellness_token as string | null,
+    measuredRows: measured ?? 0,
+  })) {
+    return <AppShell><HealthLocked /></AppShell>;
+  }
 
   // Recovery comes from the loader the dashboard and the morning notification
   // use, so the number here is the number everywhere.

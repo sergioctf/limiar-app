@@ -85,12 +85,14 @@ function DayMarks({ day }: { day: MovementDay }) {
 }
 
 export function HomeContent({
-  dateLabel, today, recovery, week, tomorrow, attention, refreshKey,
+  dateLabel, today, recovery, healthConnected = true, week, tomorrow, attention, refreshKey,
   firstName, userName, username, isNewUser, overtraining, calorieDay, lastSyncAt, history,
 }: {
   dateLabel: string;
   today: Today;
   recovery: RecoveryToday | null;
+  /** Há relógio conectado: sem isso a Home não fala de disposição nem de cansaço. */
+  healthConnected?: boolean;
   week: WeekMovement;
   tomorrow: WeeklyPlanDay | null;
   attention: HomeAttention | null;
@@ -159,7 +161,7 @@ export function HomeContent({
    * swap. An empty "Como você está hoje" card says nothing and costs a screen.
    */
   const healthBlock = mainPending
-    || (recovery != null && (recovery.score != null || recovery.needsCheckin || recovery.offer != null));
+    || (healthConnected && recovery != null && (recovery.score != null || recovery.needsCheckin || recovery.offer != null));
 
   const offer = (
     <>
@@ -218,7 +220,7 @@ export function HomeContent({
         <Section title="Como você está hoje">
           <Card>
             <div className="space-y-3">
-              {recovery && recovery.score != null && (
+              {healthConnected && recovery && recovery.score != null && (
                 <Link
                   href="/health"
                   className="flex items-center gap-3 rounded-2xl border border-surface-700 bg-surface-900/40 p-3 transition-colors hover:border-surface-600 active:scale-[0.99]"
@@ -246,7 +248,7 @@ export function HomeContent({
               {/* The question before a demanding session, and the swap it can lead to. */}
               {mainPending ? <TodayCheckPanel>{offer}</TodayCheckPanel> : offer}
 
-              {recovery?.needsCheckin && today.state !== "done" && (
+              {healthConnected && recovery?.needsCheckin && today.state !== "done" && (
                 <Link
                   href="/health?checkin=1"
                   className="flex min-h-[44px] items-center justify-between rounded-xl bg-surface-700/30 px-3 text-sm text-surface-300 hover:text-surface-100"

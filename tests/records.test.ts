@@ -162,3 +162,45 @@ describe("todas as telas usam este motor", () => {
     expect(bestAt(buildRecords(runs, comSentinela), 5000)).toBe(1555);
   });
 });
+
+describe("o relógio esquecido ligado", () => {
+  /**
+   * Sete das 36 corridas que o Matheus importou do Strava vinham assim: 10,01
+   * km com 95 h de duração, 5,1 km com 719 h. O atleta esqueceu de encerrar a
+   * atividade, e a tabela de recordes tratava esse número como o tempo dele.
+   */
+  const esquecida = r({
+    id: "esquecida", date: "2025-07-31", distance_km: 10.01,
+    duration_seconds: 345_404,          // 95 h 56 min
+    moving_time_seconds: 3303,          // 55:03 — o que o Strava mostra
+    elapsed_time_seconds: 345_404,
+  });
+
+  it("não entra na tabela com o tempo absurdo", () => {
+    const recs = buildRecords([esquecida], []);
+    expect(bestAt(recs, 10000)).toBe(3303);
+  });
+
+  it("e ainda pode ser recorde, que era o que se perdia", () => {
+    // Antes, a corrida boa ficava atrás de um número de 95 horas e sumia da
+    // comparação; a marca real nunca aparecia em lugar nenhum.
+    const recs = buildRecords(
+      [esquecida, r({ id: "outra", date: "2026-01-10", distance_km: 10.02, duration_seconds: 3400 })],
+      [],
+    );
+    const dez = recs.find(x => x.distanceM === 10000)!;
+    expect(dez.best!.runId).toBe("esquecida");
+    expect(dez.second!.seconds).toBe(3400);
+  });
+
+  it("uma corrida normal continua sendo medida pelo relógio da prova", () => {
+    // Parou num semáforo: o tempo parado conta, porque um recorde é um esforço
+    // contínuo. Só o relógio claramente quebrado é descartado.
+    const recs = buildRecords(
+      [r({ id: "semaforo", date: "2026-02-02", distance_km: 10.05,
+           duration_seconds: 3600, moving_time_seconds: 3400, elapsed_time_seconds: 3600 })],
+      [],
+    );
+    expect(bestAt(recs, 10000)).toBe(3600);
+  });
+});

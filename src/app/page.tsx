@@ -13,6 +13,7 @@
 import { redirect } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/AppShell";
+import { hasHealthDevice } from "@/lib/health-access";
 import { DashboardWithRefresh } from "@/components/dashboard/DashboardWithRefresh";
 import { HomeContent, type HomeAttention } from "@/components/home/HomeContent";
 import { athleteDateStr, athleteDaysAgoStr, athleteMondayStr } from "@/lib/week";
@@ -57,8 +58,8 @@ export default async function HomePage() {
   const nextMonday = addDays(monday, 7);
   const admin = createAdminClient();
 
-  const [profile, plans, runs, activities, wellness, tests, body, feedback, sync, anyActivity, goals] = await Promise.all([
-    supabase.from("profiles").select("name, username").eq("id", user.id).maybeSingle(),
+  const [profile, plans, runs, activities, wellness, tests, body, feedback, sync, anyActivity, goals, icu, whoop] = await Promise.all([
+    supabase.from("profiles").select("name, username, wellness_token").eq("id", user.id).maybeSingle(),
     safe<{ period_start: string; full_report: string | null }>(admin.from("coach_reports").select("period_start, full_report")
       .eq("user_id", user.id).eq("period_type", "week").in("period_start", [monday, nextMonday])),
     /*
@@ -90,6 +91,10 @@ export default async function HomePage() {
     safe<{ id: string }>(supabase.from("activities").select("id").eq("user_id", user.id).is("deleted_at", null).limit(1)),
     safe<Goal>(supabase.from("goals").select("*").eq("user_id", user.id).in("status", ["active", "upcoming"])
       .or(`race_date.is.null,race_date.gt.${today}`).order("race_date", { ascending: true }).limit(3)),
+    // Saúde é uma seção de medições: sem aparelho, a Home não fala de disposição
+    // nem de cansaço (Sérgio, 29/09) — ver `health-access.ts`.
+    admin.from("intervals_connections").select("user_id").eq("user_id", user.id).maybeSingle(),
+    admin.from("whoop_connections").select("user_id").eq("user_id", user.id).maybeSingle(),
   ]);
 
   const plan = parsePlan(plans.find(r => r.period_start === monday)?.full_report);
@@ -109,6 +114,20 @@ export default async function HomePage() {
     wellness: wellness.filter(w => w.date >= monday), weightKg,
   });
   const recovery = await loadRecoveryInputs(supabase, user.id, now).then(r => r.recovery, () => null);
+
+  /*
+    Disposição só para quem mede disposição.
+
+    Sem relógio, o número vinha da carga de treino com cara de leitura do
+    corpo, e a Home convidava para um check-in manual que substituía o sensor.
+    Quem não conectou nada vê o treino, e só.
+  */
+  const healthConnected = hasHealthDevice({
+    intervals: !!icu.data,
+    whoop: !!whoop.data,
+    wellnessToken: (profile.data?.wellness_token as string | null) ?? null,
+    measuredRows: wellness.filter(w => (w as { source?: string }).source !== "checkin").length,
+  });
 
   // The one alert that costs the athlete something if ignored.
   const metrics = latestTest
@@ -156,7 +175,8 @@ export default async function HomePage() {
         <HomeContent
           dateLabel={dateLabel}
           today={todayView}
-          recovery={recovery}
+          recovery={healthConnected ? recovery : null}
+          healthConnected={healthConnected}
           week={week}
           tomorrow={tomorrow}
           attention={attention}

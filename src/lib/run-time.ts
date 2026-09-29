@@ -112,4 +112,23 @@ export function looksLikeForgottenWatch(run: RunTimes): boolean {
   return mv > 0 && el > mv * 4 && el - mv > 20 * 60;
 }
 
+/**
+ * Quanto tempo o treino durou — o relógio que se pode somar sem medo.
+ *
+ * É o `elapsed`, que é a resposta honesta para "quanto tempo você ficou fora",
+ * **exceto** quando o relógio ficou ligado depois do treino. Um atleta novo
+ * trouxe do Strava sete corridas assim, e elas não eram sutis: 10,01 km com
+ * 95 h 56 min de duração, 5,1 km com 719 h. Somar isso num total mensal, numa
+ * estimativa de calorias ou num recorde não produz um número impreciso —
+ * produz um número absurdo, e um número absurdo na tela destrói a confiança em
+ * todos os outros.
+ *
+ * Nesses casos vale o tempo em movimento, que é o que o próprio Strava mostra
+ * como a duração da atividade. Não é um palpite: é a única evidência que
+ * sobrou de quanto tempo a pessoa de fato treinou.
+ */
+export function trainingSeconds(run: RunTimes): number {
+  return looksLikeForgottenWatch(run) ? movingSeconds(run) : elapsedSeconds(run);
+}
+
 export type { Run };

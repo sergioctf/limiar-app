@@ -170,10 +170,23 @@ export function toSportKey(raw: string | null | undefined): SportKey | null {
     return "ciclismo";
   }
 
-  // Força — strength & HIIT bucket
+  /*
+    Força — musculação e HIIT.
+
+    "Workout" **não** entra aqui, e essa é a correção de 29/09.
+
+    No Strava, `Workout` é o balde do que ele não modela: um mergulho, uma aula,
+    uma sessão em casa. O Sérgio registrou um mergulho e o app mostrou
+    "Musculação · 15 min". Não era só o rótulo errado na tela — o dia de
+    musculação do plano passa a contar como feito (`day-status` casa por
+    esporte), e o volume de força da semana ganha uma sessão que não existiu.
+
+    Sem saber o que foi, "outro" é a resposta honesta: conta como treino, conta
+    calorias, e não mente sobre qual.
+  */
   if (
     t.includes("weight") || t.includes("strength") || t.includes("gym") ||
-    t.includes("workout") || t.includes("crossfit") ||
+    t.includes("musculac") || t.includes("musculaç") || t.includes("crossfit") ||
     // Strava sends the full name "HighIntensityIntervalTraining"; matching only
     // the acronym left every HIIT session unclassified, so it counted towards
     // no sport at all.
@@ -209,6 +222,10 @@ export function toSportKey(raw: string | null | undefined): SportKey | null {
   if (t.includes("dance") || t.includes("danc")) return "danca";
   if (t.includes("skate")) return "skate";
   if (t.includes("surf") || t.includes("windsurf") || t.includes("kitesurf")) return "surf";
+  // Mergulho não é natação: o Strava manda "Workout" ou "Scuba", e chamar isso
+  // de treino de natação colocaria metros que ninguém nadou no volume.
+  if (t.includes("scuba") || t.includes("snorkel") || t.includes("dive")
+      || t.includes("mergulh")) return "outro";
   if (t.includes("inlineskate") || t.includes("patins")) return "patins";
   if (t.includes("functional") || t.includes("funcional")) return "funcional";
 

@@ -23,7 +23,7 @@ import {
   rankEfforts, activityStandsInFor, EFFORT_DISTANCES,
   type RankedEffort, type DistanceRecord,
 } from "@/lib/best-efforts";
-import { elapsedSeconds } from "@/lib/run-time";
+import { trainingSeconds } from "@/lib/run-time";
 
 /** The run fields records need. Deliberately narrow so callers can `select` little. */
 export interface RunForRecords {
@@ -93,7 +93,20 @@ export function buildCandidates(
     for (const r of runs) {
       if (measured.has(`${r.id}|${m}`)) continue;
       if (!activityStandsInFor(r.distance_km, m)) continue;
-      const seconds = elapsedSeconds(r);
+      /*
+        O relógio da prova, mas só quando ele descreve a prova.
+
+        `looksLikeForgottenWatch` existia desde sempre para isto — o próprio
+        comentário dele dizia "um guarda para exibição **e recordes**" — e os
+        recordes nunca o consultaram. O resultado apareceu com o Matheus, que
+        importou do Strava sete corridas com o relógio esquecido ligado: os
+        10,01 km dele entravam na tabela como 95 h 56 min, e os 10 km de
+        2025-07-10 como 119 h 32 min. Não eram apenas feios: enquanto o
+        substituto carrega um tempo absurdo, a marca real daquela corrida
+        (55:03 em movimento, que é o que o Strava mostra) fica invisível — e
+        teria sido o recorde se fosse a melhor.
+      */
+      const seconds = trainingSeconds(r);
       if (!seconds || seconds <= 0) continue;
       out.push({
         distanceM: m, label, seconds,

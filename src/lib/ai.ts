@@ -10,6 +10,7 @@
  * o que comporta centenas de corridas confortavelmente.
  */
 
+import { trainingSeconds } from "@/lib/run-time";
 import type { Run, WeeklyPlanData, WeeklyPlanDay, PlanDayType, StructuredWorkout, PlanChatMessage, AthleteNoteCategory, MacroPlanData, MacroPlanWeek, MacroRaceType } from "@/types";
 import { secondsToPaceString, secondsToReadable } from "@/lib/utils";
 import { SPORTS, ALL_SPORTS, DEFAULT_SPORTS, toSportKey, type SportKey, type PrimarySport } from "@/lib/sports";
@@ -262,7 +263,7 @@ Estrutura: 1) balanço da semana vs histórico, 2) tendência de evolução iden
 `.trim();
 
   const totalKm   = weekRuns.reduce((s, r) => s + r.distance_km, 0);
-  const totalTime = weekRuns.reduce((s, r) => s + r.duration_seconds, 0);
+  const totalTime = weekRuns.reduce((s, r) => s + trainingSeconds(r), 0);
   const hrRuns    = weekRuns.filter((r) => r.avg_hr);
   const avgHR     = hrRuns.length
     ? Math.round(hrRuns.reduce((s, r) => s + (r.avg_hr ?? 0), 0) / hrRuns.length)
