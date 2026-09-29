@@ -85,8 +85,15 @@ export interface AdvisorInput {
     /** How long this movement has been in the plan, in weeks. */
     weeksInPlan: number;
   }>;
-  /** Strength sessions prescribed vs. logged over the last 3 weeks. */
-  strengthLogged: { prescribed: number; logged: number };
+  /**
+   * Sessões de força prescritas, registradas e **feitas**, nas últimas 3 semanas.
+   *
+   * `logged` conta dias com série, repetição e carga anotadas; `attended` conta
+   * dias com musculação registrada de qualquer forma, inclusive a que veio do
+   * relógio. São coisas diferentes, e tratá-las como uma só fazia o conselheiro
+   * dizer "nenhum treino de força registrado" para quem treinou seis vezes.
+   */
+  strengthLogged: { prescribed: number; logged: number; attended?: number };
   nextRace:      Race | null;
   /** Fraction of planned sessions completed over recent weeks (0–1), or null. */
   adherence:     number | null;
@@ -453,20 +460,43 @@ export function analyzeTraining(input: AdvisorInput): AdvisorFinding[] {
       });
     }
 
-    // 9. Prescribed but never logged — progression has nothing to stand on.
+    /*
+      9. Prescrito e sem registro de séries — a progressão não tem em que se apoiar.
+
+      Duas situações muito diferentes, que antes recebiam o mesmo texto:
+
+      • **Foi à academia e não anotou.** A sessão existe, o relógio a registrou,
+        a agenda a mostra como feita. Dizer "nenhum treino de força registrado"
+        aqui é o app contradizendo a própria tela ao lado — e soa como acusação.
+      • **Não foi.** Aí sim o assunto é a sessão, não a planilha.
+    */
     if (input.strengthLogged.prescribed >= 6 && input.strengthLogged.logged === 0) {
-      out.push({
-        key: "sem_registro_forca",
-        area: "forca",
-        severity: "media",
-        title: "Nenhum treino de força registrado",
-        evidence: `${input.strengthLogged.prescribed} sessões prescritas nas últimas 3 semanas, nenhuma registrada.`,
-        proposal: "Registre pelo menos as séries do exercício principal — leva 30 segundos no fim da sessão.",
-        rationale:
-          "Sem registro, a carga da próxima semana é chute. Com registro, o app aplica progressão dupla de verdade: " +
-          "sobe repetição até o topo da faixa, depois sobe peso, e recua quando você trava.",
-        patch: null,
-      });
+      const attended = input.strengthLogged.attended ?? 0;
+      out.push(attended > 0
+        ? {
+          key: "sem_series_forca",
+          area: "forca",
+          severity: "baixa",
+          title: "Suas sessões de musculação estão registradas",
+          evidence: `${attended} ${attended === 1 ? "sessão registrada" : "sessões registradas"} nas últimas 3 semanas, nenhuma com séries e cargas.`,
+          proposal: "Anote as séries do exercício principal — leva 30 segundos no fim da sessão e é o que liga a progressão.",
+          rationale:
+            "O treino contabiliza como feito de qualquer jeito. O que falta é a carga: sem ela, a semana seguinte " +
+            "repete o mesmo peso por falta de informação, em vez de subir repetição até o topo da faixa e então o peso.",
+          patch: null,
+        }
+        : {
+          key: "sem_registro_forca",
+          area: "forca",
+          severity: "media",
+          title: "Nenhum treino de força registrado",
+          evidence: `${input.strengthLogged.prescribed} sessões prescritas nas últimas 3 semanas, nenhuma registrada.`,
+          proposal: "Registre pelo menos as séries do exercício principal — leva 30 segundos no fim da sessão.",
+          rationale:
+            "Sem registro, a carga da próxima semana é chute. Com registro, o app aplica progressão dupla de verdade: " +
+            "sobe repetição até o topo da faixa, depois sobe peso, e recua quando você trava.",
+          patch: null,
+        });
     }
   }
 

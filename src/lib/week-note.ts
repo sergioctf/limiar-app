@@ -70,3 +70,93 @@ export function fallbackWeekNote(f: WeekNoteFacts): string {
   return `${km(f.weeklyKm)} de corrida esta semana${long}. ` +
     "Se as pernas chegarem pesadas no treino forte, reduza o ritmo antes de reduzir a distância.";
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * E a trava que impede o recado de envelhecer.
+ *
+ * O recado é escrito quando a semana nasce. Depois disso o atleta move a
+ * corrida de dia, adapta a sessão, reorganiza a semana inteira ou pede uma
+ * mudança no chat — seis rotas escrevem o plano — e o texto continua descrevendo
+ * a semana que existia antes.
+ *
+ * Foi o que apareceu na tela do Sérgio em 29/09: o recado falava de "5,5 km na
+ * segunda" com a corrida já na terça. O número estava certo, o dia não, e a
+ * `noteRespectsPlan` acima só olhava números.
+ *
+ * A regra nova é estreita de propósito: só reprova quando o texto **amarra uma
+ * distância a um dia** e o plano discorda. Citar um dia sem número continua
+ * valendo ("mantenha o domingo livre"), porque isso não é uma afirmação sobre a
+ * sessão daquele dia.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+const DAY_WORDS: Array<{ re: string; day: string }> = [
+  { re: "segunda", day: "Mon" },
+  { re: "ter[çc]a", day: "Tue" },
+  { re: "quarta",  day: "Wed" },
+  { re: "quinta",  day: "Thu" },
+  { re: "sexta",   day: "Fri" },
+  { re: "s[áa]bado", day: "Sat" },
+  { re: "domingo", day: "Sun" },
+];
+
+export interface NoteDay {
+  day: string;
+  distanceKm: number | null;
+}
+
+/** Nenhuma distância citada junto de um dia contradiz o plano? */
+export function noteMatchesDays(note: string, days: NoteDay[]): boolean {
+  const kmOf = new Map(days.map(d => [d.day, d.distanceKm]));
+
+  for (const { re, day } of DAY_WORDS) {
+    // "5,5 km na segunda" e "na segunda, 5,5 km" — os dois sentidos, no mesmo
+    // período (o ponto final corta o alcance, para não casar frases vizinhas).
+    const patterns = [
+      new RegExp(String.raw`(\d+(?:[.,]\d+)?)\s*(?:km|quil[ôo]metros?)[^.!?]{0,40}?\b(?:${re})`, "gi"),
+      new RegExp(String.raw`\b(?:${re})\b[^.!?]{0,40}?(\d+(?:[.,]\d+)?)\s*(?:km|quil[ôo]metros?)`, "gi"),
+    ];
+    for (const p of patterns) {
+      for (const m of Array.from(note.matchAll(p))) {
+        const cited = Number(m[1].replace(",", "."));
+        const planned = kmOf.get(day);
+        if (planned == null || Math.abs(planned - cited) > 0.5) return false;
+      }
+    }
+  }
+  return true;
+}
+
+/**
+ * O plano com o recado conferido — e trocado pelo do motor quando envelheceu.
+ *
+ * Roda na **leitura**, não na escrita, e é por isso que funciona: são seis
+ * rotas que mexem no plano (mover, adaptar, reorganizar, trocar o treino de
+ * hoje, o chat, e as duas da musculação), e cada uma teria que lembrar de
+ * invalidar o texto. Aqui é um lugar só, e nenhuma rota precisa saber que o
+ * recado existe.
+ */
+export function withCheckedNote<T extends {
+  ai_message?: string;
+  days: Array<{ day: string; distance_km?: number; label?: string; type?: string }>;
+  cycle?: { week: number; isRecovery: boolean } | null;
+}>(plan: T): T {
+  const note = plan.ai_message;
+  if (!note) return plan;
+
+  const days: NoteDay[] = plan.days.map(d => ({ day: d.day, distanceKm: d.distance_km ?? null }));
+  const sessions = plan.days
+    .filter(d => (d.distance_km ?? 0) > 0)
+    .map(d => ({ label: d.label ?? "Corrida", km: d.distance_km as number }));
+  const weeklyKm = Math.round(sessions.reduce((s, x) => s + x.km, 0) * 10) / 10;
+
+  const facts: WeekNoteFacts = {
+    weeklyKm,
+    isRecovery: plan.cycle?.isRecovery ?? false,
+    cycleWeek: plan.cycle?.week ?? null,
+    sessions,
+    previousPlannedKm: null,
+  };
+
+  const ok = noteRespectsPlan(note, allowedWeekNumbers(facts)) && noteMatchesDays(note, days);
+  return ok ? plan : { ...plan, ai_message: fallbackWeekNote(facts) };
+}

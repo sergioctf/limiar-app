@@ -11,7 +11,8 @@
  * agenda passou a mostrar o realizado, verde também quer dizer "registrado" —
  * e uma cor que significa duas coisas não significa nenhuma.
  */
-import { MessageCircle } from "lucide-react";
+import { useState } from "react";
+import { CalendarDays, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { SPORTS, isRunSession } from "@/lib/sports";
 import { typeStyle, structureTitle, structureSummary } from "@/components/coach/week/tone";
@@ -22,12 +23,14 @@ import { MoveSessionControl } from "@/components/coach/MoveSessionControl";
 import { AdaptSessionControl } from "@/components/today/AdaptSession";
 import { ShoeHint } from "@/components/coach/ShoeHint";
 import type { DoneItem } from "@/lib/day-status";
+import { ScheduleTestSheet } from "@/components/coach/ScheduleTestSheet";
+import type { PlannedTest } from "@/lib/planned-test";
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 
 const km = (n: number) => `${Number(n.toFixed(1)).toString().replace(".", ",")} km`;
 
 export function RunCard({
-  session, week, canAdapt, done, onPlanChanged, onDayChanged, onAsk,
+  session, week, canAdapt, done, plannedTest, onPlanChanged, onDayChanged, onAsk, onTestChanged,
 }: {
   session: WeeklyPlanDay;
   week: string;
@@ -38,8 +41,13 @@ export function RunCard({
   onPlanChanged: (plan: WeeklyPlanData) => void;
   onDayChanged: (day: WeeklyPlanDay) => void;
   onAsk: (session: WeeklyPlanDay) => void;
+  /** O teste marcado, quando é ele que ocupa este dia. */
+  plannedTest?: PlannedTest | null;
+  onTestChanged?: (test: PlannedTest | null) => void;
 }) {
   const tone = typeStyle(session.type);
+  const isTest = session.type === "test" && !!plannedTest;
+  const [rescheduling, setRescheduling] = useState(false);
 
   return (
     <div className="space-y-3 rounded-2xl border border-surface-700 bg-surface-800/60 p-4">
@@ -125,8 +133,20 @@ export function RunCard({
         espalhadas em alturas diferentes conforme o dia.
       */}
       <div className="flex flex-wrap items-center gap-2 border-t border-surface-700/50 pt-2.5">
-        {/* Só uma corrida pode ser movida como "a corrida". */}
-        {isRunSession(session) && (
+        {/*
+          O teste não se move como as outras sessões: ele é uma marcação, não
+          uma linha do plano. "Mover de dia" chamaria o motor para mexer numa
+          corrida que já não está ali — o que vale aqui é remarcar.
+        */}
+        {isTest ? (
+          <button
+            type="button"
+            onClick={() => setRescheduling(true)}
+            className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-surface-600 px-2.5 text-xs font-medium text-surface-300 transition-colors hover:border-brand-500/60 hover:text-brand-300"
+          >
+            <CalendarDays className="h-3.5 w-3.5" /> Remarcar teste
+          </button>
+        ) : isRunSession(session) && (
           <MoveSessionControl
             week={week}
             day={session.day}
@@ -135,7 +155,7 @@ export function RunCard({
             onMoved={onPlanChanged}
           />
         )}
-        {canAdapt && <AdaptSessionControl day={session} onChanged={onDayChanged} compact />}
+        {!isTest && canAdapt && <AdaptSessionControl day={session} onChanged={onDayChanged} compact />}
         {/*
           A mesma conversa, com o assunto já posto. "Uma identidade, várias
           portas": o treinador é um só, e cada porta diz o que acontece ao
@@ -149,6 +169,14 @@ export function RunCard({
           <MessageCircle className="h-3.5 w-3.5" /> Perguntar
         </button>
       </div>
+
+      {rescheduling && (
+        <ScheduleTestSheet
+          current={plannedTest ?? null}
+          onClose={() => setRescheduling(false)}
+          onSaved={t => onTestChanged?.(t)}
+        />
+      )}
     </div>
   );
 }

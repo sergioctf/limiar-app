@@ -15,6 +15,7 @@
  */
 import { useState } from "react";
 import Link from "next/link";
+import { TestDayQuestion } from "@/components/coach/TestDayQuestion";
 import { compareSessions, executionDiffers, parseProposal, parsedLabel, VERDICT_LABEL } from "@/lib/session-adapt";
 import {
   EFFORTS, EXECUTIONS, VERY_HARD, contextQuestion, evaluateRunFeedback, type Execution,
@@ -122,6 +123,9 @@ export function RunFeedbackForm({
           {item.run.distance_km.toFixed(1).replace(".", ",")} km{item.run.avg_hr ? ` · FC média ${item.run.avg_hr} bpm` : ""}
         </p>
       </div>
+
+      {/* No dia marcado, a pergunta vem antes de tudo — ver TestDayQuestion. */}
+      {editing && <TestDayQuestion runDate={item.run.date} />}
 
       {editing ? (
         <>

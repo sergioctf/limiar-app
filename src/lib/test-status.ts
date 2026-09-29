@@ -115,14 +115,21 @@ export function testStatus(input: PerformanceTest[] | PerformanceTest | null | u
   }
 
   if (state === "aging") {
+    /*
+      Sem sermão.
+
+      O aviso explicava em três linhas por que dois meses mudam o
+      condicionamento e como treinar abaixo do que se aguenta "custa evolução em
+      silêncio". Quem já fez um teste sabe para que ele serve; o que a pessoa
+      precisa aqui é da data e do botão (Sérgio, 29/09). O texto longo continua
+      valendo para o estado `stale`, que é quando o plano realmente está
+      prescrevendo ritmo errado.
+    */
     return {
       state, latest, weeksSince: weeks, hasHr, unlocks,
       nudge: "soft",
       headline: `Teste de ${weeks} semanas atrás`,
-      detail:
-        "Já dá para refazer. Dois meses de treino costumam mudar o condicionamento o " +
-        "suficiente para os alvos ficarem lentos — e treinar abaixo do que você aguenta " +
-        "custa evolução em silêncio.",
+      detail: "",
     };
   }
 

@@ -9,7 +9,7 @@
  * não garantia — a garantia tem que estar no código.
  */
 import { describe, expect, it } from "vitest";
-import { allowedWeekNumbers, fallbackWeekNote, noteRespectsPlan, type WeekNoteFacts } from "@/lib/week-note";
+import { allowedWeekNumbers, fallbackWeekNote, noteMatchesDays, noteRespectsPlan, withCheckedNote, type WeekNoteFacts } from "@/lib/week-note";
 
 const recovery: WeekNoteFacts = {
   weeklyKm: 14,
@@ -75,5 +75,70 @@ describe("quando o recado da IA não serve, o motor escreve o seu", () => {
     expect(note).toContain("21 km");
     expect(note).toContain("11,5 km");
     expect(noteRespectsPlan(note, allowedWeekNumbers(normal))).toBe(true);
+  });
+});
+
+describe("o recado envelhece quando o plano muda", () => {
+  const days = [
+    { day: "Mon", distanceKm: null },
+    { day: "Tue", distanceKm: 5.5 },
+    { day: "Thu", distanceKm: 8 },
+    { day: "Sat", distanceKm: 12 },
+  ];
+
+  it("reprova a distância amarrada ao dia errado", () => {
+    // O caso real: a corrida foi movida para terça e o texto continuou na segunda.
+    expect(noteMatchesDays("Comece leve: 5,5 km na segunda para soltar as pernas.", days)).toBe(false);
+  });
+
+  it("aprova quando o dia e a distância batem", () => {
+    expect(noteMatchesDays("Comece leve: 5,5 km na terça para soltar as pernas.", days)).toBe(true);
+  });
+
+  it("funciona nos dois sentidos da frase", () => {
+    expect(noteMatchesDays("Na terça, 5,5 km de rodagem.", days)).toBe(true);
+    expect(noteMatchesDays("Na quinta, 5,5 km de rodagem.", days)).toBe(false);
+  });
+
+  it("citar um dia sem número continua valendo", () => {
+    // "Mantenha o domingo livre" é uma frase legítima sobre um dia de descanso.
+    expect(noteMatchesDays("Mantenha o domingo livre e chegue inteiro no sábado.", days)).toBe(true);
+  });
+
+  it("não atravessa o ponto final", () => {
+    // Duas frases independentes: o número de uma não descreve o dia da outra.
+    expect(noteMatchesDays("O longão é no sábado. São 12 km no total.", days)).toBe(true);
+  });
+
+  it("o plano sem corrida naquele dia também reprova", () => {
+    expect(noteMatchesDays("Segunda tem 6 km fáceis.", days)).toBe(false);
+  });
+});
+
+describe("withCheckedNote", () => {
+  const plan = {
+    ai_message: "Comece leve: 5,5 km na segunda para soltar as pernas.",
+    days: [
+      { day: "Mon", type: "rest", label: "Descanso" },
+      { day: "Tue", type: "easy", label: "Rodagem leve", distance_km: 5.5 },
+      { day: "Sat", type: "long_run", label: "Longão", distance_km: 12 },
+    ],
+    cycle: { week: 2, isRecovery: false },
+  };
+
+  it("troca o recado velho pelo do motor", () => {
+    const out = withCheckedNote(plan);
+    expect(out.ai_message).not.toContain("segunda");
+    expect(out.ai_message).toContain("17,5 km");
+  });
+
+  it("deixa em paz o recado que ainda descreve a semana", () => {
+    const ok = { ...plan, ai_message: "Longão de 12 km no sábado é a sessão principal." };
+    expect(withCheckedNote(ok).ai_message).toBe(ok.ai_message);
+  });
+
+  it("sem recado, nada a fazer", () => {
+    const sem = { ...plan, ai_message: undefined };
+    expect(withCheckedNote(sem).ai_message).toBeUndefined();
   });
 });

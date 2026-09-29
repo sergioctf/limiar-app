@@ -18,7 +18,7 @@ import { prefsForAgenda } from "@/lib/week-fit";
 import { computeTrainingLoad } from "@/lib/training-load";
 import { planFingerprint, planStaleness, type Staleness } from "@/lib/plan-freshness";
 import { readWeek, type ShortfallReason, type WeekReading } from "@/lib/week-reading";
-import { allowedWeekNumbers, fallbackWeekNote, noteRespectsPlan, type WeekNoteFacts } from "@/lib/week-note";
+import { allowedWeekNumbers, fallbackWeekNote, noteRespectsPlan, withCheckedNote, type WeekNoteFacts } from "@/lib/week-note";
 import { stillValidFilter, weekStartsAt } from "@/lib/athlete-notes";
 import type { RunContext } from "@/lib/run-feedback";
 import type { WeeklyPlanData, WeeklyPlanDay, Run, TrainingPrefs } from "@/types";
@@ -496,7 +496,8 @@ export async function loadWeeklyPlan(
     const parsed = JSON.parse(row.full_report) as WeeklyPlanData;
     if (!Array.isArray(parsed.days) || parsed.days.length === 0) return { plan: null, reportId: row.id };
     parsed.days = normalizeWeeklyPlanDays(parsed.days);
-    return { plan: parsed, reportId: row.id };
+    // O recado da semana envelhece quando o plano muda — ver week-note.ts.
+    return { plan: withCheckedNote(parsed), reportId: row.id };
   } catch {
     return { plan: null, reportId: row.id };   // legacy text-format report
   }

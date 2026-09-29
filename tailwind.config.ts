@@ -5,6 +5,19 @@ const config: Config = {
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+    /*
+      `src/lib` também escreve classe.
+
+      `session-colors.ts` guarda a cor de cada tipo de sessão — é de propósito
+      que ela more numa lib, para a Hoje e o Treinador falarem a mesma língua.
+      Só que o Tailwind nunca olhou essa pasta: as cores só funcionavam por
+      coincidência, quando a mesma classe aparecia em algum componente.
+
+      A que não aparecia era a do teste: `bg-pink-500` nunca entrou no CSS, e a
+      sessão de teste ficava sem cor na agenda. Encontrado em 29/09, quando o
+      teste de 3 km passou a aparecer na semana.
+    */
+    "./src/lib/**/*.{js,ts}",
   ],
   theme: {
     extend: {

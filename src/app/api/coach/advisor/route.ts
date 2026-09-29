@@ -11,6 +11,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { toSportKey } from "@/lib/sports";
 import { testStatus, TEST_BENEFITS, TEST_PROTOCOL } from "@/lib/test-status";
 import { reconcileSuggestions, dedupeForDisplay } from "@/lib/advisor-inbox";
 import {
@@ -164,9 +165,23 @@ export async function GET() {
   const threeWeeks = new Date(); threeWeeks.setDate(threeWeeks.getDate() - 21);
   const threeWeeksStr = threeWeeks.toISOString().slice(0, 10);
   const loggedDays = new Set(strengthRows.filter(r => r.date >= threeWeeksStr).map(r => r.date));
+  /*
+    Treinar e registrar séries são duas coisas, e o conselheiro confundia as duas.
+
+    A agenda reconhece a musculação que chega do relógio; este cálculo olhava só
+    os registros de série, repetição e carga e anunciava "nenhum treino de força
+    registrado" para quem tinha ido à academia seis vezes. As duas telas
+    discordavam sobre o mesmo atleta (Sérgio, 29/09).
+  */
+  const liftedDays = new Set(
+    activities
+      .filter(a => a.date >= threeWeeksStr && toSportKey(a.sport_type) === "musculacao")
+      .map(a => a.date),
+  );
   const strengthLogged = {
     prescribed: (strengthPrefs?.days.length ?? 0) * 3,
     logged: loggedDays.size,
+    attended: liftedDays.size,
   };
 
   // Only weeks that actually had something scheduled in the past count.

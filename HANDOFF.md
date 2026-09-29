@@ -22,7 +22,7 @@
 2. **O deploy é feito da máquina local**, com `npx vercel deploy --prod` na pasta. Não há CI, não há deploy a partir do GitHub. O que está em produção é o que estava no disco de Sérgio no momento do último deploy.
 3. **O banco não é reconstruível a partir do repositório.** As tabelas `activities`, `performance_tests` e `races` são usadas intensamente pelo código, mas **não existe DDL delas em nenhum `.sql`**. Foram criadas por rotas `/api/admin/*` que já foram apagadas. Além disso, as migrations 002–027 foram aplicadas **à mão** no SQL Editor do Supabase (não existe runner nem `DATABASE_URL`), e há infraestrutura que vive só no Supabase (job `pg_cron` e segredo no Vault — ver seção 18).
 4. **Possível vazamento de dados entre usuários (crítico, a confirmar no banco).** A migration `002_social.sql` cria a policy `"Authenticated can search profiles"` com `for select using (auth.role() = 'authenticated')`. RLS filtra linhas, não colunas: qualquer usuário logado pode, com a anon key, ler **todas as colunas de todos os perfis** — e-mail, data de nascimento, altura, sexo e o `wellness_token`, que autentica o endpoint público `/api/ingest/wellness`, permitindo gravar dados de saúde no nome de outra pessoa. Não verifiquei se a policy ainda existe em produção. Verifique com `select * from pg_policies where tablename = 'profiles';`. No mesmo nível de risco: **o webhook do Strava aceita eventos forjados** e um POST com `aspect_type: "delete"` apaga (soft delete) a corrida de qualquer usuário pelo ID da atividade (dívida A9).
-5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.574 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
+5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.594 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
 6. **Há usuários reais.** São 7 contas por convite (Sérgio e amigos). O plano da semana é lido e seguido por pessoas. Regra de ouro que custou caro: **nunca reescrever uma semana que já começou** (ver ADR sobre congelamento de semana).
 
 ---
@@ -1333,6 +1333,19 @@ Três bugs vistos no app de um usuário novo (Matheus Augusto, entrou 26/09) mai
 - **Varredura:** duas corridas do Pedro com números impossíveis (distância zero; 0,27 km a 1:59/km) — anotadas, não quebram nada. Nenhum outro dado fora de faixa.
 - **1.574 testes** (14 novos em `records`, `strava-sport-mapping` e `health-access`).
 
+## 6.45 Marcar o teste de 3 km, e o fim de duas contradições ✅ (novo, 29/09)
+
+Detalhes em **`docs/teste-marcado-e-contradicoes.md`**.
+
+- **O teste passou a existir antes de acontecer.** "Registrar novo teste" (um formulário para depois de correr) virou **"Marcar teste de 3 km"**: calendário, e o teste entra na semana no mesmo instante. `src/lib/planned-test.ts` + `ScheduleTestSheet` + `POST/GET/PATCH/DELETE /api/coach/planned-test` + migration **037** (`planned_tests`, índice único parcial: um agendamento aberto por atleta, RLS por dono).
+- **Como ele entra na semana:** camada por cima do plano guardado — o motor não roda de novo e o volume não é recalculado. São 6 km (2 + 3 + 1) ocupando o lugar da corrida do dia, que na prática é o treino de tiro; a musculação do dia continua.
+- **No dia marcado**, o check-in do treino pergunta "Você realizou o teste de 3 km hoje?" — *Fiz* leva ao formulário de calibração, *Não fiz* remarca e o check-in segue normal (`TestDayQuestion`). No card, o teste oferece **Remarcar teste** no lugar de "Mover de dia".
+- **O aviso de teste velho perdeu o sermão** de três linhas no estado `aging`; ficou a data e o botão. O texto longo continua no `stale`.
+- **O recado da semana não envelhece mais.** Ele citava "5,5 km na segunda" com a corrida já na terça: `noteMatchesDays` + `withCheckedNote` conferem na **leitura** do plano (uma vez, em `loadWeeklyPlan`) em vez de exigir que as seis rotas que mexem no plano lembrem de invalidar o texto.
+- **"Nenhum treino de força registrado" parou de acusar quem treinou.** O Conselheiro olhava só `strength_logs`; agora distingue **ir** (atividade do relógio) de **anotar** (série e carga), e nesse caso diz que as sessões estão registradas e o que falta é a carga.
+- **Bug de CSS achado no caminho:** `src/lib` não estava nos `content` do Tailwind, então `bg-pink-500` (a cor do teste em `session-colors.ts`) nunca existiu. Qualquer classe escrita numa lib estava nessa situação.
+- **1.594 testes** (20 novos).
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
@@ -2491,7 +2504,7 @@ npx vercel deploy --prod --yes
 
 ## 18.4 Banco e migrations
 
-- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **036** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028 a 032; em 18/09 para 033 e 034; em 20/09 para 035, conferida pelas três policies de `ai_messages` em `pg_policies`; em 21/09 para 036, conferida lendo `expires_at` pela API).
+- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **037** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028 a 032; em 18/09 para 033 e 034; em 20/09 para 035, conferida pelas três policies de `ai_messages` em `pg_policies`; em 21/09 para 036, conferida lendo `expires_at` pela API; em 29/09 para 037, conferida lendo `planned_tests` pela API).
 - **O código tolera tabela ausente** (`try/catch` e sondas como `notification_log` em `morning-dispatch.ts`), então uma migration não aplicada **não quebra**: desliga a feature em silêncio.
 - **Fora do repositório:**
 
@@ -2582,7 +2595,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 | Dimensão | Estado | Nota |
 |---|---|---|
 | **Proposta de valor** | Clara: treinador de corrida (e força) que prescreve com ciência, se adapta ao corpo e explica o porquê | 🟢 |
-| **Motor de treino** | Maduro, determinístico, ~1.574 testes, corrigido contra casos reais | 🟢 |
+| **Motor de treino** | Maduro, determinístico, ~1.594 testes, corrigido contra casos reais | 🟢 |
 | **Saúde/recuperação** | Nova (14/09), funcional com Garmin via intervals.icu e sem relógio; score não validado contra desfecho | 🟡 |
 | **UX** | Rica e animada no dashboard e na Saúde; telas antigas inconsistentes; muita navegação (10 itens) | 🟡 |
 | **Usuários** | 7 contas por convite; push chega a 4; **sem métricas de uso** (nenhum analytics) | 🔴 para decidir produto |

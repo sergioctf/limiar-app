@@ -24,6 +24,7 @@ import { savePlanOffline, loadPlanOffline } from "@/lib/offline-store";
 import { isLegacyPlanShape } from "@/lib/workout-builder";
 import { localMondayStr, localNextMondayStr, localDateStr } from "@/lib/week";
 import { weekSummaryLine } from "@/lib/week-agenda";
+import { applyPlannedTest, type PlannedTest } from "@/lib/planned-test";
 import { dayProgress, dayDone, type DayProgress } from "@/lib/day-progress";
 import type { DayActivity, DayRun, DoneItem } from "@/lib/day-status";
 import { WeekFitControl } from "@/components/coach/WeekFitControl";
@@ -63,12 +64,16 @@ interface Props {
   /** Corridas e atividades das últimas semanas — o que a agenda mostra como feito. */
   doneRuns?: DayRun[];
   doneActivities?: DayActivity[];
+  /** O teste de 3 km marcado: entra na semana por cima do plano guardado. */
+  plannedTest?: PlannedTest | null;
+  onTestChanged?: (test: PlannedTest | null) => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function WeeklyPlanCard({
-  initialPlan, initialReportId, paces, doneRuns = [], doneActivities = [],
+  initialPlan, initialReportId, paces, doneRuns = [], doneActivities = [], plannedTest = null,
+  onTestChanged,
 }: Props) {
   const currentMonday = getCurrentMondayStr();
   const nextMonday    = getNextMondayStr();
@@ -88,7 +93,21 @@ export function WeeklyPlanCard({
   /** Week whose plan came from the offline copy rather than the network. */
   const [offlineWeek, setOfflineWeek] = useState<string | null>(null);
 
-  const plan     = plans[activeWeek] ?? null;
+  /*
+    O teste marcado é uma camada por cima do plano guardado, não uma alteração
+    dele: o motor não roda de novo e o volume não é recalculado. Por isso ele
+    aparece no mesmo instante em que é marcado — ver .
+  */
+  const stored   = plans[activeWeek] ?? null;
+  /*
+    Memorizado porque o efeito que escolhe o dia de hoje depende de `plan`:
+    sem isto, cada render criava um objeto novo, o efeito rodava de novo e a
+    seleção voltava para hoje — tocar em outro dia não fazia nada.
+  */
+  const plan     = useMemo(
+    () => (stored ? applyPlannedTest(stored, plannedTest) : null),
+    [stored, plannedTest],
+  );
   const reportId = reportIds[activeWeek] ?? null;
   const isNextWeek = activeWeek === nextMonday;
 
@@ -617,9 +636,11 @@ export function WeeklyPlanCard({
               canAdapt={canAdapt}
               progress={selectedDay ? progressByDay[selectedDay.day] ?? null : null}
               done={selectedDone}
+              plannedTest={plannedTest}
               onPlanChanged={onPlanChanged}
               onDayChanged={onDayChanged}
               onAsk={onAsk}
+              onTestChanged={onTestChanged}
             />
           </div>
         </div>

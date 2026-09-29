@@ -38,7 +38,7 @@ export function TestCalibrationCard({ tests }: { tests: PerformanceTest[] | Perf
 
         <div className="min-w-0 flex-1">
           <p className="font-bold text-surface-100 text-sm">{status.headline}</p>
-          <p className="text-xs text-surface-400 mt-1 leading-relaxed">{status.detail}</p>
+          {status.detail && <p className="text-xs text-surface-400 mt-1 leading-relaxed">{status.detail}</p>}
 
           {missing && (
             <>
@@ -87,7 +87,7 @@ export function TestCalibrationCard({ tests }: { tests: PerformanceTest[] | Perf
             className="btn-primary mt-3 text-xs py-1.5 px-3 inline-flex"
           >
             <FlaskConical className="w-3.5 h-3.5" />
-            {missing ? "Fazer o teste de 3 km" : "Registrar novo teste"}
+            {missing ? "Fazer o teste de 3 km" : "Marcar teste de 3 km"}
             <ChevronRight className="w-3.5 h-3.5" />
           </Link>
         </div>

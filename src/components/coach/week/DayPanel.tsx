@@ -18,12 +18,13 @@ import { RunCard } from "@/components/coach/week/RunCard";
 import { StrengthCard } from "@/components/coach/week/StrengthCard";
 import type { DayProgress } from "@/lib/day-progress";
 import type { DoneItem } from "@/lib/day-status";
+import type { PlannedTest } from "@/lib/planned-test";
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 
 const km = (n: number) => `${Number(n.toFixed(1)).toString().replace(".", ",")} km`;
 
 export function DayPanel({
-  day, week, isToday, canAdapt, progress, done, onPlanChanged, onDayChanged, onAsk,
+  day, week, isToday, canAdapt, progress, done, plannedTest, onPlanChanged, onDayChanged, onAsk, onTestChanged,
 }: {
   day: WeeklyPlanDay | null;
   week: string;
@@ -35,6 +36,9 @@ export function DayPanel({
   onPlanChanged: (plan: WeeklyPlanData) => void;
   onDayChanged: (day: WeeklyPlanDay) => void;
   onAsk: (session: WeeklyPlanDay) => void;
+  /** O teste de 3 km marcado, quando cai neste dia. */
+  plannedTest?: PlannedTest | null;
+  onTestChanged?: (test: PlannedTest | null) => void;
 }) {
   if (!day) {
     return (
@@ -70,9 +74,11 @@ export function DayPanel({
           week={week}
           canAdapt={canAdapt}
           done={doneFor(main.sport ?? "corrida")}
+          plannedTest={plannedTest}
           onPlanChanged={onPlanChanged}
           onDayChanged={onDayChanged}
           onAsk={onAsk}
+          onTestChanged={onTestChanged}
         />
       )}
 

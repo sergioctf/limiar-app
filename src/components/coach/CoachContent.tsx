@@ -20,7 +20,7 @@
  *   4. Meus dias de treino
  *   5. O plano de longo prazo
  */
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, FlaskConical, Layers } from "lucide-react";
 import Link from "next/link";
@@ -28,6 +28,8 @@ import { Card, Section } from "@/components/ui/Surface";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { computeMetrics, paceToString } from "@/lib/performance";
 import { WeeklyPlanCard } from "@/components/coach/WeeklyPlanCard";
+import { withCheckedNote } from "@/lib/week-note";
+import type { PlannedTest } from "@/lib/planned-test";
 import { WeekQuestionCard } from "@/components/today/WeekQuestionCard";
 import { PlanFreshnessBanner } from "@/components/coach/PlanFreshnessBanner";
 import { SportSelector } from "@/components/coach/SportSelector";
@@ -58,6 +60,21 @@ export function CoachContent({
 }: Props) {
   const router = useRouter();
 
+  /*
+    O teste marcado vive aqui porque duas coisas precisam dele ao mesmo tempo:
+    o aviso (que passa a dizer o dia) e a semana (onde ele aparece). Marcar
+    atualiza o estado, e a semana muda na hora — sem recarregar nada.
+  */
+  const [plannedTest, setPlannedTest] = useState<PlannedTest | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/coach/planned-test", { cache: "no-store" })
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (!cancelled) setPlannedTest((d?.test as PlannedTest | null) ?? null); })
+      .catch(() => { /* sem marcação, a semana segue igual */ });
+    return () => { cancelled = true; };
+  }, []);
+
   const latestTest = tests[0] ?? null;
   const metrics = useMemo(() => {
     if (!latestTest) return null;
@@ -83,7 +100,8 @@ export function CoachContent({
     if (!latestWeekReport?.full_report) return null;
     try {
       const parsed = JSON.parse(latestWeekReport.full_report) as WeeklyPlanData;
-      return Array.isArray(parsed.days) ? parsed : null;
+      // Mover uma corrida de dia não pode deixar o recado falando do dia antigo.
+      return Array.isArray(parsed.days) ? withCheckedNote(parsed) : null;
     } catch {
       return null;   // relatório em texto, do gerador antigo
     }
@@ -125,7 +143,7 @@ export function CoachContent({
             </Card>
           </Link>
         )}
-        <StaleTestWarning latestTest={latestTest} onAddTest={() => router.push("/coach/calibracao")} />
+        <StaleTestWarning latestTest={latestTest} plannedTest={plannedTest} onScheduled={setPlannedTest} />
         <PlanFreshnessBanner />
         {adherenceHistory[0] && <ProactiveAdjustBanner currentWeek={adherenceHistory[0]} />}
         <WeekQuestionCard />
@@ -136,6 +154,8 @@ export function CoachContent({
 
       <WeeklyPlanCard
         initialPlan={initialWeeklyPlan}
+        plannedTest={plannedTest}
+        onTestChanged={setPlannedTest}
         initialReportId={latestWeekReport?.id ?? null}
         paces={pacesForPlan}
         doneRuns={doneRuns}
