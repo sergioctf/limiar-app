@@ -321,6 +321,30 @@ export async function GET() {
    * accumulated before the write path was fixed.
    */
   const liveKeys = new Set(findings.map(f => f.key));
+
+  /*
+    Fecha o que deixou de valer.
+
+    Um achado termina de três formas: o atleta aplica, o atleta dispensa, ou —
+    de longe a mais comum — **o problema simplesmente acaba**, porque ele moveu
+    a sessão de dia ou passou a registrar as séries. Faltava esse terceiro
+    estado, e a linha ficava `pending` para sempre: a notificação semanal lia
+    essas linhas e podia avisar sobre um conflito que não existe mais.
+
+    Melhor esforço, como o resto da persistência daqui: se a migration 038 (o
+    status `resolved`) ainda não rodou, o erro é ignorado e a tela continua
+    correta de qualquer forma — quem decide o que aparece é `dedupeForDisplay`.
+  */
+  const mortas = (fresh as unknown as SuggestionRow[])
+    .filter(r => !liveKeys.has(r.finding_key))
+    .map(r => r.id);
+  if (mortas.length > 0) {
+    await admin.from("advisor_suggestions")
+      .update({ status: "resolved", updated_at: new Date().toISOString() })
+      .in("id", mortas).eq("user_id", user.id)
+      .then(() => undefined, () => undefined);
+  }
+
   const suggestions = dedupeForDisplay(fresh as never, liveKeys, weekStart)
     .map(r => ({
       id: r.id,

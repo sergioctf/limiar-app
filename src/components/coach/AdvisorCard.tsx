@@ -140,20 +140,25 @@ export function AdvisorCard({ onGoToTests }: { onGoToTests?: () => void }) {
 
   return (
     <div className="space-y-3">
+      {/*
+        O cabeçalho diz o que a lista é, não como ela se chama.
+
+        Era "Conselheiro · 2 observação(ões)", seguido de dois parágrafos
+        explicando o que o conselheiro faz — texto que o atleta lê uma vez e
+        depois atravessa toda semana. "Sugestões para sua semana" já diz tudo
+        isso, e o número cabe num selo (01/10).
+      */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-brand-400" />
-          <h3 className="font-bold text-surface-100">Conselheiro</h3>
+          <h3 className="font-bold text-surface-100">Sugestões para sua semana</h3>
         </div>
-        <span className="text-[10px] text-surface-500">
-          {data.suggestions.length > 0 ? `${data.suggestions.length} observação(ões)` : "tudo certo"}
-        </span>
+        {data.suggestions.length > 0 && (
+          <span className="rounded-full bg-surface-700 px-2 py-0.5 text-xs font-bold text-surface-200 tabular-nums">
+            {data.suggestions.length}
+          </span>
+        )}
       </div>
-
-      <p className="text-xs text-surface-500 leading-relaxed">
-        Ele olha seu plano, seus registros e sua configuração e aponta o que pode render mais.
-        Nada muda sozinho — você aplica ou mantém como está.
-      </p>
 
       {error && (
         <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>
@@ -197,7 +202,6 @@ export function AdvisorCard({ onGoToTests }: { onGoToTests?: () => void }) {
       */}
       {data.suggestions.map((s, i) => {
         const ui = SEVERITY_UI[s.severity] ?? SEVERITY_UI.baixa;
-        const area = AREA_UI[s.area] ?? AREA_UI.corrida;
         /*
           The first one is open by default. Suggestions arrive sorted by
           severity, so it is the one that matters most — and an inbox that
@@ -216,15 +220,23 @@ export function AdvisorCard({ onGoToTests }: { onGoToTests?: () => void }) {
             >
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 mt-2 ${ui.dot}`} />
               <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-1.5 text-[10px] text-surface-500 uppercase tracking-wide">
-                  {area.icon} {area.label} · {ui.label}
-                </span>
-                <span className="block font-bold text-surface-100 text-sm mt-0.5">{s.title}</span>
-                <span className="block text-xs text-surface-400 mt-0.5 leading-relaxed">{s.evidence}</span>
+                <span className="block text-sm font-bold text-surface-100">{s.title}</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-surface-400">{s.evidence}</span>
+                {/*
+                  A área e a severidade saíram da linha fechada: eram duas
+                  palavras em caixa alta acima do título, disputando com ele a
+                  primeira leitura. A cor do ponto já diz a severidade, e o
+                  assunto está no próprio título.
+                */}
+                {!isOpen && (
+                  <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-brand-400">
+                    Ver proposta <ChevronDown className="h-3 w-3" />
+                  </span>
+                )}
               </span>
-              <ChevronDown
-                className={`w-4 h-4 shrink-0 text-surface-500 mt-1 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
-              />
+              {isOpen && (
+                <ChevronDown className="mt-1 h-4 w-4 shrink-0 rotate-180 text-surface-500 transition-transform duration-200" />
+              )}
             </button>
 
             {isOpen && (

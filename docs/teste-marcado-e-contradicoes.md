@@ -108,3 +108,60 @@ objeto novo a cada render. `useMemo` no plano sobreposto resolveu.
 `planned-test`, a trava de dia do recado e o teste do Conselheiro). Fluxo
 conferido na tela: marcar → aparece na quarta no lugar do tiro → o resumo da
 semana cai de 27 km para 24 km → o card oferece Remarcar.
+
+---
+
+# O conselheiro parou de contradizer a tela (01/10)
+
+Item 4 da lista. O Sérgio viu o conselheiro falando dos tiros num dia enquanto
+a agenda, ao lado, mostrava outro.
+
+## O que estava acontecendo
+
+Encontrei na conta dele **seis linhas `pending` paradas desde 21/09** — entre
+elas "Quinta: perna e tiros curtos 6×200 m no mesmo dia", de uma semana que já
+tinha sido reorganizada duas vezes.
+
+O mecanismo estava numa linha de `dedupeForDisplay`:
+
+```ts
+rows.filter(r => liveKeys.has(r.finding_key) || r.week_start === weekStart)
+```
+
+A segunda metade era deliberada, e o comentário explicava: *"algo detectado hoje
+e resolvido à tarde confunde mais do que informa"*. O efeito real é pior do que
+o problema que ela evitava — um card que contradiz a tela não é um lembrete, é
+o app discordando de si mesmo. **Entre piscar e mentir, pisca.**
+
+## Três correções
+
+1. **A linha só sobrevive enquanto o achado é verdade.** A escapatória saiu.
+2. **Um achado pode se resolver sozinho** — migration **038**, que acrescenta o
+   status `resolved` ao `check`. Faltava o terceiro final, que é o mais comum:
+   nem aplicado, nem dispensado — **acabou**, porque a pessoa moveu a sessão.
+   Sem ele, a notificação semanal (`/api/cron/notify-advisor`, que lê linhas
+   `pending` da semana) podia avisar sobre um conflito que não existe mais.
+3. **A rota fecha o que deixou de valer** a cada execução, em melhor esforço.
+   As seis linhas mortas do Sérgio foram fechadas ao aplicar a migration.
+
+## E a apresentação
+
+Era "Conselheiro · 2 observação(ões)" seguido de dois parágrafos explicando o
+que o conselheiro faz — texto lido uma vez e atravessado toda semana. Agora:
+
+```
+Sugestões para sua semana                    [2]
+
+Tiros na véspera do longão
+Tiro na sexta, longão no sábado — sem folga entre as duas sessões mais duras.
+Ver proposta ⌄
+```
+
+A área e a severidade saíram da linha fechada: eram duas palavras em caixa alta
+acima do título, disputando a primeira leitura. A cor do ponto já diz a
+severidade e o assunto está no título.
+
+**Fica no radar:** marcar na própria sessão da agenda quando há sugestão sobre
+ela ("se a sugestão envolve sexta, sinalizar naquela sessão"). Depende de o
+achado carregar o dia de forma estruturada — hoje alguns carregam na chave
+(`..._Thu`) e outros só no texto.

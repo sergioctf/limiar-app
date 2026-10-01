@@ -1382,6 +1382,17 @@ Item 7 da lista. Detalhes em **`docs/controles-mobile-01-10.md`**.
 - **O botão da IA some nos últimos 140 px de rolagem**, que é onde moram as ações de rodapé: ele cobria "Meus dias de sempre" e a conversa da semana.
 - **1.614 testes.** Os três painéis conferidos no celular.
 
+## 6.49 O conselheiro parou de contradizer a tela ✅ (novo, 01/10)
+
+Item 4 da lista. Detalhes em **`docs/teste-marcado-e-contradicoes.md`**.
+
+- **Reproduzido:** seis linhas `pending` paradas desde 21/09 na conta do Sérgio, entre elas "Quinta: perna e tiros no mesmo dia" — de uma semana já reorganizada duas vezes.
+- **A causa** era uma linha de `dedupeForDisplay`: a sugestão sobrevivia se tivesse sido criada nesta semana, mesmo depois de deixar de valer. Era deliberado (evitar piscar), e custava caro: card contradizendo a agenda ao lado. Entre piscar e mentir, pisca.
+- **Migration 038:** status `resolved`. Faltava o terceiro final de um achado — nem aplicado nem dispensado, **acabou**. Sem ele, `/api/cron/notify-advisor` (que lê `pending` da semana) podia empurrar aviso de conflito inexistente. Aplicada em 01/10; as seis linhas mortas foram fechadas.
+- **A rota fecha o que deixou de valer** a cada execução, em melhor esforço.
+- **Apresentação:** "Sugestões para sua semana" + selo com o número; linha fechada com título, uma evidência e "Ver proposta". Saíram os dois parágrafos de preâmbulo e a linha de área/severidade em caixa alta.
+- **No radar:** sinalizar na própria sessão da agenda quando há sugestão sobre ela.
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
@@ -2540,7 +2551,7 @@ npx vercel deploy --prod --yes
 
 ## 18.4 Banco e migrations
 
-- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **037** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028 a 032; em 18/09 para 033 e 034; em 20/09 para 035, conferida pelas três policies de `ai_messages` em `pg_policies`; em 21/09 para 036, conferida lendo `expires_at` pela API; em 29/09 para 037, conferida lendo `planned_tests` pela API).
+- **Aplicação:** colar o SQL de `supabase/migrations/NNN_*.sql` no SQL Editor do Supabase, em ordem. **Não existe runner, `DATABASE_URL` nem Supabase CLI configurado.** Todas as migrations até **038** estão aplicadas em produção (confirmado em 14–15/09 para 026 e 027; em 16/09 para 028 a 032; em 18/09 para 033 e 034; em 20/09 para 035, conferida pelas três policies de `ai_messages` em `pg_policies`; em 21/09 para 036, conferida lendo `expires_at` pela API; em 29/09 para 037, conferida lendo `planned_tests` pela API; em 01/10 para 038, conferida gravando `status = resolved`).
 - **O código tolera tabela ausente** (`try/catch` e sondas como `notification_log` em `morning-dispatch.ts`), então uma migration não aplicada **não quebra**: desliga a feature em silêncio.
 - **Fora do repositório:**
 

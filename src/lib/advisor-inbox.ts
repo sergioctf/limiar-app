@@ -125,16 +125,28 @@ export function reconcileSuggestions(
  * above stops new ones appearing, but it cannot retroactively merge the rows
  * an athlete has already accumulated.
  *
- * A row survives if its finding is still true, or if it was raised this week:
- * something detected today and gone by this afternoon confuses more than it
- * informs.
+ * **Uma linha só sobrevive enquanto o achado é verdade.**
+ *
+ * Havia uma escapatória aqui: a linha também sobrevivia se tivesse sido criada
+ * nesta semana, com o argumento de que algo detectado de manhã e resolvido à
+ * tarde confunde mais do que informa. O efeito real é pior do que o problema
+ * que ela evitava.
+ *
+ * O Sérgio viu em 01/10: o conselheiro falava dos tiros num dia enquanto a
+ * agenda, ao lado, mostrava os tiros em outro — ele tinha movido a sessão, o
+ * achado deixou de valer, e o card continuou lá com o texto antigo. Um card que
+ * contradiz a tela não é um lembrete: é o app discordando de si mesmo.
+ *
+ * Sumir sem aviso é o comportamento certo. O achado acabou porque a pessoa
+ * resolveu — continuar mostrando é que seria mentira.
  */
 export function dedupeForDisplay(
   rows: SuggestionRow[],
   liveKeys: Set<string>,
-  weekStart: string,
+  /** Mantido na assinatura: o chamador tem a semana, e os testes a documentam. */
+  _weekStart?: string,
 ): SuggestionRow[] {
-  const relevant = rows.filter(r => liveKeys.has(r.finding_key) || r.week_start === weekStart);
+  const relevant = rows.filter(r => liveKeys.has(r.finding_key));
 
   const newestByKey = new Map<string, SuggestionRow>();
   for (const r of relevant) {

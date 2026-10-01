@@ -118,10 +118,18 @@ describe("a exibição nunca repete", () => {
     expect(dedupeForDisplay(rows, vivas, "2026-08-31")).toHaveLength(0);
   });
 
-  it("mas mantém o desta semana mesmo que já não esteja na lista viva", () => {
-    // Foi detectado nesta semana; sumir no mesmo dia confunde mais que informa.
+  it("e some também quando foi detectado hoje — o card não pode contradizer a tela", () => {
+    /*
+      Esta regra era o contrário até 01/10: um achado criado nesta semana
+      sobrevivia mesmo depois de deixar de valer, para não aparecer e sumir no
+      mesmo dia. O preço disso foi o conselheiro falando dos tiros num dia
+      enquanto a agenda, ao lado, mostrava outro — o atleta tinha movido a
+      sessão, e o card ficou com o texto velho.
+
+      Entre piscar e mentir, pisca.
+    */
     const rows = [linha("recente", { week_start: "2026-08-31" })];
-    expect(dedupeForDisplay(rows, vivas, "2026-08-31")).toHaveLength(1);
+    expect(dedupeForDisplay(rows, vivas, "2026-08-31")).toHaveLength(0);
   });
 
   it("preserva achados distintos", () => {
