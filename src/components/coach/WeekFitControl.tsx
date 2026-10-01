@@ -8,7 +8,8 @@
  * Nothing changes before "Confirmar", and "Desfazer" puts the week back.
  */
 import { useState } from "react";
-import { CalendarClock, X } from "lucide-react";
+import { CalendarClock } from "lucide-react";
+import { Sheet } from "@/components/ui/Sheet";
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 
 type DayKey = WeeklyPlanDay["day"];
@@ -117,24 +118,50 @@ export function WeekFitControl({
         <button
           type="button"
           onClick={() => { setOpen(true); reset(); setDays(initial); }}
-          className="flex items-center gap-1.5 min-h-[44px] text-[11px] text-surface-400 hover:text-brand-300 transition-colors"
+          className="flex min-h-[44px] items-center gap-1.5 text-xs text-surface-400 transition-colors hover:text-brand-300"
         >
           {/* O nome diz o que acontece ao tocar: antes era "Minha agenda desta
               semana", que descreve uma tela, não uma ação. */}
           <CalendarClock className="w-3.5 h-3.5" /> Reorganizar {isNextWeek ? "a próxima semana" : "esta semana"}
         </button>
       ) : (
-        <div className="rounded-2xl border border-surface-600 bg-surface-900/60 p-3 space-y-3">
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-semibold text-surface-100">
-              Quais dias você consegue correr {isNextWeek ? "na próxima semana" : "até domingo"}?
-            </p>
-            <button type="button" aria-label="Fechar" onClick={() => setOpen(false)} className="p-1 text-surface-500 hover:text-surface-200">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-7 gap-1">
+        /*
+          O mesmo painel de baixo de "Mover" e "Adaptar" (01/10). Era um bloco
+          com borda dentro do card, com sete botões de três letras — e o
+          "Confirmar" mudava de lugar conforme o passo. Agora o título diz o
+          escopo, os dias são linhas grandes e os botões ficam sempre no pé.
+        */
+        <Sheet
+          title={`Reorganizar ${isNextWeek ? "a próxima semana" : "esta semana"}`}
+          scope={`Quais dias você consegue correr ${isNextWeek ? "na próxima semana" : "até domingo"}?`}
+          onClose={() => setOpen(false)}
+          busy={busy}
+          error={error}
+          footer={
+            <div className="flex gap-2 pt-1">
+              {saved ? (
+                <button type="button" onClick={() => setOpen(false)} className="btn-primary min-h-[48px] flex-1 justify-center">Fechar</button>
+              ) : !preview ? (
+                <>
+                  <button type="button" onClick={() => setOpen(false)} disabled={busy} className="btn-secondary min-h-[48px] flex-1">Cancelar</button>
+                  <button type="button" disabled={busy || days.length === 0} onClick={() => void run(note ? "confirm" : "preview")} className="btn-primary min-h-[48px] flex-[2] justify-center">
+                    {busy ? "Organizando…" : note ? "Confirmar" : "Ver como fica"}
+                  </button>
+                </>
+              ) : preview.unchanged ? (
+                <button type="button" onClick={() => setOpen(false)} className="btn-primary min-h-[48px] flex-1 justify-center">Já cabe — nada a mudar</button>
+              ) : (
+                <>
+                  <button type="button" disabled={busy} onClick={() => setPreview(null)} className="btn-secondary min-h-[48px] flex-1">Voltar</button>
+                  <button type="button" disabled={busy} onClick={() => void run("confirm")} className="btn-primary min-h-[48px] flex-[2] justify-center">
+                    {busy ? "Salvando…" : "Confirmar"}
+                  </button>
+                </>
+              )}
+            </div>
+          }
+        >
+          <div className="grid grid-cols-2 gap-1.5">
             {DAYS.map(d => {
               const disabled = !openDays.includes(d.key);
               const on = days.includes(d.key);
@@ -145,12 +172,13 @@ export function WeekFitControl({
                   disabled={disabled || busy}
                   aria-pressed={on}
                   onClick={() => toggle(d.key)}
-                  className={`min-h-[44px] rounded-lg text-xs font-semibold transition-colors ${
-                    disabled ? "text-surface-700 cursor-not-allowed"
-                      : on ? "bg-brand-500 text-white" : "bg-surface-700/60 text-surface-300 hover:text-surface-100"
+                  className={`min-h-[48px] rounded-xl border px-3 text-sm font-semibold transition-colors ${
+                    disabled ? "cursor-not-allowed border-surface-800 text-surface-700"
+                      : on ? "border-brand-500/60 bg-brand-500/15 text-brand-200"
+                        : "border-surface-700 text-surface-300 hover:border-surface-600"
                   }`}
                 >
-                  {d.short}
+                  {d.name.charAt(0).toUpperCase() + d.name.slice(1)}
                 </button>
               );
             })}
@@ -175,28 +203,8 @@ export function WeekFitControl({
               </ul>
             </div>
           )}
-          {note && <p className="text-xs text-surface-300 leading-relaxed" role="status">{note}</p>}
-          {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
-
-          <div className="flex gap-2">
-            {saved ? (
-              <button type="button" onClick={() => setOpen(false)} className="btn-secondary flex-1">Fechar</button>
-            ) : !preview ? (
-              <button type="button" disabled={busy || days.length === 0} onClick={() => void run(note ? "confirm" : "preview")} className="btn-primary flex-1">
-                {busy ? "Organizando…" : note ? "Confirmar" : "Ver como fica"}
-              </button>
-            ) : preview.unchanged ? (
-              <button type="button" onClick={() => setOpen(false)} className="btn-secondary flex-1">Já cabe — nada a mudar</button>
-            ) : (
-              <>
-                <button type="button" disabled={busy} onClick={() => setPreview(null)} className="btn-secondary flex-1">Voltar</button>
-                <button type="button" disabled={busy} onClick={() => void run("confirm")} className="btn-primary flex-1">
-                  {busy ? "Salvando…" : "Confirmar"}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+          {note && <p className="text-sm leading-relaxed text-surface-300" role="status">{note}</p>}
+        </Sheet>
       )}
     </div>
   );

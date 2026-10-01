@@ -1370,6 +1370,18 @@ Segunda metade do item 6, autorizada pelo Sérgio ("pode esconder as abas sem da
 - **Conferido contra os oito atletas reais:** ninguém perde nada em uso. Os cinco sem relógio perdem a aba Saúde, que para eles já era a tela bloqueada de 29/09.
 - **1.614 testes** (15 novos).
 
+## 6.48 Um painel só para toda decisão que mexe no treino ✅ (novo, 01/10)
+
+Item 7 da lista. Detalhes em **`docs/controles-mobile-01-10.md`**.
+
+- **`src/components/ui/Sheet.tsx`** é o primitivo, com quatro garantias: título com o escopo, opções de 52 px, **a consequência antes da confirmação**, e confirmar/cancelar sempre no pé (cancelar à esquerda, confirmar à direita e maior). Erro e carregamento no mesmo lugar. Fecha no toque fora, no X e no Esc.
+- **Converteram-se** Mover de dia, Adaptar a musculação, Reorganizar a semana e Marcar o teste. O adaptar da corrida já era folha de baixo, com fluxo de vários passos — fica para a próxima passada.
+- **Mover deixou de aplicar no toque.** Era um bloco no card com sete botões de três letras que moviam sem confirmar e sem dizer o que ia acontecer; agora diz "Longão sai de sábado e passa para terça. O volume da semana não muda" antes de confirmar.
+- **Alvos de 44 px** em todos os gatilhos (eram 38).
+- **O que é RIR virou toque**, não `title` — tooltip de atributo não existe no celular, e a tela de musculação é usada de pé entre duas séries.
+- **O botão da IA some nos últimos 140 px de rolagem**, que é onde moram as ações de rodapé: ele cobria "Meus dias de sempre" e a conversa da semana.
+- **1.614 testes.** Os três painéis conferidos no celular.
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação

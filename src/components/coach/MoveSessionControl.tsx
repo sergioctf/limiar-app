@@ -1,14 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Loader2, X } from "lucide-react";
+import { CalendarDays } from "lucide-react";
+import { Sheet, SheetActions, SheetOption } from "@/components/ui/Sheet";
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 
-const DAYS: Array<{ key: WeeklyPlanDay["day"]; short: string }> = [
-  { key: "Mon", short: "Seg" }, { key: "Tue", short: "Ter" }, { key: "Wed", short: "Qua" },
-  { key: "Thu", short: "Qui" }, { key: "Fri", short: "Sex" }, { key: "Sat", short: "Sáb" },
-  { key: "Sun", short: "Dom" },
+const DAYS: Array<{ key: WeeklyPlanDay["day"]; label: string }> = [
+  { key: "Mon", label: "Segunda" }, { key: "Tue", label: "Terça" }, { key: "Wed", label: "Quarta" },
+  { key: "Thu", label: "Quinta" }, { key: "Fri", label: "Sexta" }, { key: "Sat", label: "Sábado" },
+  { key: "Sun", label: "Domingo" },
 ];
+
+const DAY_LABEL = Object.fromEntries(DAYS.map(d => [d.key, d.label])) as Record<string, string>;
 
 /**
  * Move this one session to another day, this week only.
@@ -17,6 +20,14 @@ const DAYS: Array<{ key: WeeklyPlanDay["day"]; short: string }> = [
  * slept through it and did the afternoon lifting, and wants the run on Tuesday
  * to keep the week intact. Nothing about next week should change — so this
  * never touches the training preferences, and the copy says so.
+ *
+ * ## Como ele mudou em 01/10
+ *
+ * Abria um bloco dentro do card com sete botões de três letras numa grade, e
+ * **movia no toque**: sem confirmação, sem dizer o que ia acontecer, com alvos
+ * que a mão erra. Agora é o painel de baixo padrão (`Sheet`): dias como linhas
+ * grandes, a consequência escrita antes, e confirmar/cancelar onde eles estão
+ * em todo o resto do app.
  */
 export function MoveSessionControl({
   week, day, session, label, onMoved,
@@ -27,43 +38,48 @@ export function MoveSessionControl({
   label: string;
   onMoved: (plan: WeeklyPlanData) => void;
 }) {
-  const [open, setOpen]       = useState(false);
-  const [busy, setBusy]       = useState<string | null>(null);
-  const [error, setError]     = useState<string | null>(null);
+  const [open, setOpen]   = useState(false);
+  const [target, setTarget] = useState<WeeklyPlanDay["day"] | null>(null);
+  const [busy, setBusy]   = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  async function move(to: WeeklyPlanDay["day"]) {
-    setBusy(to);
+  async function move() {
+    if (!target || busy) return;
+    setBusy(true);
     setError(null);
     try {
       const res = await fetch("/api/coach/weekly-plan/move", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ week, from: day, to, session }),
+        body: JSON.stringify({ week, from: day, to: target, session }),
       });
       const d = await res.json().catch(() => null);
       if (!res.ok) { setError(d?.error ?? "Não foi possível mover."); return; }
       onMoved(d.plan as WeeklyPlanData);
-      setOpen(false);
+      close();
     } catch {
       setError("Falha na conexão.");
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
+  }
+
+  function close() {
+    setOpen(false);
+    setTarget(null);
+    setError(null);
   }
 
   if (!open) {
     /*
-      Um botão, não um link cinza de 11 px.
-
-      Mover a sessão é a coisa que o atleta mais faz nesta tela — a vida muda de
-      dia o tempo todo — e estava escrita menor do que o aviso de tênis
-      (Sérgio, 26/09). Mesmo desenho de "Adaptar", porque são o mesmo tipo de
-      decisão: mexer nesta sessão.
+      Um botão, não um link cinza de 11 px — e com 44 px de altura, que é o
+      mínimo para o dedo (Sérgio, 26/09 e 01/10). Mover a sessão é a coisa que
+      o atleta mais faz nesta tela: a vida muda de dia o tempo todo.
     */
     return (
       <button
         onClick={() => setOpen(true)}
-        className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-surface-600 px-2.5 text-xs font-medium text-surface-300 transition-colors hover:border-brand-500/60 hover:text-brand-300"
+        className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-surface-600 px-3 text-xs font-medium text-surface-300 transition-colors hover:border-brand-500/60 hover:text-brand-300"
       >
         <CalendarDays className="h-3.5 w-3.5" /> Mover de dia
       </button>
@@ -71,43 +87,41 @@ export function MoveSessionControl({
   }
 
   return (
-    <div className="bg-surface-800/70 border border-surface-700 rounded-lg p-2.5 space-y-2">
-      <div className="flex items-center gap-2">
-        <p className="text-[11px] text-surface-300">
-          Mover <span className="font-semibold">{label}</span> para:
-        </p>
-        <button
-          onClick={() => { setOpen(false); setError(null); }}
-          aria-label="Cancelar"
-          className="ml-auto text-surface-500 hover:text-surface-300"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      <div className="grid grid-cols-7 gap-1">
+    <Sheet
+      title={`Mover ${label.toLowerCase()}`}
+      scope={`De ${DAY_LABEL[day]?.toLowerCase() ?? day}, só nesta semana.`}
+      onClose={close}
+      busy={busy}
+      error={error}
+      footer={
+        <SheetActions
+          confirmLabel={target ? `Mover para ${DAY_LABEL[target].toLowerCase()}` : "Escolha um dia"}
+          onConfirm={move}
+          onCancel={close}
+          disabled={!target}
+          busy={busy}
+        />
+      }
+    >
+      <div className="space-y-1.5">
         {DAYS.map(d => (
-          <button
+          <SheetOption
             key={d.key}
-            onClick={() => move(d.key)}
-            disabled={d.key === day || busy != null}
-            className={`min-h-[44px] rounded-md text-xs font-bold transition-colors disabled:opacity-40 ${
-              d.key === day
-                ? "bg-surface-700 text-surface-500"
-                : "bg-surface-700/60 text-surface-300 hover:bg-brand-500 hover:text-white"
-            }`}
-          >
-            {busy === d.key ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : d.short}
-          </button>
+            label={d.label}
+            detail={d.key === day ? "é onde está hoje" : null}
+            selected={target === d.key}
+            disabled={d.key === day}
+            onClick={() => setTarget(d.key)}
+          />
         ))}
       </div>
 
-      {error && <p className="text-[11px] text-red-400">{error}</p>}
-
-      <p className="text-[10px] text-surface-500 leading-relaxed">
-        Vale só para esta semana. Seus dias de treino continuam os mesmos —
-        para mudar a rotina, use as preferências.
+      {/* A consequência, antes de confirmar. */}
+      <p className="text-xs leading-relaxed text-surface-500">
+        {target
+          ? `${label} sai de ${DAY_LABEL[day]?.toLowerCase()} e passa para ${DAY_LABEL[target].toLowerCase()}. O volume da semana não muda.`
+          : "Vale só para esta semana. Seus dias de treino continuam os mesmos — para mudar a rotina, use as preferências."}
       </p>
-    </div>
+    </Sheet>
   );
 }

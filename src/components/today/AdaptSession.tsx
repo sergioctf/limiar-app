@@ -298,7 +298,7 @@ export function AdaptSessionControl({ day, onChanged, compact = false }: {
         </div>
       ) : compact ? (
         <button type="button" onClick={() => setOpen(true)}
-          className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-surface-600 px-2.5 text-xs font-medium text-surface-300 transition-colors hover:border-brand-500/60 hover:text-brand-300">
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-surface-600 px-3 text-xs font-medium text-surface-300 transition-colors hover:border-brand-500/60 hover:text-brand-300">
           <SlidersHorizontal className="h-3.5 w-3.5" /> Adaptar
         </button>
       ) : (

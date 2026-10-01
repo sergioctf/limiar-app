@@ -88,7 +88,7 @@ export function StrengthCard({
         <button
           type="button"
           onClick={() => onAsk(day)}
-          className="inline-flex min-h-[38px] items-center gap-1.5 px-1 text-xs text-surface-400 transition-colors hover:text-brand-300"
+          className="inline-flex min-h-[44px] items-center gap-1.5 px-1 text-xs text-surface-400 transition-colors hover:text-brand-300"
         >
           <MessageCircle className="h-3.5 w-3.5" /> Perguntar
         </button>

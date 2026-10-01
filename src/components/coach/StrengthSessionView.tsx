@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Timer, Repeat2, Flame, ClipboardList, TrendingDown, Replace } from "lucide-react";
+import { Timer, Repeat2, Flame, ClipboardList, HelpCircle, TrendingDown, Replace } from "lucide-react";
+import { Sheet } from "@/components/ui/Sheet";
 import { StrengthLogger } from "@/components/coach/StrengthLogger";
 import { ExerciseImage } from "@/components/coach/ExerciseImage";
 import { ExerciseSwap } from "@/components/coach/ExerciseSwap";
@@ -34,6 +35,7 @@ export function StrengthSessionView({ session, date, day, weekStart }: {
   weekStart?: string;
 }) {
   const [logging, setLogging] = useState(false);
+  const [explainRir, setExplainRir] = useState(false);
   const [swapping, setSwapping] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [swapError, setSwapError] = useState<string | null>(null);
@@ -147,12 +149,21 @@ export function StrengthSessionView({ session, date, day, weekStart }: {
                     ? `${ex.reps[0]}-${ex.reps[1]}s`
                     : ex.reps[0] === ex.reps[1] ? ex.reps[0] : `${ex.reps[0]}-${ex.reps[1]}`}
                 </span>
-                <span
-                  className="text-[11px] text-surface-400 flex items-center gap-1"
-                  title="Repetições em reserva: quantas você ainda conseguiria fazer ao parar a série."
+                {/*
+                  O que é RIR, por toque — não pelo atributo `title`.
+                  Tooltip de atributo não existe no celular, que é onde esta
+                  tela é usada (de pé, entre duas séries). Botão abre a
+                  explicação para todo mundo (Sérgio, 01/10).
+                */}
+                <button
+                  type="button"
+                  onClick={() => setExplainRir(true)}
+                  aria-label="O que é RIR"
+                  className="flex min-h-[44px] items-center gap-1 text-[11px] text-surface-400 transition-colors hover:text-surface-200"
                 >
                   <Flame className="w-3 h-3 text-orange-400" /> RIR {ex.rir}
-                </span>
+                  <HelpCircle className="w-3 h-3 text-surface-600" />
+                </button>
                 <span className="text-[11px] text-surface-500 flex items-center gap-1">
                   <Repeat2 className="w-3 h-3" /> {ex.restSeconds}s
                 </span>
@@ -195,6 +206,26 @@ export function StrengthSessionView({ session, date, day, weekStart }: {
       >
         <ClipboardList className="w-3.5 h-3.5" /> Registrar treino
       </button>
+
+      {explainRir && (
+        <Sheet title="RIR — repetições em reserva" onClose={() => setExplainRir(false)}>
+          <p className="text-sm leading-relaxed text-surface-300">
+            Quantas repetições você ainda conseguiria fazer ao parar a série. <strong className="text-surface-100">RIR 2</strong>{" "}
+            é parar com duas sobrando — não é chegar à falha.
+          </p>
+          <p className="text-sm leading-relaxed text-surface-400">
+            É assim que o plano controla o esforço sem pedir que você conte peso: a carga sobe quando
+            você passa a terminar as séries com mais reserva do que o pedido.
+          </p>
+          <button
+            type="button"
+            onClick={() => setExplainRir(false)}
+            className="btn-primary min-h-[48px] w-full justify-center"
+          >
+            Entendi
+          </button>
+        </Sheet>
+      )}
 
       {logging && (
         <StrengthLogger
