@@ -7,13 +7,14 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { LimiarMark } from "@/components/LimiarMark";
 import { NAV_AREAS, areaOf } from "@/components/layout/nav-areas";
+import { isAreaVisible, NAV_ALL_VISIBLE, type NavData } from "@/lib/nav-visibility";
 
 /**
  * Six areas instead of ten entries (18/09). Provas and Metas are part of the
  * Treinador; Corridas, Calendário and Gráficos are the Histórico — each reached
  * through the area's own tabs.
  */
-export function Sidebar() {
+export function Sidebar({ nav = NAV_ALL_VISIBLE }: { nav?: NavData }) {
   const pathname = usePathname();
   const current = areaOf(pathname);
   const supabase = createClient();
@@ -36,7 +37,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex flex-col gap-1 flex-1">
-        {NAV_AREAS.map(({ key, href, icon: Icon, label }) => {
+        {NAV_AREAS.filter(a => isAreaVisible(a.key, nav)).map(({ key, href, icon: Icon, label }) => {
           const active = current?.key === key;
           return (
             <Link

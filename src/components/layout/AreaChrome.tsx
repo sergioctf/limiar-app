@@ -9,6 +9,7 @@
  *     Histórico (Corridas · Calendário · Gráficos) — the area's tabs, so the
  *     pages that used to be separate menu entries read as one place.
  */
+import { isTabVisible, NAV_ALL_VISIBLE, type NavData } from "@/lib/nav-visibility";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Settings } from "lucide-react";
@@ -40,15 +41,21 @@ export function MobileTopBar() {
   );
 }
 
-export function AreaTabs() {
+export function AreaTabs({ nav = NAV_ALL_VISIBLE }: { nav?: NavData }) {
   const pathname = usePathname();
   const area = areaOf(pathname);
   // Only on the area's own pages — a run's detail page is not a tab.
   if (!area?.tabs || !area.tabs.some(t => t.href === pathname)) return null;
+  /*
+    Aba vazia não é opção. Provas e Metas só aparecem depois da primeira
+    corrida, Gráficos a partir de três — e uma aba sozinha não é barra de abas.
+  */
+  const tabs = area.tabs.filter(t => isTabVisible(t.href, nav) || t.href === pathname);
+  if (tabs.length < 2) return null;
   return (
     <nav aria-label={area.label} className={cn(area.width ?? "max-w-4xl", "mx-auto mb-4")}>
       <div className="flex gap-1 bg-surface-800 border border-surface-700 rounded-xl p-1">
-        {area.tabs.map(t => {
+        {tabs.map(t => {
           const active = t.href === pathname;
           return (
             <Link

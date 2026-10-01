@@ -1,3 +1,6 @@
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { loadNavData } from "@/lib/nav-data";
+import { NAV_ALL_VISIBLE } from "@/lib/nav-visibility";
 import { Sidebar } from "./Sidebar";
 import { IdentityGate } from "@/components/profile/IdentityGate";
 import { MobileBottomNav } from "./MobileBottomNav";
@@ -10,10 +13,24 @@ interface AppShellProps {
   children: React.ReactNode;
 }
 
-export function AppShell({ children }: AppShellProps) {
+/*
+  O menu é montado aqui, com as contagens do atleta.
+
+  Quem não tem corrida não vê Histórico, quem não tem relógio não vê Saúde — e
+  as Configurações explicam o que falta para cada porta abrir (a regra está em
+  `nav-visibility.ts`). Na falha de leitura, tudo aparece: esconder por engano
+  é pior do que mostrar demais.
+*/
+export async function AppShell({ children }: AppShellProps) {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const nav = user
+    ? await loadNavData(createAdminClient(), user.id).catch(() => NAV_ALL_VISIBLE)
+    : NAV_ALL_VISIBLE;
+
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
+      <Sidebar nav={nav} />
       <main className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
         <MobileTopBar />
         <OfflineBanner />
@@ -26,7 +43,7 @@ export function AppShell({ children }: AppShellProps) {
         {/* Content area — padded on mobile for bottom nav + safe area */}
         <div className="flex-1 p-4 md:p-6 lg:pb-6" style={{ paddingBottom: "calc(7.5rem + env(safe-area-inset-bottom))" }}>
           <ErrorBoundary>
-            <AreaTabs />
+            <AreaTabs nav={nav} />
             {children}
             {/* Blocks only when name, surname or handle is missing. */}
             <IdentityGate />
@@ -35,7 +52,7 @@ export function AppShell({ children }: AppShellProps) {
       </main>
       {/* A IA é uma camada sobre o app, não uma aba: alcançável de qualquer tela. */}
       <CoachFab />
-      <MobileBottomNav />
+      <MobileBottomNav nav={nav} />
     </div>
   );
 }

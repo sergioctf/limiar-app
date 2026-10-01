@@ -11,10 +11,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NAV_AREAS, areaOf } from "@/components/layout/nav-areas";
+import { isAreaVisible, NAV_ALL_VISIBLE, type NavData } from "@/lib/nav-visibility";
 
 const BOTTOM = NAV_AREAS.filter(a => a.key !== "config");
 
-export function MobileBottomNav() {
+export function MobileBottomNav({ nav = NAV_ALL_VISIBLE }: { nav?: NavData }) {
   const pathname = usePathname();
   const current = areaOf(pathname);
 
@@ -24,7 +25,7 @@ export function MobileBottomNav() {
                     border-t border-surface-700
                     flex items-center
                     pb-safe">
-      {BOTTOM.map(({ key, href, icon: Icon, label }) => {
+      {BOTTOM.filter(a => isAreaVisible(a.key, nav)).map(({ key, href, icon: Icon, label }) => {
         const active = current?.key === key;
         return (
           <Link

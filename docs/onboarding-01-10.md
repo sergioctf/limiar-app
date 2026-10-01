@@ -83,3 +83,65 @@ seis dias para escolher, e a tela final com a oferta do tour.
 - **Primeira semana sem teste:** o plano nasce sem ritmos se a pessoa pular o
   passo 5. Já era assim; o que mudou é que agora dá para marcar em vez de adiar
   indefinidamente.
+
+---
+
+# As abas sem dado também somem (01/10, parte 2)
+
+Ficou de fora da primeira leva por ser decisão do Sérgio, não minha. Ele
+respondeu: *"pode esconder as abas sem dado também."*
+
+## A regra
+
+`src/lib/nav-visibility.ts`, com três princípios guiando o que **nunca** some:
+
+1. **O app é o treino.** Hoje, Treinador e Configurações aparecem sempre — e,
+   dentro do Treinador, Plano e Calibração, que é por onde se começa.
+2. **Nada vira beco sem saída.** Uma área só é escondida quando existe outro
+   caminho para criar o dado que a destrava: corrida entra pelo Strava ou pelo
+   "+" da Hoje, prova e meta vivem dentro do Treinador, relógio se conecta nas
+   Configurações.
+3. **Esconder é promessa, não sumiço.** Ver abaixo.
+
+| Área / aba | Aparece quando |
+|---|---|
+| Hoje · Treinador · Configurações | sempre |
+| Histórico | ≥1 corrida ou atividade |
+| Gráficos (dentro do Histórico) | ≥3 corridas — com menos, a linha não diz nada |
+| Saúde | Garmin, Whoop ou Saúde da Apple conectados |
+| Amigos | ≥1 amizade ou ≥1 corrida |
+| Provas · Metas (dentro do Treinador) | ≥1 prova/meta ou ≥1 corrida |
+
+Uma barra de abas com uma aba só não é barra: `AreaTabs` se esconde inteira
+nesse caso.
+
+## A metade honesta
+
+Uma porta que some sem explicação é pior do que uma porta vazia: a pessoa não
+sabe se o recurso não existe, se ela não tem acesso ou se quebrou. Então o que
+sai do menu entra nas Configurações, dito como promessa e continuando clicável:
+
+> **Gráficos** — Aparecem a partir de 3 corridas: com menos, a linha não diz nada.
+> **Saúde** — Precisa de um relógio conectado: Garmin, Whoop ou Saúde da Apple.
+
+## Como é lido
+
+`loadNavData` faz oito contagens `head: true` em paralelo (o Postgres devolve só
+o total) no `AppShell`, uma vez por página. Falha em silêncio mostrando tudo:
+esconder por engano é pior do que mostrar demais.
+
+## O que isso dá, na prática
+
+| | Menu |
+|---|---|
+| Conta nova | **Hoje · Treinador · Configurações** |
+| Depois da primeira corrida | + Histórico, Amigos, Provas, Metas |
+| Com relógio | + Saúde |
+
+Conferido contra os oito atletas reais: ninguém perde nada que esteja usando.
+Os cinco sem relógio perdem a aba Saúde — que para eles já era a tela bloqueada
+de 29/09. O único sem corridas (3 amigos) mantém Amigos, por causa deles.
+
+**1.614 testes** (15 novos em `tests/nav-visibility.test.ts`, incluindo os dois
+que protegem as promessas: o essencial nunca some, e tudo que foi escondido
+aparece explicado).

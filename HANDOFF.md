@@ -22,7 +22,7 @@
 2. **O deploy é feito da máquina local**, com `npx vercel deploy --prod` na pasta. Não há CI, não há deploy a partir do GitHub. O que está em produção é o que estava no disco de Sérgio no momento do último deploy.
 3. **O banco não é reconstruível a partir do repositório.** As tabelas `activities`, `performance_tests` e `races` são usadas intensamente pelo código, mas **não existe DDL delas em nenhum `.sql`**. Foram criadas por rotas `/api/admin/*` que já foram apagadas. Além disso, as migrations 002–027 foram aplicadas **à mão** no SQL Editor do Supabase (não existe runner nem `DATABASE_URL`), e há infraestrutura que vive só no Supabase (job `pg_cron` e segredo no Vault — ver seção 18).
 4. **Possível vazamento de dados entre usuários (crítico, a confirmar no banco).** A migration `002_social.sql` cria a policy `"Authenticated can search profiles"` com `for select using (auth.role() = 'authenticated')`. RLS filtra linhas, não colunas: qualquer usuário logado pode, com a anon key, ler **todas as colunas de todos os perfis** — e-mail, data de nascimento, altura, sexo e o `wellness_token`, que autentica o endpoint público `/api/ingest/wellness`, permitindo gravar dados de saúde no nome de outra pessoa. Não verifiquei se a policy ainda existe em produção. Verifique com `select * from pg_policies where tablename = 'profiles';`. No mesmo nível de risco: **o webhook do Strava aceita eventos forjados** e um POST com `aspect_type: "delete"` apaga (soft delete) a corrida de qualquer usuário pelo ID da atividade (dívida A9).
-5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.599 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
+5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.614 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
 6. **Há usuários reais.** São 7 contas por convite (Sérgio e amigos). O plano da semana é lido e seguido por pessoas. Regra de ouro que custou caro: **nunca reescrever uma semana que já começou** (ver ADR sobre congelamento de semana).
 
 ---
@@ -1359,6 +1359,17 @@ Detalhes em **`docs/onboarding-01-10.md`**. Veio do usuário novo que se perdeu 
 - **Faxina:** `OnboardingTour.tsx` (193 linhas, a primeira implementação do tutorial) foi apagado; só a chave `limiar_onboarded` era usada e ela mudou de casa para `lib/onboarding-flow.ts`, com o mesmo valor.
 - **1.599 testes.** Fluxo percorrido tela a tela no celular.
 
+## 6.47 O menu mostra o que tem o que mostrar ✅ (novo, 01/10)
+
+Segunda metade do item 6, autorizada pelo Sérgio ("pode esconder as abas sem dado também"). Detalhes em **`docs/onboarding-01-10.md`**.
+
+- **A regra** está em `src/lib/nav-visibility.ts`: Hoje, Treinador e Configurações sempre; Histórico com ≥1 corrida ou atividade; Gráficos com ≥3 corridas; Saúde com relógio; Amigos com ≥1 amizade ou corrida; Provas e Metas com ≥1 prova/meta ou corrida. Uma barra com uma aba só se esconde inteira.
+- **Três princípios:** o app é o treino (o essencial nunca some); nada vira beco sem saída (toda área escondida tem outro caminho para criar o dado que a destrava); e **esconder é promessa** — o que sai do menu aparece nas Configurações dizendo o que falta, e continua clicável (`HiddenAreasCard` + `GET /api/nav-visibility`).
+- **Como é lido:** `loadNavData` faz oito contagens `head: true` em paralelo no `AppShell` (que virou async), uma vez por página. Falha mostrando tudo.
+- **Na prática:** conta nova vê **Hoje · Treinador · Configurações**; a primeira corrida traz Histórico, Amigos, Provas e Metas; o relógio traz Saúde.
+- **Conferido contra os oito atletas reais:** ninguém perde nada em uso. Os cinco sem relógio perdem a aba Saúde, que para eles já era a tela bloqueada de 29/09.
+- **1.614 testes** (15 novos).
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
@@ -2608,7 +2619,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 | Dimensão | Estado | Nota |
 |---|---|---|
 | **Proposta de valor** | Clara: treinador de corrida (e força) que prescreve com ciência, se adapta ao corpo e explica o porquê | 🟢 |
-| **Motor de treino** | Maduro, determinístico, ~1.599 testes, corrigido contra casos reais | 🟢 |
+| **Motor de treino** | Maduro, determinístico, ~1.614 testes, corrigido contra casos reais | 🟢 |
 | **Saúde/recuperação** | Nova (14/09), funcional com Garmin via intervals.icu e sem relógio; score não validado contra desfecho | 🟡 |
 | **UX** | Rica e animada no dashboard e na Saúde; telas antigas inconsistentes; muita navegação (10 itens) | 🟡 |
 | **Usuários** | 7 contas por convite; push chega a 4; **sem métricas de uso** (nenhum analytics) | 🔴 para decidir produto |

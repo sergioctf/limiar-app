@@ -5,6 +5,7 @@ import { ThemeSelector } from "@/components/settings/ThemeSelector";
 import { Section } from "@/components/ui/Surface";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { TutorialButton } from "@/components/settings/TutorialButton";
+import { HiddenAreasCard } from "@/components/settings/HiddenAreasCard";
 import {
   Activity, CheckCircle2, XCircle, RefreshCw, Link2, Link2Off,
   User, LogOut, Clock, Check, AlertCircle, Loader2, Bell, Smartphone, Edit2,
@@ -135,6 +136,8 @@ export function SettingsContent({
         <div className="space-y-3">
           <ThemeSelector />
           <TutorialButton />
+          {/* O menu esconde o que ainda não tem dado; aqui ele presta contas. */}
+          <HiddenAreasCard />
         </div>
       </Section>
 
