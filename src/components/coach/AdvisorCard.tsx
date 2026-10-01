@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { haptic } from "@/lib/haptics";
 import {
   Sparkles, Lock, FlaskConical, Check, X, ChevronDown, Loader2,
-  AlertTriangle, Dumbbell, Footprints, Link2, BedDouble, ShieldCheck,
+  AlertTriangle, Dumbbell, Footprints, Link2, BedDouble,
 } from "lucide-react";
 
 type Area = "integracao" | "forca" | "corrida" | "recuperacao" | "teste";
@@ -60,6 +60,8 @@ export function AdvisorCard({ onGoToTests }: { onGoToTests?: () => void }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy]       = useState<string | null>(null);
   const [open, setOpen]       = useState<string | null>(null);
+  /** A lista nasce fechada — o card é um aviso até alguém tocar nele. */
+  const [listOpen, setListOpen] = useState(false);
   const [error, setError]     = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -141,24 +143,47 @@ export function AdvisorCard({ onGoToTests }: { onGoToTests?: () => void }) {
   return (
     <div className="space-y-3">
       {/*
-        O cabeçalho diz o que a lista é, não como ela se chama.
+        Fechado por padrão: um aviso, não uma parede.
 
-        Era "Conselheiro · 2 observação(ões)", seguido de dois parágrafos
-        explicando o que o conselheiro faz — texto que o atleta lê uma vez e
-        depois atravessa toda semana. "Sugestões para sua semana" já diz tudo
-        isso, e o número cabe num selo (01/10).
+        O conselheiro ocupava a tela toda semana — "Conselheiro · 2
+        observação(ões)", dois parágrafos explicando o que ele faz, e cada
+        sugestão com a sua evidência já aberta. Mas sugestão não é o que a
+        pessoa veio ver: ela veio ver o treino. "Tem duas coisas aqui" é tudo
+        que precisa aparecer sem ninguém pedir (Sérgio, 01/10).
+
+        O cabeçalho também diz o que a lista é, não como ela se chama:
+        "Sugestões para sua semana" dispensa os dois parágrafos, e a quantidade
+        cabe num selo.
       */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-brand-400" />
-          <h3 className="font-bold text-surface-100">Sugestões para sua semana</h3>
-        </div>
-        {data.suggestions.length > 0 && (
-          <span className="rounded-full bg-surface-700 px-2 py-0.5 text-xs font-bold text-surface-200 tabular-nums">
-            {data.suggestions.length}
+      <button
+        type="button"
+        onClick={() => setListOpen(v => !v)}
+        aria-expanded={listOpen}
+        disabled={data.suggestions.length === 0}
+        className="flex min-h-[52px] w-full items-center justify-between gap-2 rounded-2xl border border-surface-700 bg-surface-800/60 px-4 text-left transition-colors enabled:hover:border-surface-600 disabled:cursor-default"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <Sparkles className="h-4 w-4 shrink-0 text-brand-400" />
+          <span className="min-w-0">
+            <span className="block text-sm font-bold text-surface-100">Sugestões para sua semana</span>
+            <span className="block text-xs text-surface-500">
+              {data.suggestions.length === 0
+                ? "Nada a ajustar por enquanto"
+                : listOpen ? "toque para fechar" : "toque para ver"}
+            </span>
           </span>
-        )}
-      </div>
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          {data.suggestions.length > 0 && (
+            <span className="rounded-full bg-brand-500/20 px-2 py-0.5 text-xs font-bold tabular-nums text-brand-300">
+              {data.suggestions.length}
+            </span>
+          )}
+          {data.suggestions.length > 0 && (
+            <ChevronDown className={`h-4 w-4 text-surface-500 transition-transform duration-200 ${listOpen ? "rotate-180" : ""}`} />
+          )}
+        </span>
+      </button>
 
       {error && (
         <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>
@@ -171,21 +196,6 @@ export function AdvisorCard({ onGoToTests }: { onGoToTests?: () => void }) {
         </p>
       )}
 
-      {data.suggestions.length === 0 && (
-        <div className="card p-5 border border-green-500/20 bg-green-500/[0.04]">
-          <div className="flex items-start gap-3">
-            <ShieldCheck className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold text-surface-100 text-sm">Nada a ajustar por enquanto</p>
-              <p className="text-xs text-surface-400 mt-1 leading-relaxed">
-                Sua semana está coerente: volume, sessões fortes e musculação não estão brigando
-                entre si. O conselheiro volta a falar quando algo mudar — e silêncio aqui é
-                um bom sinal, não falta de análise.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/*
         One suggestion, one line — until the athlete asks for more.
@@ -200,15 +210,10 @@ export function AdvisorCard({ onGoToTests }: { onGoToTests?: () => void }) {
         it. The proposal and the buttons appear when they are wanted. Only one
         opens at a time, which was already the behaviour and is the whole point.
       */}
-      {data.suggestions.map((s, i) => {
+      {listOpen && data.suggestions.map(s => {
         const ui = SEVERITY_UI[s.severity] ?? SEVERITY_UI.baixa;
-        /*
-          The first one is open by default. Suggestions arrive sorted by
-          severity, so it is the one that matters most — and an inbox that
-          demands a tap before revealing whether anything is worth doing has
-          buried its own answer.
-        */
-        const isOpen = open === null ? i === 0 : open === s.id;
+        // Nenhuma abre sozinha: a lista inteira já está atrás de um toque.
+        const isOpen = open === s.id;
         const isBusy = busy === s.id;
 
         return (

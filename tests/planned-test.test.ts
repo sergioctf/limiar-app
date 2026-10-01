@@ -88,9 +88,21 @@ describe("marcar o teste na semana", () => {
     expect(applyPlannedTest(antes, scheduled("2026-10-07"))).toBe(antes);
   });
 
-  it("teste já feito ou cancelado não aparece", () => {
+  it("o teste feito continua no dia, agora como feito", () => {
+    /*
+      Ele sumia da agenda no instante em que era registrado — o dia voltava a
+      mostrar o treino que o motor tinha posto ali, como se o teste nunca
+      tivesse existido (Sérgio, 01/10). Uma agenda que apaga o que você fez é
+      pior do que uma que não sabe.
+    */
+    const out = applyPlannedTest(plan(), { ...scheduled("2026-09-30"), status: "done" });
+    const wed = out.days.find(d => d.day === "Wed")!;
+    expect(wed.label).toBe("Teste de 3 km");
+    expect(wed.testDone).toBe(true);
+  });
+
+  it("mas o cancelado some — esse de fato não aconteceu", () => {
     const antes = plan();
-    expect(applyPlannedTest(antes, { ...scheduled("2026-09-30"), status: "done" })).toBe(antes);
     expect(applyPlannedTest(antes, { ...scheduled("2026-09-30"), status: "skipped" })).toBe(antes);
     expect(applyPlannedTest(antes, null)).toBe(antes);
   });

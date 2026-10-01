@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { athleteDateStr, athleteDaysAgoStr } from "@/lib/week";
-import { matchFeedbackPlan, validFeedbackInput } from "@/lib/run-feedback";
+import { asksForCheckIn, matchFeedbackPlan, validFeedbackInput } from "@/lib/run-feedback";
+import { applyPlannedTest } from "@/lib/planned-test";
+import { loadPlannedTest } from "@/lib/weekly-plan";
 import { lightenUpcomingRuns } from "@/lib/plan-edit";
 import { compareSessions, parseProposal, parsedLabel, recordExecuted, undoAdaptation } from "@/lib/session-adapt";
 import type { Execution } from "@/lib/run-feedback";
@@ -27,7 +29,17 @@ async function planFor(db: ReturnType<typeof createClient>, userId: string, date
     const plan = JSON.parse(reports.data[0].full_report);
     // A plan generated after the run date cannot prove what was prescribed beforehand.
     if (!plan.generated_at || athleteDateStr(new Date(plan.generated_at)) > date) return null;
-    return Array.isArray(plan.days) ? matchFeedbackPlan(date, plan.days as WeeklyPlanDay[], sameDay.count ?? 0) : null;
+    if (!Array.isArray(plan.days)) return null;
+    /*
+      O teste de 3 km entra aqui como entra em todo lugar que lê o plano.
+
+      Sem isto, a corrida do teste não casava com sessão nenhuma: virava
+      "atividade fora do plano" e o app pedia o check-in normal de treino para
+      uma corrida que era, na verdade, uma medição (Sérgio, 01/10).
+    */
+    const test = await loadPlannedTest(db, userId);
+    const withTest = applyPlannedTest({ week_start: monday.toISOString().slice(0, 10), days: plan.days as WeeklyPlanDay[] }, test);
+    return matchFeedbackPlan(date, withTest.days, sameDay.count ?? 0);
   } catch { return null; }
 }
 
@@ -136,11 +148,12 @@ export async function GET(request: NextRequest) {
   const saved = await db.from("run_feedback").select(FIELDS)
     .eq("user_id", user.id).in("run_id", runs.map(r => r.id));
   if (saved.error) return json({ error: "O check-in está indisponível no momento. Tente novamente mais tarde." }, 503);
-  const items = await Promise.all(runs.map(async run => {
+  const all = await Promise.all(runs.map(async run => {
     const feedback = saved.data?.find(f => f.run_id === run.id) ?? null;
     return { run, feedback, planned: feedback ? feedback.planned : await planFor(db, user.id, run.date) };
   }));
-  return json({ items });
+  // O teste de 3 km tem o fluxo dele; a regra está em `asksForCheckIn`.
+  return json({ items: all.filter(asksForCheckIn) });
 }
 
 export async function PUT(request: NextRequest) {

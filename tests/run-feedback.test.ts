@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  contextQuestion, evaluateRunFeedback, matchFeedbackPlan, promptCandidate, validFeedbackInput,
-  type FeedbackItem, type RunFeedback,
+  asksForCheckIn, contextQuestion, evaluateRunFeedback, matchFeedbackPlan, promptCandidate,
+  validFeedbackInput, type FeedbackItem, type RunFeedback,
 } from "@/lib/run-feedback";
 import type { WeeklyPlanDay } from "@/types";
 
@@ -189,5 +189,30 @@ describe("what was actually done", () => {
     expect(validFeedbackInput({ ...base, execution: "adapted", executedText: "8x400m" })).toBe(true);
     expect(validFeedbackInput({ ...base, execution: "whatever" })).toBe(false);
     expect(validFeedbackInput({ ...base, execution: "other", executedText: "x".repeat(301) })).toBe(false);
+  });
+});
+
+describe("o teste de 3 km não pede check-in", () => {
+  const test = (testDone: boolean): WeeklyPlanDay =>
+    ({ ...planned, type: "test", label: "Teste de 3 km", ...(testDone ? { testDone } : {}) } as WeeklyPlanDay);
+
+  it("pergunta por um treino comum", () => {
+    expect(asksForCheckIn({ planned, feedback: null })).toBe(true);
+  });
+  it("pergunta por uma corrida fora do plano", () => {
+    expect(asksForCheckIn({ planned: null, feedback: null })).toBe(true);
+  });
+  it("pergunta enquanto o teste está apenas marcado — a resposta pode ser 'não fiz'", () => {
+    expect(asksForCheckIn({ planned: test(false), feedback: null })).toBe(true);
+  });
+  it("cala depois que o teste foi registrado: a calibração já é o check-in", () => {
+    expect(asksForCheckIn({ planned: test(true), feedback: null })).toBe(false);
+  });
+  it("mantém um check-in já respondido, mesmo no dia do teste", () => {
+    expect(asksForCheckIn({ planned: test(true), feedback: answer(3, "none") })).toBe(true);
+  });
+  it("não cala por um check-in adiado ou recusado", () => {
+    expect(asksForCheckIn({ planned, feedback: { ...answer(3, "none"), status: "deferred" } })).toBe(true);
+    expect(asksForCheckIn({ planned, feedback: { ...answer(3, "none"), status: "skipped" } })).toBe(true);
   });
 });

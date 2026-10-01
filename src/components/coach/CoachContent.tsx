@@ -143,7 +143,7 @@ export function CoachContent({
             </Card>
           </Link>
         )}
-        <StaleTestWarning latestTest={latestTest} plannedTest={plannedTest} onScheduled={setPlannedTest} />
+        <StaleTestWarning latestTest={latestTest} />
         <PlanFreshnessBanner />
         {adherenceHistory[0] && <ProactiveAdjustBanner currentWeek={adherenceHistory[0]} />}
         <WeekQuestionCard />

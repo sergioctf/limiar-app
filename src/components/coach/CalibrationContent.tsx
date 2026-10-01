@@ -11,7 +11,7 @@
  * Aqui ficam juntos, na ordem em que a pergunta aparece: o que o teste diz,
  * em que ritmos isso vira, o que prevê para uma prova, e o histórico.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Flag, FlaskConical, Gauge } from "lucide-react";
 import { Card, Section } from "@/components/ui/Surface";
 import { Metric, MetricGrid } from "@/components/ui/Metric";
@@ -31,6 +31,21 @@ import type { PerformanceTest } from "@/types";
 export function CalibrationContent({ tests: initialTests }: { tests: PerformanceTest[] }) {
   const [tests, setTests] = useState<PerformanceTest[]>(initialTests);
   const [showForm, setShowForm] = useState(false);
+
+  /*
+    Chegou para registrar: o formulário abre sozinho.
+
+    No dia do teste, o `TestAction` manda para cá com `?registrar=1`. Quem
+    acabou de correr 3 km no limite não veio ler sobre VDOT — veio digitar o
+    tempo, e o formulário estava no fim da página (Sérgio, 01/10).
+  */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get("registrar") === "1") {
+      setShowForm(true);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   const latestTest = tests[0] ?? null;
   const metrics = useMemo(() => {

@@ -83,6 +83,23 @@ export async function POST(request: NextRequest) {
       .select("*")
       .single();
 
+    /*
+      Registrar o teste fecha a marcação dele.
+
+      São duas coisas no banco — `planned_tests` (a intenção) e
+      `performance_tests` (o resultado) — e quem vive isso vive uma só: fez o
+      teste. Sem este fecho, o app continuaria pedindo para marcar um teste que
+      já aconteceu, e a agenda continuaria mostrando "vai fazer".
+
+      Melhor esforço: o resultado já está salvo, e falhar aqui seria perder o
+      que importa por causa da contabilidade.
+    */
+    await admin
+      .from("planned_tests")
+      .update({ status: "done", updated_at: new Date().toISOString() })
+      .eq("user_id", user.id).eq("status", "scheduled")
+      .then(() => undefined, () => undefined);
+
     if (error) {
       if (error.code === "42P01" || error.message?.includes("does not exist")) {
         return NextResponse.json(

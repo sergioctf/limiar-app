@@ -19,15 +19,44 @@ import {
  */
 export function AchievementCompare() {
   const [group, setGroup] = useState<AthleteBadges[] | null>(null);
+  const [falhou, setFalhou] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
 
+  /*
+    Falhar calado era pior do que falhar.
+
+    Qualquer erro da rota virava uma lista vazia, e a tela mostrava a comparação
+    "só você" — indistinguível de quem não tem amigos. Quem clicou em
+    "Comparar com amigos" e caiu numa tela sem amigo nenhum conclui, com razão,
+    que o botão não funciona (Sérgio, 01/10).
+  */
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/friends/achievements")
-      .then(r => r.ok ? r.json() : null)
+    setFalhou(false);
+    fetch("/api/friends/achievements", { cache: "no-store" })
+      .then(async r => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
       .then(d => { if (!cancelled) setGroup((d?.group ?? []) as AthleteBadges[]); })
-      .catch(() => { if (!cancelled) setGroup([]); });
+      .catch(() => { if (!cancelled) { setFalhou(true); setGroup([]); } });
     return () => { cancelled = true; };
-  }, []);
+  }, [tentativa]);
+
+  if (falhou) {
+    return (
+      <div className="card space-y-3 p-6 text-center">
+        <p className="text-sm text-surface-300">Não consegui carregar as conquistas do grupo.</p>
+        <button
+          type="button"
+          onClick={() => { setGroup(null); setTentativa(n => n + 1); }}
+          className="btn-primary mx-auto min-h-[48px]"
+        >
+          Tentar de novo
+        </button>
+      </div>
+    );
+  }
 
   if (!group) {
     return (

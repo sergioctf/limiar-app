@@ -500,6 +500,14 @@ export interface WeeklyPlanDay {
   quality?: import("@/lib/mesocycle").QualityKind;
   /** Set when the athlete adapted this session; the original stays inside. */
   adaptation?: import("@/lib/session-adapt").SessionAdaptation;
+  /**
+   * Esta sessão é o teste de 3 km marcado, e ele já foi feito.
+   *
+   * O teste não é uma sessão do motor: é um fato do atleta sobreposto ao plano
+   * (ver `planned-test.ts`). A tela precisa distinguir "vai fazer" de "fez"
+   * sem ir buscar a tabela de novo.
+   */
+  testDone?: boolean;
 }
 
 export interface WeeklyPlanData {

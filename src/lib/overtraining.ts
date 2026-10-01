@@ -202,7 +202,10 @@ export function detectOvertraining(
     level === "high"
       ? "Priorize recuperação: 1–2 dias de descanso ou treino regenerativo, sono e hidratação."
       : level === "caution"
-      ? "Monitore a recuperação. Mantenha treinos leves e evite aumentar a carga agora."
+      // Sem o "monitore a recuperação" na frente: o card já é o monitoramento, e
+      // a frase repetia o título antes de dizer a única coisa acionável que
+      // tinha (Sérgio, 01/10).
+      ? "Mantenha treinos leves e evite aumentar a carga agora."
       : "Carga sob controle — siga o plano normalmente.";
 
   return { level, tsb, acwr, signals, recommendation };

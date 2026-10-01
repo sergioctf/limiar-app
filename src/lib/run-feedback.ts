@@ -228,6 +228,24 @@ export function evaluateRunFeedback({ run, feedback, planned }: FeedbackItem) {
   return { title, evidence, next: "Os próximos treinos seguem como planejados." };
 }
 
+/**
+ * O teste de 3 km não pede check-in.
+ *
+ * Ele tem o fluxo dele — o formulário que recalibra VDOT, ritmos, zonas e
+ * previsões — e perguntar "como foi para você?" depois disso é pedir duas
+ * vezes a mesma coisa, em duas linguagens diferentes (Sérgio, 01/10).
+ *
+ * Só vale depois que o teste **foi registrado**: enquanto está apenas marcado,
+ * a pergunta continua, porque a resposta pode ser "não fiz" — e aí era um
+ * treino comum, e o check-in é o certo. Uma resposta já dada também fica: o
+ * histórico do atleta não desaparece porque a regra mudou depois.
+ */
+export function asksForCheckIn(item: Pick<FeedbackItem, "feedback" | "planned">): boolean {
+  if (item.feedback?.status === "answered") return true;
+  const planned = item.planned as (WeeklyPlanDay & { testDone?: boolean }) | null;
+  return !(planned?.type === "test" && planned.testDone === true);
+}
+
 /** A check-in left for later comes back after this long, not on the next tap. */
 export const DEFER_HOURS = 6;
 

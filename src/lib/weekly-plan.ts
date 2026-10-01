@@ -19,6 +19,7 @@ import { computeTrainingLoad } from "@/lib/training-load";
 import { planFingerprint, planStaleness, type Staleness } from "@/lib/plan-freshness";
 import { readWeek, type ShortfallReason, type WeekReading } from "@/lib/week-reading";
 import { allowedWeekNumbers, fallbackWeekNote, noteRespectsPlan, withCheckedNote, type WeekNoteFacts } from "@/lib/week-note";
+import { applyPlannedTest, type PlannedTest } from "@/lib/planned-test";
 import { stillValidFilter, weekStartsAt } from "@/lib/athlete-notes";
 import type { RunContext } from "@/lib/run-feedback";
 import type { WeeklyPlanData, WeeklyPlanDay, Run, TrainingPrefs } from "@/types";
@@ -484,10 +485,12 @@ async function coachNoteFor(input: {
 export async function loadWeeklyPlan(
   db: DbClient, userId: string, weekStart: string,
 ): Promise<{ plan: WeeklyPlanData | null; reportId: string | null }> {
-  const { data } = await db
-    .from("coach_reports").select("id, full_report")
-    .eq("user_id", userId).eq("period_type", "week").eq("period_start", weekStart)
-    .order("created_at", { ascending: false }).limit(1);
+  const [{ data }, test] = await Promise.all([
+    db.from("coach_reports").select("id, full_report")
+      .eq("user_id", userId).eq("period_type", "week").eq("period_start", weekStart)
+      .order("created_at", { ascending: false }).limit(1),
+    loadPlannedTest(db, userId),
+  ]);
 
   const row = data?.[0];
   if (!row?.full_report) return { plan: null, reportId: row?.id ?? null };
@@ -496,10 +499,41 @@ export async function loadWeeklyPlan(
     const parsed = JSON.parse(row.full_report) as WeeklyPlanData;
     if (!Array.isArray(parsed.days) || parsed.days.length === 0) return { plan: null, reportId: row.id };
     parsed.days = normalizeWeeklyPlanDays(parsed.days);
+    /*
+      O teste marcado entra aqui, e não só na tela do Treinador.
+
+      Ele nasceu como camada de exibição dentro do card da semana — e por isso
+      existia só ali. O resto do app lia o plano guardado e não via teste
+      nenhum: a corrida do teste virava "atividade fora do plano", o check-in
+      pedia o feedback normal de treino, e a adesão da semana contava uma
+      sessão não feita (Sérgio, 01/10, no dia em que fez o teste).
+
+      Agora todo mundo que carrega o plano por aqui enxerga a mesma semana. O
+      plano **guardado** continua intocado: o teste não é uma alteração do
+      motor, é um fato do atleta por cima dela.
+    */
+    const withTest = applyPlannedTest(parsed, test);
     // O recado da semana envelhece quando o plano muda — ver week-note.ts.
-    return { plan: withCheckedNote(parsed), reportId: row.id };
+    return { plan: withCheckedNote(withTest), reportId: row.id };
   } catch {
     return { plan: null, reportId: row.id };   // legacy text-format report
+  }
+}
+
+/** O teste marcado (ou feito) do atleta — null quando a tabela nem existe. */
+export async function loadPlannedTest(db: DbClient, userId: string): Promise<PlannedTest | null> {
+  try {
+    const { data } = await db
+      .from("planned_tests")
+      .select("id, date, distance_km, status")
+      .eq("user_id", userId).in("status", ["scheduled", "done"])
+      .order("date", { ascending: false }).limit(1);
+    const row = data?.[0] as { id: string; date: string; distance_km: number; status: string } | undefined;
+    return row
+      ? { id: row.id, date: row.date, distanceKm: Number(row.distance_km), status: row.status as PlannedTest["status"] }
+      : null;
+  } catch {
+    return null;
   }
 }
 

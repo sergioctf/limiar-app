@@ -55,7 +55,7 @@ export function mondayOfDate(date: string): string {
  * no volume da semana. Um teste de 3 km "puro" custaria 3 km no papel e 6 na
  * perna.
  */
-export function testSession(day: DayKey, dayPt: string, distanceKm = 3): WeeklyPlanDay {
+export function testSession(day: DayKey, dayPt: string, distanceKm = 3, done = false): WeeklyPlanDay {
   const structure: StructuredWorkout = {
     blocks: [
       { kind: "warmup", distance_km: 2, intensity: "E", note: "Solto, sem pressa — o teste começa depois." },
@@ -69,6 +69,7 @@ export function testSession(day: DayKey, dayPt: string, distanceKm = 3): WeeklyP
     type: "test",
     sport: "corrida",
     label: `Teste de ${distanceKm} km`,
+    testDone: done,
     distance_km: 2 + distanceKm + 1,
     description:
       `Aquecimento de 2 km, ${distanceKm} km no maior ritmo que você sustenta até o fim, e 1 km de volta à calma. ` +
@@ -87,12 +88,23 @@ export function applyPlannedTest<T extends { week_start: string; days: WeeklyPla
   plan: T,
   test: PlannedTest | null,
 ): T {
-  if (!test || test.status !== "scheduled") return plan;
+  /*
+    Marcado **ou feito**.
+
+    O teste sumia da semana no instante em que era registrado: o status virava
+    `done`, o overlay parava de aplicar, e o dia voltava a mostrar o treino que
+    o motor tinha posto ali — como se o teste nunca tivesse existido (Sérgio,
+    01/10). Uma agenda que apaga o que você fez é pior do que uma que não sabe:
+    ele continua no dia, agora como coisa feita.
+
+    Só `skipped` desaparece, porque aí ele de fato não aconteceu.
+  */
+  if (!test || (test.status !== "scheduled" && test.status !== "done")) return plan;
   if (mondayOfDate(test.date) !== plan.week_start) return plan;
 
   const key = dayKeyOfDate(test.date);
   const existing = plan.days.find(d => d.day === key);
-  const session = testSession(key, existing?.dayPt ?? key, test.distanceKm);
+  const session = testSession(key, existing?.dayPt ?? key, test.distanceKm, test.status === "done");
 
   const days = plan.days.map(d => {
     if (d.day !== key) return d;

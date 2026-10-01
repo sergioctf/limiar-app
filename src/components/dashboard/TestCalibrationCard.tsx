@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { FlaskConical, ChevronRight, ChevronDown, Check, Lock } from "lucide-react";
 import { testStatus, TEST_BENEFITS, TEST_PROTOCOL } from "@/lib/test-status";
+import { TestAction } from "@/components/coach/TestAction";
 import type { PerformanceTest } from "@/types";
 
 /**
@@ -82,14 +83,15 @@ export function TestCalibrationCard({ tests }: { tests: PerformanceTest[] | Perf
             </>
           )}
 
-          <Link
-            href="/coach"
-            className="btn-primary mt-3 text-xs py-1.5 px-3 inline-flex"
-          >
-            <FlaskConical className="w-3.5 h-3.5" />
-            {missing ? "Fazer o teste de 3 km" : "Marcar teste de 3 km"}
-            <ChevronRight className="w-3.5 h-3.5" />
-          </Link>
+          {/*
+            A ação acontece aqui, não no Treinador.
+
+            Este botão levava para /coach, onde era preciso achar o mesmo botão
+            e tocar de novo — dois cliques para abrir um calendário (Sérgio,
+            01/10). O  abre o painel na própria Home, e no dia do
+            teste ele vira "Registrar teste de 3 km".
+          */}
+          <div className="mt-3"><TestAction variant="inline" /></div>
         </div>
       </div>
     </div>

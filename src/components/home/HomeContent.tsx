@@ -215,54 +215,7 @@ export function HomeContent({
 
       <EntryPrompt refreshKey={refreshKey} />
 
-      {/* ── 1. Como você está hoje ────────────────────────────────────────── */}
-      {healthBlock && (
-        <Section title="Como você está hoje">
-          <Card>
-            <div className="space-y-3">
-              {healthConnected && recovery && recovery.score != null && (
-                <Link
-                  href="/health"
-                  className="flex items-center gap-3 rounded-2xl border border-surface-700 bg-surface-900/40 p-3 transition-colors hover:border-surface-600 active:scale-[0.99]"
-                >
-                  <Ring ratio={recovery.score / 100} size={64} thickness={6} tone={VERDICT_TONE[recovery.verdict ?? "moderada"]}>
-                    <span className="text-base font-bold">{recovery.score}</span>
-                  </Ring>
-                  {/*
-                    * A frase é o assunto; "Disposição" é só o rótulo dela.
-                    *
-                    * Antes o destaque era a palavra "Recuperação", seguida de
-                    * "Relógio + carga" — a procedência do número, que interessa
-                    * a quem desconfia dele, não a quem vai treinar em dez
-                    * minutos. Quem quiser a conta abre Saúde, que é onde ela
-                    * mora (Sérgio, 20/09).
-                    */}
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-lg font-semibold leading-snug text-surface-100">{recovery.short}</span>
-                    <span className="block text-xs text-surface-500">Disposição</span>
-                  </span>
-                  <ArrowRight className="w-4 h-4 shrink-0 text-surface-600" />
-                </Link>
-              )}
-
-              {/* The question before a demanding session, and the swap it can lead to. */}
-              {mainPending ? <TodayCheckPanel>{offer}</TodayCheckPanel> : offer}
-
-              {healthConnected && recovery?.needsCheckin && today.state !== "done" && (
-                <Link
-                  href="/health?checkin=1"
-                  className="flex min-h-[44px] items-center justify-between rounded-xl bg-surface-700/30 px-3 text-sm text-surface-300 hover:text-surface-100"
-                >
-                  <span>Como você dormiu? Check-in de 20 s afina a recuperação</span>
-                  <ArrowRight className="w-4 h-4 shrink-0" />
-                </Link>
-              )}
-            </div>
-          </Card>
-        </Section>
-      )}
-
-      {/* ── 2. Treino de hoje ─────────────────────────────────────────────── */}
+      {/* ── 1. Treino de hoje ─────────────────────────────────────────────── */}
       <Section title="Treino de hoje">
         <Card density="roomy">
           <div className="space-y-4">
@@ -370,6 +323,59 @@ export function HomeContent({
           </div>
         </Card>
       </Section>
+
+      {/*
+        ── 2. Como você está hoje ──────────────────────────────────────────
+
+        Depois do treino, não antes (Sérgio, 01/10). Quem abre o app de manhã
+        quer saber o que vai fazer; como o corpo está é a segunda pergunta — e
+        é uma pergunta sobre o treino, não sobre si mesma.
+      */}
+      {healthBlock && (
+        <Section title="Como você está hoje">
+          <Card>
+            <div className="space-y-3">
+              {healthConnected && recovery && recovery.score != null && (
+                <Link
+                  href="/health"
+                  className="flex items-center gap-3 rounded-2xl border border-surface-700 bg-surface-900/40 p-3 transition-colors hover:border-surface-600 active:scale-[0.99]"
+                >
+                  <Ring ratio={recovery.score / 100} size={64} thickness={6} tone={VERDICT_TONE[recovery.verdict ?? "moderada"]}>
+                    <span className="text-base font-bold">{recovery.score}</span>
+                  </Ring>
+                  {/*
+                    * A frase é o assunto; "Disposição" é só o rótulo dela.
+                    *
+                    * Antes o destaque era a palavra "Recuperação", seguida de
+                    * "Relógio + carga" — a procedência do número, que interessa
+                    * a quem desconfia dele, não a quem vai treinar em dez
+                    * minutos. Quem quiser a conta abre Saúde, que é onde ela
+                    * mora (Sérgio, 20/09).
+                    */}
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-lg font-semibold leading-snug text-surface-100">{recovery.short}</span>
+                    <span className="block text-xs text-surface-500">Disposição</span>
+                  </span>
+                  <ArrowRight className="w-4 h-4 shrink-0 text-surface-600" />
+                </Link>
+              )}
+
+              {/* The question before a demanding session, and the swap it can lead to. */}
+              {mainPending ? <TodayCheckPanel>{offer}</TodayCheckPanel> : offer}
+
+              {healthConnected && recovery?.needsCheckin && today.state !== "done" && (
+                <Link
+                  href="/health?checkin=1"
+                  className="flex min-h-[44px] items-center justify-between rounded-xl bg-surface-700/30 px-3 text-sm text-surface-300 hover:text-surface-100"
+                >
+                  <span>Como você dormiu? Check-in de 20 s afina a recuperação</span>
+                  <ArrowRight className="w-4 h-4 shrink-0" />
+                </Link>
+              )}
+            </div>
+          </Card>
+        </Section>
+      )}
 
       {/*
         ── 3. Minha semana — every sport, done and not done, numbers big ──

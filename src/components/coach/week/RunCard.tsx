@@ -12,7 +12,7 @@
  * e uma cor que significa duas coisas não significa nenhuma.
  */
 import { useState } from "react";
-import { CalendarDays, MessageCircle } from "lucide-react";
+import { CalendarDays, FlaskConical, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { SPORTS, isRunSession } from "@/lib/sports";
 import { typeStyle, structureTitle, structureSummary } from "@/components/coach/week/tone";
@@ -24,6 +24,7 @@ import { AdaptSessionControl } from "@/components/today/AdaptSession";
 import { ShoeHint } from "@/components/coach/ShoeHint";
 import type { DoneItem } from "@/lib/day-status";
 import { ScheduleTestSheet } from "@/components/coach/ScheduleTestSheet";
+import { localDateStr } from "@/lib/week";
 import type { PlannedTest } from "@/lib/planned-test";
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 
@@ -47,6 +48,7 @@ export function RunCard({
 }) {
   const tone = typeStyle(session.type);
   const isTest = session.type === "test" && !!plannedTest;
+  const isTestToday = isTest && plannedTest?.date === localDateStr(new Date());
   const [rescheduling, setRescheduling] = useState(false);
 
   return (
@@ -139,13 +141,40 @@ export function RunCard({
           corrida que já não está ali — o que vale aqui é remarcar.
         */}
         {isTest ? (
-          <button
-            type="button"
-            onClick={() => setRescheduling(true)}
-            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-surface-600 px-3 text-xs font-medium text-surface-300 transition-colors hover:border-brand-500/60 hover:text-brand-300"
-          >
-            <CalendarDays className="h-3.5 w-3.5" /> Remarcar teste
-          </button>
+          <>
+            {/*
+              No dia, registrar é a ação — não remarcar.
+
+              O app oferecia "marcar teste" em três telas no dia do teste,
+              enquanto o botão de registrar o que acabara de ser corrido estava
+              no fim da página de Calibração (Sérgio, 01/10).
+            */}
+            {isTestToday && !session.testDone && (
+              <Link
+                href="/coach/calibracao?registrar=1"
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-brand-500 px-3 text-xs font-semibold text-white transition-colors hover:bg-brand-400"
+              >
+                <FlaskConical className="h-3.5 w-3.5" /> Registrar teste de 3 km
+              </Link>
+            )}
+            {!session.testDone && (
+              <button
+                type="button"
+                onClick={() => setRescheduling(true)}
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-surface-600 px-3 text-xs font-medium text-surface-300 transition-colors hover:border-brand-500/60 hover:text-brand-300"
+              >
+                <CalendarDays className="h-3.5 w-3.5" /> Remarcar teste
+              </button>
+            )}
+            {session.testDone && (
+              <Link
+                href="/coach/calibracao"
+                className="inline-flex min-h-[44px] items-center gap-1.5 text-xs font-medium text-brand-400 transition-colors hover:text-brand-300"
+              >
+                <FlaskConical className="h-3.5 w-3.5" /> Ver o que o teste recalibrou
+              </Link>
+            )}
+          </>
         ) : isRunSession(session) && (
           <MoveSessionControl
             week={week}
