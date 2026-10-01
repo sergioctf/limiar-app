@@ -4,6 +4,9 @@ import { useState } from "react";
 import { Loader2, Check, Link2, Bell, Trophy } from "lucide-react";
 import { MUSCLE_LABEL, type MuscleGroup } from "@/lib/exercises";
 import type { QuestionField } from "@/lib/onboarding-flow";
+import { testDateOptions } from "@/lib/planned-test";
+import { formatTestDate } from "@/components/coach/ScheduleTestSheet";
+import { localDateStr } from "@/lib/week";
 import type { DayKey } from "@/types";
 
 const DAYS: Array<{ key: DayKey; short: string }> = [
@@ -37,6 +40,7 @@ export function OnboardingQuestion({
     case "runDays":  return <RunDaysQuestion onSaved={onSaved} />;
     case "strength": return <StrengthQuestion onSaved={onSaved} />;
     case "strava":   return <StravaQuestion />;
+    case "test":     return <TestQuestion onSaved={onSaved} />;
     case "push":     return <PushQuestion />;
     case "goal":     return <GoalQuestion />;
   }
@@ -213,5 +217,59 @@ function GoalQuestion() {
     <a href="/races" className="btn-secondary w-full justify-center">
       <Trophy className="w-4 h-4" /> Cadastrar uma prova
     </a>
+  );
+}
+
+/**
+ * Marcar o teste de 3 km já no primeiro acesso.
+ *
+ * É a pergunta que fecha o fluxo porque é a que dá ritmo ao plano — e porque
+ * agora dá para responder: desde 29/09 o teste pode ser **marcado** para um
+ * dia, em vez de só registrado depois de feito (ver `lib/planned-test.ts`).
+ *
+ * Sem modal: uma fileira de dias e pronto. Um calendário dentro de um fluxo
+ * que já é uma tela cheia é uma camada a mais para quem está se cadastrando.
+ */
+function TestQuestion({ onSaved }: { onSaved: () => void }) {
+  const [date, setDate] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const options = testDateOptions(localDateStr(new Date())).slice(0, 6);
+
+  async function save() {
+    if (!date) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/coach/planned-test", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date }),
+      });
+      if (res.ok) { setSaved(true); setTimeout(onSaved, 600); }
+    } catch { /* skippable by design */ }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-1.5">
+        {options.map(d => (
+          <button
+            key={d}
+            onClick={() => setDate(d)}
+            className={`min-h-[44px] rounded-xl border px-2 text-xs font-semibold transition-colors ${
+              date === d
+                ? "border-brand-500/60 bg-brand-500/15 text-brand-200"
+                : "border-surface-700 bg-surface-800 text-surface-400"
+            }`}
+          >
+            {formatTestDate(d)}
+          </button>
+        ))}
+      </div>
+      <p className="text-[10px] text-surface-500">
+        6 km no dia: 2 de aquecimento, 3 no limite e 1 de volta à calma. Dá para remarcar depois.
+      </p>
+      <SaveButton saving={saving} saved={saved} onClick={save} disabled={!date} label="Marcar o teste" />
+    </div>
   );
 }

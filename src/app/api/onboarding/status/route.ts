@@ -22,6 +22,16 @@ export interface OnboardingStep {
   done:     boolean;
   /** Core steps gate the checklist; the rest are recommendations. */
   core:     boolean;
+  /** Estado já resolvido de outro jeito — "marcado para sex, 3 de out". */
+  note?:    string | null;
+}
+
+const WEEKDAY = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+const MONTH = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+function formatDayLabel(date: string): string {
+  const d = new Date(`${date}T12:00:00`);
+  return `${WEEKDAY[d.getDay()]}, ${d.getDate()} de ${MONTH[d.getMonth()]}`;
 }
 
 export async function GET() {
@@ -52,12 +62,15 @@ export async function GET() {
     }
   };
 
-  const [profile, runs, tests, strava, push] = await Promise.all([
+  const [profile, runs, tests, strava, push, planned] = await Promise.all([
     fetchProfile(),
     safe<{ id: string }>(admin.from("runs").select("id").eq("user_id", user.id).is("deleted_at", null).limit(1)),
     safe<{ id: string }>(admin.from("performance_tests").select("id").eq("user_id", user.id).limit(1)),
     safe<{ id: string }>(admin.from("strava_connections").select("id").eq("user_id", user.id).limit(1)),
     safe<{ id: string }>(admin.from("push_subscriptions").select("id").eq("user_id", user.id).limit(1)),
+    // Um teste marcado não é um teste feito, mas também não é uma pendência:
+    // cobrar quem já escolheu o dia é o app não prestando atenção.
+    safe<{ date: string }>(admin.from("planned_tests").select("date").eq("user_id", user.id).eq("status", "scheduled").limit(1)),
   ]);
 
   // A name auto-derived from the e-mail prefix isn't a real name.
@@ -67,6 +80,9 @@ export async function GET() {
   void hasRealName;
   const strengthDays =
     ((profile?.strength_prefs as { days?: unknown[] } | null)?.days ?? []).length;
+
+  const plannedDate = planned[0]?.date ?? null;
+  const plannedLabel = plannedDate ? formatDayLabel(plannedDate) : "";
 
   const steps: OnboardingStep[] = [
     {
@@ -111,9 +127,12 @@ export async function GET() {
       // motor faz. Estimar ritmo de treino que não é máximo produz número com
       // cara de medido, e weekly-plan.ts recusa isso explicitamente. Sem teste
       // o plano vem sem ritmo e sem FC, e é isso que a dica precisa dizer.
-      hint:  "Sem ele o plano vem sem ritmo e sem faixa de FC — o app não inventa esses números.",
+      hint:  plannedDate
+        ? `Marcado para ${plannedLabel}. No dia, o check-in do treino pergunta se você fez.`
+        : "Sem ele o plano vem sem ritmo e sem faixa de FC — o app não inventa esses números.",
       href:  "/coach",
       done:  tests.length > 0,
+      note:  plannedDate ? `marcado para ${plannedLabel}` : null,
       core:  false,
     },
     {

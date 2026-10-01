@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { GraduationCap, Loader2 } from "lucide-react";
-import { TOUR_STORAGE_KEY } from "@/components/onboarding/OnboardingTour";
 
 /**
  * Replay the app tour.
@@ -21,11 +20,12 @@ export function TutorialButton() {
 
   function replay() {
     setGoing(true);
-    try {
-      localStorage.removeItem(TOUR_STORAGE_KEY);
-    } catch {
-      // Storage denied — the query flag below still forces the tour open.
-    }
+    /*
+      A chave fica. Ela marca o primeiro acesso como visto, e apagá-la fazia
+      a vitrine voltar a ser o fluxo de cadastro na próxima visita — com as
+      perguntas de novo, para quem já respondeu. `?tour=1` abre a vitrine
+      sozinho (ver OnboardingGate).
+    */
     window.location.href = "/?tour=1";
   }
 
@@ -33,9 +33,9 @@ export function TutorialButton() {
     <div className="card p-4 flex items-center gap-3">
       <GraduationCap className="w-5 h-5 text-brand-400 shrink-0" />
       <div className="min-w-0 flex-1">
-        <h3 className="font-bold text-surface-100 text-sm">Tutorial do app</h3>
+        <h3 className="font-bold text-surface-100 text-sm">Conheça o app</h3>
         <p className="text-[11px] text-surface-500 mt-0.5">
-          Rever a apresentação das telas e do que cada uma faz.
+          Nove telas mostrando o que cada parte faz. Não pede configuração nenhuma.
         </p>
       </div>
       <button

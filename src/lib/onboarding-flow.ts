@@ -1,22 +1,50 @@
 /**
- * The first-run wizard: what it shows, what it asks, and in which order.
+ * O primeiro acesso: o que se pergunta, em que ordem, e o que fica para depois.
  *
- * The spine of the feature lives here as data so the sequence can be reasoned
- * about — and tested — without rendering anything. Every rule that matters is
- * expressible against this list: that nothing is mandatory, that a scene always
- * precedes the question it motivates, that the athlete can leave at any point.
+ * A espinha mora aqui como dado, para a sequência poder ser discutida — e
+ * testada — sem renderizar nada.
  *
- * Two decisions shaped it:
+ * ## O que mudou em 01/10, e por quê
  *
- *  • Scenes are built from the app's own components with example data, never
- *    screenshots. The app changes weekly; a screenshot is a lie within a month,
- *    and it cannot follow the light/dark theme.
+ * O fluxo tinha **quinze telas**: nove cenas de demonstração e seis perguntas,
+ * alternando, antes de o atleta ter um único dado seu no app. A ideia era boa
+ * no papel (cada pergunta chega logo depois da tela que a justifica), mas um
+ * usuário novo entrou em 26/09 e o resumo do Sérgio foi: *"está tudo muito
+ * confuso. O app tem muita coisa, está pouco intuitivo."*
  *
- *  • Scene and question alternate. Ten screens of features followed by six
- *    forms turns configuration into paperwork. Showing the structured workout
- *    with its paces and *then* asking which days you run makes the question a
- *    consequence of what was just demonstrated.
+ * Quinze telas antes do primeiro treino é um folheto, não um começo. E a ordem
+ * era a da vitrine — amigos, musculação, provas — não a do que o motor precisa
+ * para montar a primeira semana.
+ *
+ * Agora são **quatro perguntas**, na ordem em que o plano depende delas:
+ *
+ *   1. **quem é você** — nome e @, que é o que as outras pessoas veem (e evita
+ *      que o `IdentityGate` interrompa logo depois, uma segunda vez);
+ *   2. **de onde vêm suas corridas** — Strava, ou registro na mão;
+ *   3. **que dias você corre** — a pergunta que mais muda o plano;
+ *   4. **quando você faz o teste de 3 km** — marcando o dia, agora que dá
+ *      (ver `planned-test.ts`); sem ele o plano vem sem ritmo.
+ *
+ * A musculação, a prova-alvo e os avisos saíram daqui: nenhum dos três é
+ * necessário para a primeira semana existir, e cada um tem o seu lugar natural
+ * no app. Eles continuam na lista de configuração do painel.
+ *
+ * ## E a vitrine?
+ *
+ * As nove cenas continuam existindo, em `TOUR_STEPS`, como **"Conheça o app"** —
+ * uma coisa que se escolhe ver, não um pedágio. É o que o botão das
+ * Configurações abre, e o que o fim do primeiro acesso oferece.
  */
+
+/**
+ * Marca que o primeiro acesso já aconteceu.
+ *
+ * O nome é de 2026 e fica como está: trocá-lo faria o fluxo reaparecer para
+ * todo mundo que já passou por ele. Morava no `OnboardingTour`, a primeira
+ * implementação do tutorial — apagada em 01/10, quando sobraram três: aquela,
+ * este fluxo e a lista do painel.
+ */
+export const TOUR_STORAGE_KEY = "limiar_onboarded";
 
 export type StepKind = "scene" | "question" | "welcome" | "done";
 
@@ -27,6 +55,7 @@ export type QuestionField =
   | "strength"      // dias e grupos musculares
   | "goal"          // objetivo ou prova alvo
   | "strava"
+  | "test"          // marcar o teste de 3 km
   | "push";
 
 export interface OnboardingStepDef {
@@ -78,99 +107,120 @@ export const SCENE_TITLE: Record<SceneKey, string> = {
   friends:           "Quem treina com você",
 };
 
+/* ── O primeiro acesso ────────────────────────────────────────────────────── */
+
 export const ONBOARDING_STEPS: OnboardingStepDef[] = [
   {
     id: "welcome", kind: "welcome", skippable: true,
     title: "Bem-vindo ao Limiar",
-    body:  "Dois minutos agora e o app já começa com o seu treino, não com um genérico. Dá para pular tudo e configurar depois.",
+    body:
+      "Quatro perguntas, um minuto, e sua primeira semana de treino já nasce com a sua cara. " +
+      "Dá para pular qualquer uma — o que faltar fica na lista do painel.",
   },
 
-  // ── Quem é você ───────────────────────────────────────────────────────────
-  {
-    id: "scene-friends", kind: "scene", scene: "friends", skippable: true,
-    title: SCENE_TITLE.friends,
-    body:  "Ranking por dias treinados, desafios e o feed de quem treina com você.",
-  },
   {
     id: "q-identity", kind: "question", field: "identity", skippable: true,
-    title: "Como você aparece para os outros",
-    body:  "Nome, sobrenome e um @username — é assim que seus amigos te encontram.",
+    title: "Como você se chama",
+    body: "Nome, sobrenome e um @username. É assim que seus amigos te encontram aqui.",
   },
 
-  // ── A corrida ─────────────────────────────────────────────────────────────
   {
-    id: "scene-run", kind: "scene", scene: "structuredRun", skippable: true,
-    title: SCENE_TITLE.structuredRun,
-    body:  "Aquecimento, tiros e desaquecimento, cada bloco com ritmo e faixa de batimento. Não é uma distância solta.",
+    id: "q-strava", kind: "question", field: "strava", skippable: true,
+    title: "De onde vêm suas corridas",
+    body:
+      "Com o Strava conectado elas entram sozinhas, e o plano já começa sabendo quanto " +
+      "você corre hoje. Sem ele, dá para registrar cada corrida na mão.",
   },
+
   {
     id: "q-run-days", kind: "question", field: "runDays", skippable: true,
     title: "Que dias você corre?",
-    body:  "É a pergunta que mais muda o seu plano. Sem ela o app assume terça, quinta e sábado — que provavelmente não são os seus.",
+    body:
+      "É a pergunta que mais muda o seu plano: ela decide onde caem o longão e o treino " +
+      "forte. Sem resposta, o app chuta terça, quinta e sábado.",
   },
 
-  // ── A musculação ──────────────────────────────────────────────────────────
   {
-    id: "scene-strength", kind: "scene", scene: "strengthCatalogue", skippable: true,
-    title: SCENE_TITLE.strengthCatalogue,
-    body:  "Séries, repetições e carga sugerida. Com foto de cada movimento, para não restar dúvida na hora.",
-  },
-  {
-    id: "q-strength", kind: "question", field: "strength", skippable: true,
-    title: "E a musculação?",
-    body:  "Escolha os dias e os grupos musculares. O treinador monta as séries a partir disso.",
-  },
-
-  // ── O que o app calcula ───────────────────────────────────────────────────
-  {
-    id: "scene-zones", kind: "scene", scene: "zones", skippable: true,
-    title: SCENE_TITLE.zones,
-    body:  "Um teste de 3 km define seus ritmos de treino e suas zonas de frequência cardíaca. Sem ele o app não inventa esses números.",
-  },
-  {
-    id: "scene-predictions", kind: "scene", scene: "predictions", skippable: true,
-    title: SCENE_TITLE.predictions,
-    body:  "5 km, 10 km, meia e maratona, projetados do seu teste mais recente.",
-  },
-  {
-    id: "scene-load", kind: "scene", scene: "trainingLoad", skippable: true,
-    title: SCENE_TITLE.trainingLoad,
-    body:  "Carga aguda contra crônica: o app avisa quando você está fundo demais para o treino que vem.",
-  },
-
-  // ── De onde vêm os dados ──────────────────────────────────────────────────
-  {
-    id: "scene-history", kind: "scene", scene: "history", skippable: true,
-    title: SCENE_TITLE.history,
-    body:  "Previsto contra executado, quilômetro a quilômetro, com o percurso no mapa e um comentário do treinador.",
-  },
-  {
-    id: "q-strava", kind: "question", field: "strava", skippable: true,
-    title: "Conectar o Strava",
-    body:  "Suas corridas entram sozinhas, sem você apertar nada. Também dá para registrar na mão.",
-  },
-
-  // ── O destino ─────────────────────────────────────────────────────────────
-  {
-    id: "scene-races", kind: "scene", scene: "races", skippable: true,
-    title: SCENE_TITLE.races,
-    body:  "Cadastre a prova e o plano inteiro se organiza em torno dela, até o polimento da última semana.",
-  },
-  {
-    id: "q-goal", kind: "question", field: "goal", skippable: true,
-    title: "Tem uma prova no radar?",
-    body:  "Com data e distância o plano vira periodização de verdade. Sem prova, o foco é evoluir com consistência.",
-  },
-  {
-    id: "q-push", kind: "question", field: "push", skippable: true,
-    title: "Avisos do treino",
-    body:  "O treino do dia de manhã, e alerta quando a carga pedir descanso.",
+    id: "q-test", kind: "question", field: "test", skippable: true,
+    title: "Quando você faz o teste de 3 km?",
+    body:
+      "São 3 km no seu limite — é o que dá ao plano os seus ritmos e as suas faixas de " +
+      "frequência cardíaca. O app não inventa esses números: marque um dia e ele entra na sua semana.",
   },
 
   {
     id: "done", kind: "done", scene: "dashboard", skippable: false,
     title: "Pronto",
-    body:  "O que você pulou continua na lista de configuração do painel — dá para completar quando quiser.",
+    body:
+      "Sua semana está montada. O que você pulou continua na lista do painel, e dá para " +
+      "ver o app inteiro quando quiser.",
+  },
+];
+
+/* ── A vitrine, para quem quiser ver ──────────────────────────────────────── */
+
+/**
+ * As nove cenas, sem pergunta nenhuma.
+ *
+ * Montadas com os componentes do próprio app e dados de exemplo, nunca
+ * capturas de tela: o app muda toda semana, um print é mentira em um mês e não
+ * acompanha o tema claro/escuro.
+ */
+export const TOUR_STEPS: OnboardingStepDef[] = [
+  {
+    id: "tour-welcome", kind: "welcome", skippable: true,
+    title: "O que o Limiar faz",
+    body: "Nove telas, dois minutos. Nada aqui pede configuração — é só para você ver.",
+  },
+  {
+    id: "scene-dashboard", kind: "scene", scene: "dashboard", skippable: true,
+    title: SCENE_TITLE.dashboard,
+    body: "O treino de hoje, como está o corpo e o que a semana ainda pede.",
+  },
+  {
+    id: "scene-run", kind: "scene", scene: "structuredRun", skippable: true,
+    title: SCENE_TITLE.structuredRun,
+    body: "Aquecimento, tiros e desaquecimento, cada bloco com ritmo e faixa de batimento. Não é uma distância solta.",
+  },
+  {
+    id: "scene-zones", kind: "scene", scene: "zones", skippable: true,
+    title: SCENE_TITLE.zones,
+    body: "Um teste de 3 km define seus ritmos de treino e suas zonas de frequência cardíaca.",
+  },
+  {
+    id: "scene-predictions", kind: "scene", scene: "predictions", skippable: true,
+    title: SCENE_TITLE.predictions,
+    body: "5 km, 10 km, meia e maratona, projetados do seu teste mais recente.",
+  },
+  {
+    id: "scene-load", kind: "scene", scene: "trainingLoad", skippable: true,
+    title: SCENE_TITLE.trainingLoad,
+    body: "Carga aguda contra crônica: o app avisa quando você está fundo demais para o treino que vem.",
+  },
+  {
+    id: "scene-strength", kind: "scene", scene: "strengthCatalogue", skippable: true,
+    title: SCENE_TITLE.strengthCatalogue,
+    body: "Séries, repetições e carga sugerida, com foto de cada movimento.",
+  },
+  {
+    id: "scene-history", kind: "scene", scene: "history", skippable: true,
+    title: SCENE_TITLE.history,
+    body: "Previsto contra executado, quilômetro a quilômetro, com o percurso no mapa.",
+  },
+  {
+    id: "scene-races", kind: "scene", scene: "races", skippable: true,
+    title: SCENE_TITLE.races,
+    body: "Cadastre a prova e o plano se organiza em torno dela, até o polimento da última semana.",
+  },
+  {
+    id: "scene-friends", kind: "scene", scene: "friends", skippable: true,
+    title: SCENE_TITLE.friends,
+    body: "Ranking por dias treinados, desafios e o feed de quem treina com você.",
+  },
+  {
+    id: "tour-done", kind: "done", scene: "ai", skippable: false,
+    title: SCENE_TITLE.ai,
+    body: "Ele lê os seus dados antes de responder — e propõe, nunca muda o plano sozinho.",
   },
 ];
 
@@ -180,15 +230,16 @@ export function questionSteps(steps = ONBOARDING_STEPS): OnboardingStepDef[] {
 }
 
 /** Steps that only show a feature. */
-export function sceneSteps(steps = ONBOARDING_STEPS): OnboardingStepDef[] {
+export function sceneSteps(steps = TOUR_STEPS): OnboardingStepDef[] {
   return steps.filter(s => s.kind === "scene");
 }
 
 /**
- * The scene that motivates a question, when there is one.
+ * A cena que motiva uma pergunta, quando existe.
  *
- * Used to keep the pairing honest: a question whose feature was never shown is
- * a form field, and the whole point of this flow is that it is not one.
+ * Continua aqui porque o teste que garante o pareamento continua valendo para
+ * quem montar um fluxo misto no futuro — e porque é ele que documenta a regra:
+ * uma pergunta cuja tela nunca foi mostrada é um campo de formulário.
  */
 export function sceneBefore(
   stepId: string, steps = ONBOARDING_STEPS,

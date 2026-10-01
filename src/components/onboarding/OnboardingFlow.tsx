@@ -25,8 +25,14 @@ import { ONBOARDING_STEPS, type OnboardingStepDef } from "@/lib/onboarding-flow"
 export function OnboardingFlow({
   onFinish,
   renderQuestion,
+  steps = ONBOARDING_STEPS,
+  footer,
 }: {
   onFinish: () => void;
+  /** Qual sequência rodar: o primeiro acesso (padrão) ou a vitrine. */
+  steps?: OnboardingStepDef[];
+  /** Oferecido na última tela — é por onde o primeiro acesso leva ao tour. */
+  footer?: React.ReactNode;
   /**
    * Renders the form for a question step. Returning null makes the step a
    * plain informational screen — useful while the forms are still being built,
@@ -35,8 +41,8 @@ export function OnboardingFlow({
   renderQuestion?: (step: OnboardingStepDef, next: () => void) => React.ReactNode;
 }) {
   const [i, setI] = useState(0);
-  const step = ONBOARDING_STEPS[i];
-  const isLast = i === ONBOARDING_STEPS.length - 1;
+  const step = steps[i];
+  const isLast = i === steps.length - 1;
 
   const next = () => (isLast ? onFinish() : setI(n => n + 1));
   const back = () => setI(n => Math.max(0, n - 1));
@@ -49,7 +55,7 @@ export function OnboardingFlow({
       <div className="h-0.5 bg-surface-800 shrink-0">
         <div
           className="h-full bg-brand-500 transition-all duration-300"
-          style={{ width: `${((i + 1) / ONBOARDING_STEPS.length) * 100}%` }}
+          style={{ width: `${((i + 1) / steps.length) * 100}%` }}
         />
       </div>
 
@@ -74,6 +80,7 @@ export function OnboardingFlow({
 
           {step.scene && <OnboardingScene scene={step.scene} />}
           {form}
+          {isLast && footer}
         </div>
       </div>
 

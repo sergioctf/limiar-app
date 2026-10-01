@@ -371,7 +371,15 @@ export function HomeContent({
         </Card>
       </Section>
 
-      {/* ── 3. Minha semana — every sport, done and not done, numbers big ── */}
+      {/*
+        ── 3. Minha semana — every sport, done and not done, numbers big ──
+
+        Escondida enquanto não há nenhuma corrida nem atividade. Um anel de
+        zeros e "0 km esta semana" não é informação: é a tela ocupada avisando
+        que você ainda não fez nada. Quem acabou de entrar tem uma coisa para
+        fazer, e ela está no card de configuração (Sérgio, 01/10).
+      */}
+      {!isNewUser && (
       <Section
         title="Minha semana"
         action={<Link href="/runs" className="text-xs text-surface-500 hover:text-surface-300">Histórico</Link>}
@@ -496,8 +504,11 @@ export function HomeContent({
           </div>
         </Card>
       </Section>
+      )}
 
-      {history}
+      {/* O histórico — números da vida toda, recordes, conquistas — só existe
+          depois de existir histórico. */}
+      {!isNewUser && history}
 
       {lastSyncAt && (
         <p className="text-center text-[11px] text-surface-600">
