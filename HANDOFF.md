@@ -22,7 +22,7 @@
 2. **O deploy é feito da máquina local**, com `npx vercel deploy --prod` na pasta. Não há CI, não há deploy a partir do GitHub. O que está em produção é o que estava no disco de Sérgio no momento do último deploy.
 3. **O banco não é reconstruível a partir do repositório.** As tabelas `activities`, `performance_tests` e `races` são usadas intensamente pelo código, mas **não existe DDL delas em nenhum `.sql`**. Foram criadas por rotas `/api/admin/*` que já foram apagadas. Além disso, as migrations 002–027 foram aplicadas **à mão** no SQL Editor do Supabase (não existe runner nem `DATABASE_URL`), e há infraestrutura que vive só no Supabase (job `pg_cron` e segredo no Vault — ver seção 18).
 4. **Possível vazamento de dados entre usuários (crítico, a confirmar no banco).** A migration `002_social.sql` cria a policy `"Authenticated can search profiles"` com `for select using (auth.role() = 'authenticated')`. RLS filtra linhas, não colunas: qualquer usuário logado pode, com a anon key, ler **todas as colunas de todos os perfis** — e-mail, data de nascimento, altura, sexo e o `wellness_token`, que autentica o endpoint público `/api/ingest/wellness`, permitindo gravar dados de saúde no nome de outra pessoa. Não verifiquei se a policy ainda existe em produção. Verifique com `select * from pg_policies where tablename = 'profiles';`. No mesmo nível de risco: **o webhook do Strava aceita eventos forjados** e um POST com `aspect_type: "delete"` apaga (soft delete) a corrida de qualquer usuário pelo ID da atividade (dívida A9).
-5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.621 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
+5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.625 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
 6. **Há usuários reais.** São 7 contas por convite (Sérgio e amigos). O plano da semana é lido e seguido por pessoas. Regra de ouro que custou caro: **nunca reescrever uma semana que já começou** (ver ADR sobre congelamento de semana).
 
 ---
@@ -1407,6 +1407,17 @@ Sete itens de uma lista de nove, depois de Sérgio usar o teste marcado por um d
 - **Dois não reproduzidos**, com defesa adicionada enquanto Sérgio não disser o que vê: mapas (tiles do CARTO responderam 200 em quatro variantes, polylines presentes, mapa renderizou local — agora cai para OpenStreetMap no primeiro `tileerror`) e "Comparar com amigos" (rota responde, 3 amizades aceitas — mas qualquer erro virava lista vazia e a tela mostrava "só você", indistinguível de quem não tem amigos; agora mostra erro e "Tentar de novo").
 - **No radar:** animação de "level up" pós-teste, mostrando VDOT, zonas, ritmos e previsões sendo recalculados.
 
+## 6.51 O mapa pedia chave, e o "Regenerar" não existia ✅ (novo, 02/10)
+
+Detalhes em **`docs/mapas-e-regenerar-02-10.md`**.
+
+- **O CARTO passou a exigir chave** e devolve a cobrança como **HTTP 200 + PNG válido** escrito "API KEY REQUIRED" — todas as telhas do mundo com os mesmos 2.513 bytes. Em 01/10 eu conferi quatro URLs, vi `200` nas quatro e dei por verificado: **status não é conteúdo**, e para um recurso visual a verificação é o pixel. O fallback por `tileerror` que eu tinha escrito seria inútil — não houve erro.
+- **Fonte nova: `tile.openstreetmap.org`**, centralizada em `src/lib/map-tiles.ts`. É a origem e não um revendedor, é gratuita, tem política de uso publicada (oito atletas estão muito abaixo do uso pesado) e, quando bloqueia, erra de verdade.
+- **O tema do app decide a cor:** telhas claras servem o tema claro; no escuro são invertidas por filtro CSS no painel de telhas (`invert(1) hue-rotate(180deg)`, senão a água fica laranja). O filtro não pega o traçado, que vive em painel irmão.
+- **Falha visível:** "O mapa de fundo não carregou — o trajeto continua correto", em vez de retângulo cinza. E `tests/map-tiles.test.ts` barra a volta para qualquer CDN com `apikey`/`token` na URL.
+- **"Minha semana" não tinha como aplicar.** O rodapé do card mandava "usar **Regenerar** no plano" — botão que o redesenho do Treinador removeu. A única porta que sobrou era o aviso de plano desatualizado, que depende de o motor detectar a diferença **e** de nenhum aviso mais urgente ocupar a faixa (que só mostra o primeiro). Um usuário travou nisso em 02/10.
+- **O botão novo promete o que o motor cumpre:** "Montar a próxima semana com estes dias". `regenerationTarget` congela toda semana já começada — sempre a de hoje —, então prometer "aplicar agora" é como alguém acaba apertando dez vezes (20/09). Exceção: quem não tem plano nesta semana recebe as duas.
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
@@ -2610,7 +2621,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 
 ## 19.1 O que existe
 
-- **Vitest 2.1**, `npm test` (= `vitest run`). **93 arquivos, 1.621 testes, todos passando** (rodado em 01/10/2026, ~6 s).
+- **Vitest 2.1**, `npm test` (= `vitest run`). **94 arquivos, 1.625 testes, todos passando** (rodado em 02/10/2026, ~6 s).
 - **Só funções puras de `src/lib/`.** Sem banco, sem rede, sem DOM.
 - **Fixture central** (`tests/fixtures.ts`): atleta com teste de 3 km em 13:00 e FC média 178 → **VDOT ≈ 43,7, LTHR = 165**. Falhas se leem como "isso deu errado para um corredor de VDOT 43".
 - **`tests/README.md`:** tabela dos bugs reais que cada teste protege. Leitura obrigatória.
@@ -2656,7 +2667,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 | Dimensão | Estado | Nota |
 |---|---|---|
 | **Proposta de valor** | Clara: treinador de corrida (e força) que prescreve com ciência, se adapta ao corpo e explica o porquê | 🟢 |
-| **Motor de treino** | Maduro, determinístico, ~1.621 testes, corrigido contra casos reais | 🟢 |
+| **Motor de treino** | Maduro, determinístico, ~1.625 testes, corrigido contra casos reais | 🟢 |
 | **Saúde/recuperação** | Nova (14/09), funcional com Garmin via intervals.icu e sem relógio; score não validado contra desfecho | 🟡 |
 | **UX** | Rica e animada no dashboard e na Saúde; telas antigas inconsistentes; muita navegação (10 itens) | 🟡 |
 | **Usuários** | 7 contas por convite; push chega a 4; **sem métricas de uso** (nenhum analytics) | 🔴 para decidir produto |

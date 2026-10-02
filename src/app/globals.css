@@ -285,3 +285,36 @@
   }
   @page { margin: 12mm; }
 }
+
+/*
+  O mapa seguindo o tema do app.
+
+  As telhas do OpenStreetMap são claras — o que já serve o tema claro. No tema
+  escuro elas são invertidas: `invert` sozinho deixaria a água laranja, e
+  `hue-rotate(180deg)` devolve o azul.
+
+  O filtro fica no **painel de telhas**, não no mapa: o traçado da corrida, os
+  marcadores e a atribuição vivem em painéis irmãos e precisam manter a cor que
+  têm. Inverter o mapa inteiro deixaria a rota laranja virar azul.
+
+  (Antes o escuro vinha pronto do CARTO, que em 02/10/2026 passou a exigir
+  chave e a devolver "API KEY REQUIRED" com status 200 — ver
+  `src/lib/map-tiles.ts`.)
+*/
+.dark .map-tiles .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.85) saturate(0.35);
+}
+
+/* O Leaflet pinta o fundo de cinza-claro enquanto as telhas não chegam. */
+.map-tiles.leaflet-container {
+  background: theme("colors.surface.800");
+}
+
+/* A atribuição do OSM é obrigatória; só precisa ser legível nos dois temas. */
+.map-tiles .leaflet-control-attribution {
+  background: rgb(var(--color-surface-900) / 0.72);
+  color: theme("colors.surface.400");
+}
+.map-tiles .leaflet-control-attribution a {
+  color: theme("colors.surface.300");
+}

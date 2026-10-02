@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, MapPin } from "lucide-react";
 import { decodePolyline, type LatLng } from "@/lib/polyline";
+import { addBaseTiles } from "@/lib/map-tiles";
 import "leaflet/dist/leaflet.css";
 
 export interface RunPin {
@@ -24,6 +25,8 @@ export function RunsWorldMap({ runs }: Props) {
   const mapRef = useRef<import("leaflet").Map | null>(null);
   const [loading, setLoading] = useState(true);
   const [located, setLocated] = useState(0);
+  /** Os traçados continuam desenhados; o que falta é o mapa embaixo deles. */
+  const [tilesFailed, setTilesFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,33 +43,8 @@ export function RunsWorldMap({ runs }: Props) {
       const map = L.map(containerRef.current, { zoomControl: true, scrollWheelZoom: true, worldCopyJump: true });
       mapRef.current = map;
 
-      /*
-        O mapa não pode morrer calado.
-
-        As telhas vinham só do CARTO. Quando ele falha — e ele falha por região,
-        por volume ou por bloqueio de rede — o mapa fica um retângulo cinza, sem
-        erro no console e sem nada na tela que diga o que houve (Sérgio relatou
-        "a API de mapas parou" em 01/10; aqui elas respondiam normalmente, o
-        que é exatamente o sintoma de uma falha que depende de onde se está).
-
-        Agora a primeira falha troca para o OpenStreetMap, que é a fonte
-        original e não tem CDN intermediário.
-      */
-      const carto = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        attribution: '&copy; OpenStreetMap &copy; CARTO',
-        maxZoom: 19,
-      }).addTo(map);
-
-      let trocou = false;
-      carto.on("tileerror", () => {
-        if (trocou) return;
-        trocou = true;
-        map.removeLayer(carto);
-        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: '&copy; OpenStreetMap',
-          maxZoom: 19,
-        }).addTo(map);
-      });
+      // Telhas e escurecimento: ver `src/lib/map-tiles.ts`.
+      addBaseTiles(L, map, () => { if (!cancelled) setTilesFailed(true); });
 
       const allStarts: LatLng[] = [];
 
@@ -112,11 +90,16 @@ export function RunsWorldMap({ runs }: Props) {
           <Loader2 className="w-6 h-6 animate-spin text-brand-400" />
         </div>
       )}
-      <div ref={containerRef} className="w-full z-0" style={{ height: "min(70vh, 620px)" }} />
+      <div ref={containerRef} className="map-tiles w-full z-0" style={{ height: "min(70vh, 620px)" }} />
       {!loading && (
         <div className="absolute bottom-3 left-3 z-[400] bg-surface-900/80 backdrop-blur rounded-lg px-3 py-1.5 text-xs text-surface-300 flex items-center gap-1.5 pointer-events-none">
           <MapPin className="w-3.5 h-3.5 text-brand-400" />
           {located} corrida{located !== 1 ? "s" : ""} com GPS
+        </div>
+      )}
+      {tilesFailed && (
+        <div className="absolute right-3 top-3 z-[400] rounded-lg bg-surface-900/80 px-3 py-1.5 text-xs text-surface-400 backdrop-blur">
+          O mapa de fundo não carregou — os trajetos continuam corretos.
         </div>
       )}
     </div>

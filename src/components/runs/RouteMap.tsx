@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Play, Pause, RotateCcw, Map as MapIcon, MapPin } from "lucide-react";
 import { decodePolyline, type LatLng } from "@/lib/polyline";
+import { addBaseTiles } from "@/lib/map-tiles";
 import type { Map as LeafletMap, Polyline, CircleMarker } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -26,6 +27,8 @@ export function RouteMap({ polyline, distanceKm, latlng }: Props) {
 
   const [ready, setReady] = useState(false);
   const [hasRoute, setHasRoute] = useState(true);
+  /** O traçado continua desenhado; o que falta é o mapa embaixo dele. */
+  const [tilesFailed, setTilesFailed] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0); // 0..1
 
@@ -47,33 +50,8 @@ export function RouteMap({ polyline, distanceKm, latlng }: Props) {
       });
       mapRef.current = map;
 
-      /*
-        O mapa não pode morrer calado.
-
-        As telhas vinham só do CARTO. Quando ele falha — e ele falha por região,
-        por volume ou por bloqueio de rede — o mapa fica um retângulo cinza, sem
-        erro no console e sem nada na tela que diga o que houve (Sérgio relatou
-        "a API de mapas parou" em 01/10; aqui elas respondiam normalmente, o
-        que é exatamente o sintoma de uma falha que depende de onde se está).
-
-        Agora a primeira falha troca para o OpenStreetMap, que é a fonte
-        original e não tem CDN intermediário.
-      */
-      const carto = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        attribution: '&copy; OpenStreetMap &copy; CARTO',
-        maxZoom: 19,
-      }).addTo(map);
-
-      let trocou = false;
-      carto.on("tileerror", () => {
-        if (trocou) return;
-        trocou = true;
-        map.removeLayer(carto);
-        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: '&copy; OpenStreetMap',
-          maxZoom: 19,
-        }).addTo(map);
-      });
+      // Telhas e escurecimento: ver `src/lib/map-tiles.ts`.
+      addBaseTiles(L, map, () => { if (!cancelled) setTilesFailed(true); });
 
       // Full route (faint) + traveled overlay (bright)
       L.polyline(pts, { color: "#52525b", weight: 4, opacity: 0.6 }).addTo(map);
@@ -155,7 +133,12 @@ export function RouteMap({ polyline, distanceKm, latlng }: Props) {
         <span className="text-xs text-surface-500">{distanceKm.toFixed(1)} km</span>
       </div>
 
-      <div ref={containerRef} className="w-full rounded-xl overflow-hidden bg-surface-700/30 z-0" style={{ height: 320 }} />
+      <div ref={containerRef} className="map-tiles w-full rounded-xl overflow-hidden bg-surface-700/30 z-0" style={{ height: 320 }} />
+      {tilesFailed && (
+        <p className="mt-2 text-xs text-surface-500">
+          O mapa de fundo não carregou — o trajeto acima continua correto.
+        </p>
+      )}
 
       {/* Controls */}
       <div className="flex items-center gap-3 mt-3">

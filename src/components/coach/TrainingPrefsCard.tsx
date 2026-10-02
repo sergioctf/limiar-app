@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarRange, Loader2, Check, Info } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { CalendarRange, Loader2, Check, Info, RefreshCw } from "lucide-react";
 import type { DayKey, TrainingPrefs } from "@/types";
 import { localNextMondayStr } from "@/lib/week";
 
@@ -246,10 +247,81 @@ export function TrainingPrefsCard() {
         </div>
       )}
 
-      <p className="text-[11px] text-brand-400 leading-relaxed">
-        As sessões são distribuídas nos seus dias como leve → forte → longão. Use
-        <span className="font-semibold"> Regenerar</span> no plano para aplicar,
-        ou peça um ajuste no chat do treinador.
+      <p className="text-[11px] text-surface-500 leading-relaxed">
+        As sessões são distribuídas nos seus dias como leve → forte → longão.
+      </p>
+
+      <RegeneratePlan />
+    </div>
+  );
+}
+
+/**
+ * Aplicar o que acabou de ser escolhido.
+ *
+ * Esta tela mudava a configuração e mandava o atleta "usar Regenerar no plano"
+ * — um botão que o redesenho do Treinador tinha removido. Quem trocava os dias
+ * de corrida ficava com o texto apontando para lugar nenhum e um plano que não
+ * mudava (um usuário relatou isso em 02/10).
+ *
+ * A regeneração já existia; faltava uma porta. Esta é a mesma rota do aviso de
+ * plano desatualizado — e o aviso só aparece quando o motor detecta a diferença
+ * **e** nenhum outro aviso mais urgente está ocupando a faixa acima do plano.
+ * Aqui ela fica sempre disponível, ao lado do que a provoca.
+ *
+ * **A semana em curso nunca é reescrita** — `regenerationTarget` congela toda
+ * semana que já começou, o que na prática é sempre a de hoje. Por isso o botão
+ * promete a próxima, e não "aplicar agora": prometer o que o motor recusa é
+ * como o atleta acaba apertando o mesmo botão dez vezes esperando a semana
+ * mudar. A exceção é quem ainda não tem plano nenhum nesta semana; aí não há o
+ * que tirar de ninguém, e as duas são montadas.
+ */
+function RegeneratePlan() {
+  const router = useRouter();
+  const [state, setState] = useState<"idle" | "saving">("idle");
+  const [result, setResult] = useState<string | null>(null);
+
+  async function regenerate() {
+    setState("saving");
+    setResult(null);
+    try {
+      const res = await fetch("/api/coach/weekly-plan/freshness", { method: "POST" });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) {
+        setResult(d?.error ?? "Não foi possível atualizar o plano. Tente de novo.");
+        return;
+      }
+      const refeitas = (d?.rebuilt as string[] | undefined)?.length ?? 0;
+      setResult(
+        refeitas > 1
+          ? "Pronto — esta semana e a próxima foram montadas com os seus dias."
+          : refeitas === 1
+            ? "Pronto — a próxima semana foi montada com os seus dias."
+            : "O plano não mudou. Esta semana já começou e não é reescrita.",
+      );
+      // O plano na tela veio do servidor: sem isto, o aviso de sucesso aparece
+      // em cima exatamente das sessões que ele acabou de substituir.
+      router.refresh();
+    } catch {
+      setResult("Falha na conexão. Tente de novo.");
+    } finally {
+      setState("idle");
+    }
+  }
+
+  return (
+    <div className="space-y-2 border-t border-surface-700/60 pt-3">
+      <button
+        onClick={regenerate}
+        disabled={state === "saving"}
+        className="btn-primary min-h-[48px] w-full justify-center"
+      >
+        {state === "saving"
+          ? <><Loader2 className="h-4 w-4 animate-spin" /> Montando a semana…</>
+          : <><RefreshCw className="h-4 w-4" /> Montar a próxima semana com estes dias</>}
+      </button>
+      <p className="text-[11px] leading-relaxed text-surface-500" aria-live="polite">
+        {result ?? "A semana em curso não é reescrita — você já se organizou em torno dela. Os dias novos valem a partir de segunda."}
       </p>
     </div>
   );
