@@ -1,4 +1,4 @@
-import { DAY_SHORT_PT, dateOfWeekDay } from "@/lib/week";
+import { DAY_SHORT_PT, dateOfWeekDay, isoDateOfWeekDay } from "@/lib/week";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   localDateStr, localMondayStr, localNextMondayStr, localPreviousMondayStr,
@@ -130,5 +130,20 @@ describe("o calendário do plano fala português", () => {
 
   it("não inventa data para uma chave que não existe", () => {
     expect(dateOfWeekDay("2026-09-21", "Xyz")).toBeNull();
+  });
+
+  it("dá a data inteira, que é o que vai para o registro", () => {
+    expect(isoDateOfWeekDay("2026-09-21", "Mon")).toBe("2026-09-21");
+    expect(isoDateOfWeekDay("2026-09-21", "Sun")).toBe("2026-09-27");
+  });
+
+  it("atravessa a virada do mês e a do ano sem perder o dia", () => {
+    expect(isoDateOfWeekDay("2026-09-28", "Sat")).toBe("2026-10-03");
+    expect(isoDateOfWeekDay("2026-12-28", "Fri")).toBe("2027-01-01");
+  });
+
+  it("não inventa data inteira para chave ou semana inválida", () => {
+    expect(isoDateOfWeekDay("2026-09-21", "Xyz")).toBeNull();
+    expect(isoDateOfWeekDay("nao-e-data", "Mon")).toBeNull();
   });
 });

@@ -22,7 +22,7 @@
 2. **O deploy é feito da máquina local**, com `npx vercel deploy --prod` na pasta. Não há CI, não há deploy a partir do GitHub. O que está em produção é o que estava no disco de Sérgio no momento do último deploy.
 3. **O banco não é reconstruível a partir do repositório.** As tabelas `activities`, `performance_tests` e `races` são usadas intensamente pelo código, mas **não existe DDL delas em nenhum `.sql`**. Foram criadas por rotas `/api/admin/*` que já foram apagadas. Além disso, as migrations 002–027 foram aplicadas **à mão** no SQL Editor do Supabase (não existe runner nem `DATABASE_URL`), e há infraestrutura que vive só no Supabase (job `pg_cron` e segredo no Vault — ver seção 18).
 4. **Possível vazamento de dados entre usuários (crítico, a confirmar no banco).** A migration `002_social.sql` cria a policy `"Authenticated can search profiles"` com `for select using (auth.role() = 'authenticated')`. RLS filtra linhas, não colunas: qualquer usuário logado pode, com a anon key, ler **todas as colunas de todos os perfis** — e-mail, data de nascimento, altura, sexo e o `wellness_token`, que autentica o endpoint público `/api/ingest/wellness`, permitindo gravar dados de saúde no nome de outra pessoa. Não verifiquei se a policy ainda existe em produção. Verifique com `select * from pg_policies where tablename = 'profiles';`. No mesmo nível de risco: **o webhook do Strava aceita eventos forjados** e um POST com `aspect_type: "delete"` apaga (soft delete) a corrida de qualquer usuário pelo ID da atividade (dívida A9).
-5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.625 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
+5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.662 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
 6. **Há usuários reais.** São 7 contas por convite (Sérgio e amigos). O plano da semana é lido e seguido por pessoas. Regra de ouro que custou caro: **nunca reescrever uma semana que já começou** (ver ADR sobre congelamento de semana).
 
 ---
@@ -1418,6 +1418,19 @@ Detalhes em **`docs/mapas-e-regenerar-02-10.md`**.
 - **"Minha semana" não tinha como aplicar.** O rodapé do card mandava "usar **Regenerar** no plano" — botão que o redesenho do Treinador removeu. A única porta que sobrou era o aviso de plano desatualizado, que depende de o motor detectar a diferença **e** de nenhum aviso mais urgente ocupar a faixa (que só mostra o primeiro). Um usuário travou nisso em 02/10.
 - **O botão novo promete o que o motor cumpre:** "Montar a próxima semana com estes dias". `regenerationTarget` congela toda semana já começada — sempre a de hoje —, então prometer "aplicar agora" é como alguém acaba apertando dez vezes (20/09). Exceção: quem não tem plano nesta semana recebe as duas.
 
+## 6.52 Modo de execução: o treino enquanto ele acontece ✅ (novo, 03/10)
+
+Item 3 da lista. Detalhes em **`docs/modo-de-execucao-03-10.md`**.
+
+- **O buraco:** o app tinha a lista do que fazer (antes) e uma tabela de inputs (depois), e **nada no meio**. O atleta decorava quatro exercícios, treinava cinquenta minutos e no fim preenchia de memória — e é exatamente dessas linhas que sai a progressão de carga.
+- **`SessionRunner`**, aberto por "Começar treino" no card de musculação, **só no dia** (o registro é datado; oferecer na quinta o treino de sábado convida a gravar o que não aconteceu). Um exercício por vez ocupando a tela; só a série ativa aberta, com passos de ±2,5 kg e ±1 rep no polegar; as feitas viram linha de consulta.
+- **O descanso começa sozinho** ao marcar a série, com o tempo da prescrição, e **a última série do exercício não pede descanso** — leva ao próximo. Carga sugerida vem de `nextTarget`; sem histórico, campo em branco (o app não inventa número).
+- **Grava pela rota de sempre** (`/api/strength/log`): a progressão não sabe por qual tela o atleta entrou.
+- **O descanso é um instante, não um contador.** Guarda-se *quando ele acaba* — subtrair de um em um erra toda vez que a tela apaga, que é o caso normal. E ele fica verde no zero em vez de sumir.
+- **A sessão sobrevive ao app** (`localStorage` do dia, conferido com recarregamento no meio do treino). Na volta a prescrição de hoje é que manda: troca de exercício ou semana de volume reduzido não ressuscitam o que saiu.
+- **Bug achado na verificação:** a resposta do histórico sobrescrevia o estado inteiro, e quem marcasse a primeira série antes de a rede responder perdia a marcação — que no subsolo de uma academia é o caso normal. `reconcileLate`, com teste: série marcada ou com carga digitada é do atleta. (No caminho, um `setState` dentro do *updater* de outro `setState`, que funcionava por sorte.)
+- **Corrida não ganhou modo de execução, de propósito:** quem executa a corrida é o relógio. O papel do app ali é antes e depois.
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
@@ -2621,7 +2634,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 
 ## 19.1 O que existe
 
-- **Vitest 2.1**, `npm test` (= `vitest run`). **94 arquivos, 1.625 testes, todos passando** (rodado em 02/10/2026, ~6 s).
+- **Vitest 2.1**, `npm test` (= `vitest run`). **95 arquivos, 1.662 testes, todos passando** (rodado em 03/10/2026, ~6 s).
 - **Só funções puras de `src/lib/`.** Sem banco, sem rede, sem DOM.
 - **Fixture central** (`tests/fixtures.ts`): atleta com teste de 3 km em 13:00 e FC média 178 → **VDOT ≈ 43,7, LTHR = 165**. Falhas se leem como "isso deu errado para um corredor de VDOT 43".
 - **`tests/README.md`:** tabela dos bugs reais que cada teste protege. Leitura obrigatória.
@@ -2667,7 +2680,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 | Dimensão | Estado | Nota |
 |---|---|---|
 | **Proposta de valor** | Clara: treinador de corrida (e força) que prescreve com ciência, se adapta ao corpo e explica o porquê | 🟢 |
-| **Motor de treino** | Maduro, determinístico, ~1.625 testes, corrigido contra casos reais | 🟢 |
+| **Motor de treino** | Maduro, determinístico, ~1.662 testes, corrigido contra casos reais | 🟢 |
 | **Saúde/recuperação** | Nova (14/09), funcional com Garmin via intervals.icu e sem relógio; score não validado contra desfecho | 🟡 |
 | **UX** | Rica e animada no dashboard e na Saúde; telas antigas inconsistentes; muita navegação (10 itens) | 🟡 |
 | **Usuários** | 7 contas por convite; push chega a 4; **sem métricas de uso** (nenhum analytics) | 🔴 para decidir produto |

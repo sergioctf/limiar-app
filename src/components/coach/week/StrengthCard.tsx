@@ -10,8 +10,12 @@
  * foi roxo, pintado à mão, que é a cor do longão — duas coisas diferentes com
  * a mesma cor na mesma tela (Sérgio, 26/09).
  */
-import { MessageCircle } from "lucide-react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { MessageCircle, PlayCircle } from "lucide-react";
 import { SPORTS } from "@/lib/sports";
+import { SessionRunner } from "@/components/coach/SessionRunner";
+import { isoDateOfWeekDay, localDateStr } from "@/lib/week";
 import { sessionTone } from "@/lib/session-colors";
 import { strengthSummary } from "@/lib/day-description";
 import { Disclosure } from "@/components/ui/Disclosure";
@@ -32,7 +36,21 @@ export function StrengthCard({
   onPlanChanged: (plan: WeeklyPlanData) => void;
   onAsk: (session: WeeklyPlanDay) => void;
 }) {
+  const router = useRouter();
+  const [running, setRunning] = useState(false);
   const session = day.strength;
+
+  /*
+    "Começar treino" só no dia.
+
+    O modo de execução grava séries com data. Oferecê-lo na quinta para a
+    sessão de sábado seria convidar o atleta a registrar um treino que ainda
+    não aconteceu — e a progressão de carga é calculada exatamente a partir
+    dessas linhas.
+  */
+  const date = isoDateOfWeekDay(week, day.day);
+  const isToday = date === localDateStr(new Date());
+
   if (!session) return null;
   const tone = sessionTone("strength");
 
@@ -67,12 +85,38 @@ export function StrengthCard({
         </p>
       )}
 
+      {/*
+        A ação principal do dia da musculação é fazer o treino.
+
+        Até aqui o card oferecia "Ver os exercícios" e, dentro dele, "Registrar
+        treino" — as duas coisas que se faz *antes* e *depois*. No meio, que é
+        onde o atleta passa cinquenta minutos, não havia nada (Sérgio, item 3).
+      */}
+      {isToday && (
+        <button
+          type="button"
+          onClick={() => setRunning(true)}
+          className="btn-primary min-h-[48px] w-full justify-center"
+        >
+          <PlayCircle className="h-4 w-4" /> Começar treino
+        </button>
+      )}
+
       <Disclosure
         title="Ver os exercícios"
-        summary={`${session.exercises.length} exercícios · registrar as séries`}
+        summary={`${session.exercises.length} exercícios · ${isToday ? "conferir antes" : "e registrar as séries"}`}
       >
-        <StrengthSessionView session={session} day={day.day} weekStart={week} />
+        <StrengthSessionView session={session} date={date ?? undefined} day={day.day} weekStart={week} />
       </Disclosure>
+
+      {running && date && (
+        <SessionRunner
+          session={session}
+          date={date}
+          onClose={() => setRunning(false)}
+          onLogged={() => router.refresh()}
+        />
+      )}
 
       {/* As mesmas três decisões da corrida, no mesmo desenho: mexer no dia,
           mexer na sessão, perguntar. */}

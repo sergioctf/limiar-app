@@ -116,3 +116,20 @@ export function dateOfWeekDay(weekStart: string, day: string): number | null {
   d.setDate(d.getDate() + i);
   return d.getDate();
 }
+
+/**
+ * A data inteira daquele dia da semana (YYYY-MM-DD).
+ *
+ * `dateOfWeekDay` devolve só o número do dia, que serve para escrever "quarta
+ * 15" num cabeçalho e não serve para gravar nada. Quem registra um treino
+ * precisa da data completa — e montá-la à mão no componente é como uma sessão
+ * de segunda acaba gravada no domingo em alguma virada de mês.
+ */
+export function isoDateOfWeekDay(weekStart: string, day: string): string | null {
+  const i = DAY_ORDER_KEYS.indexOf(day);
+  if (i < 0) return null;
+  const d = new Date(`${weekStart}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setDate(d.getDate() + i);
+  return localDateStr(d);
+}
