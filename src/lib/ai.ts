@@ -15,6 +15,7 @@ import type { Run, WeeklyPlanData, WeeklyPlanDay, PlanDayType, StructuredWorkout
 import { secondsToPaceString, secondsToReadable } from "@/lib/utils";
 import { SPORTS, ALL_SPORTS, DEFAULT_SPORTS, toSportKey, type SportKey, type PrimarySport } from "@/lib/sports";
 import { normalizePlanEdits, applyPlanEdits, type PlanEdit } from "@/lib/plan-edit";
+import { historyDigest } from "@/lib/ai-history";
 
 export const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -113,6 +114,41 @@ function fmtRun(r: Run): string {
 export type GroqResult =
   | { ok: true; text: string }
   | { ok: false; reason: "no_key" | "rate_limit" | "error"; retryAfterSec?: number };
+
+/**
+ * A IA não respondeu — e o atleta merece saber por quê.
+ *
+ * A rota de análise respondia *"AI analysis failed or API key not set"* para
+ * tudo, inclusive para o caso mais comum de todos, que é o teto por minuto da
+ * Groq. Sérgio leu isso como "a IA parou de funcionar"; era "espere vinte
+ * segundos" (13/10).
+ */
+export class AiUnavailable extends Error {
+  constructor(
+    public reason: "no_key" | "rate_limit" | "error",
+    public retryAfterSec?: number,
+  ) {
+    super(reason);
+    this.name = "AiUnavailable";
+  }
+
+  /** O que dizer na tela. */
+  get mensagem(): string {
+    if (this.reason === "rate_limit") {
+      const s = this.retryAfterSec;
+      return s
+        ? `A IA atingiu o limite de uso do minuto. Tente de novo em ${s} segundo${s === 1 ? "" : "s"}.`
+        : "A IA atingiu o limite de uso do minuto. Tente de novo em instantes.";
+    }
+    if (this.reason === "no_key") return "A IA não está configurada neste ambiente.";
+    return "A IA não respondeu agora. Tente de novo em instantes.";
+  }
+
+  /** 429 é "volte já"; o resto é falha mesmo. */
+  get status(): number {
+    return this.reason === "rate_limit" ? 429 : 503;
+  }
+}
 
 /** Quantos segundos a Groq pediu para esperar, quando ela diz. */
 function retryAfterFrom(body: string): number | undefined {
@@ -225,18 +261,27 @@ Foque em: qualidade do esforço desta corrida, comparação com corridas similar
     .filter(Boolean)
     .join("\n");
 
-  // Histórico completo ordenado do mais antigo para o mais recente (exceto a corrida atual)
-  const history = allRuns
-    .filter((r) => r.id !== run.id)
-    .sort((a, b) => a.date.localeCompare(b.date));
+  /*
+    O histórico vem resumido — ver `ai-history.ts`.
 
-  const historyBlock = history.length > 0
-    ? `\n\nHistórico completo do atleta (${history.length} corridas, mais antigas primeiro):\n${history.map(fmtRun).join("\n")}`
-    : "";
+    Mandar as 170 corridas cruas custava 6.912 tokens de prompt contra um teto
+    de 8.000 por minuto: uma análise comia o minuto inteiro e tudo que viesse
+    depois levava 429 (13/10).
+  */
+  const historyDigestBlock = historyDigest(allRuns, fmtRun, { target: run });
+  const historyBlock = historyDigestBlock ? `\n\n${historyDigestBlock}` : "";
 
   const userPrompt = `Analise esta corrida:\n${runDetails}${historyBlock}`;
 
-  return callGroq(systemPrompt, userPrompt);
+  /*
+    900 e não 600: com o prompt antigo a resposta vinha com
+    `finish_reason: "length"` — cortada no meio da frase. O pedido é de "3 a 5
+    parágrafos" e o orçamento não dava para três.
+  */
+  const res = await callGroqDetailed(systemPrompt, userPrompt, 900);
+  if (res.ok) return res.text;
+  // Quem chama precisa distinguir "deu erro" de "espere vinte segundos".
+  throw new AiUnavailable(res.reason, res.retryAfterSec);
 }
 
 // ─── Weekly summary ──────────────────────────────────────────────────────────
@@ -273,11 +318,10 @@ Estrutura: 1) balanço da semana vs histórico, 2) tendência de evolução iden
     ? `Meta ativa: ${goalName}${weeksToGoal != null ? ` — ${weeksToGoal} semanas restantes` : ""}.`
     : "";
 
-  // Histórico completo excluindo corridas desta semana
+  // Histórico resumido, excluindo o que já está no bloco da semana. O despejo
+  // completo estourava o teto por minuto da Groq — ver `ai-history.ts`.
   const weekIds = new Set(weekRuns.map((r) => r.id));
-  const history = allRuns
-    .filter((r) => !weekIds.has(r.id))
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const historyBlock = historyDigest(allRuns, fmtRun, { excluir: weekIds });
 
   const gymBlock = weekActivities && weekActivities.length > 0
     ? `\nTREINOS DE FORÇA/ACADEMIA ESTA SEMANA (${weekActivities.length} sessões):\n${weekActivities.map(a =>
@@ -292,8 +336,7 @@ SEMANA ATUAL — ${weekRuns.length} corridas:
 ${weekRuns.map(fmtRun).join("\n")}
 Totais: ${totalKm.toFixed(1)} km | ${secondsToReadable(totalTime)}${avgHR ? ` | FC média ${avgHR} bpm` : ""}${gymBlock}
 
-HISTÓRICO COMPLETO DO ATLETA (${history.length} corridas anteriores, mais antigas primeiro):
-${history.map(fmtRun).join("\n")}
+${historyBlock}
 `.trim();
 
   return callGroq(systemPrompt, userPrompt);

@@ -5,7 +5,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { analyzeRun } from "@/lib/ai";
+import { AiUnavailable, analyzeRun } from "@/lib/ai";
 import { notifyFriendsOfWorkout, workoutOf } from "@/lib/friend-notify";
 import { sendPushToUser } from "@/lib/push";
 
@@ -56,9 +56,28 @@ export async function POST(
     .is("deleted_at", null)
     .order("date", { ascending: false });
 
-  const feedback = await analyzeRun(run, allRuns ?? []);
+  /*
+    O erro precisa dizer o que houve.
+
+    Qualquer falha virava "AI analysis failed or API key not set", com 500 —
+    inclusive a mais comum de todas, que é o teto de tokens por minuto da Groq.
+    Sérgio leu isso como "a IA parou de funcionar"; era "espere vinte segundos"
+    (13/10). `AiUnavailable` carrega a diferença até aqui.
+  */
+  let feedback: string | null;
+  try {
+    feedback = await analyzeRun(run, allRuns ?? []);
+  } catch (err) {
+    if (err instanceof AiUnavailable) {
+      return NextResponse.json(
+        { error: err.mensagem, retryAfterSec: err.retryAfterSec ?? null },
+        { status: err.status },
+      );
+    }
+    throw err;
+  }
   if (!feedback) {
-    return NextResponse.json({ error: "AI analysis failed or API key not set" }, { status: 500 });
+    return NextResponse.json({ error: "A IA não respondeu agora. Tente de novo em instantes." }, { status: 503 });
   }
 
   // Save feedback
