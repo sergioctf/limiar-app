@@ -189,6 +189,41 @@ export function TrainingPrefsCard() {
         </div>
       </div>
 
+      {/*
+        Por km ou por tempo.
+
+        As duas escolas são legítimas, e a diferença é real: num dia ruim, 8 km
+        custam uma hora; 45 minutos custam 45 minutos. O motor continua
+        prescrevendo em quilômetros — muda a unidade em que o plano é lido e o
+        alvo que vai para o relógio (Sérgio, 13/10).
+      */}
+      <div>
+        <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-surface-500">
+          Como você mede seus treinos
+        </p>
+        <div className="flex gap-1">
+          {(["km", "time"] as const).map(m => (
+            <button
+              key={m}
+              onClick={() => save({ ...prefs, measureBy: m })}
+              disabled={saving}
+              aria-pressed={(prefs.measureBy ?? "km") === m}
+              className={`min-h-[44px] flex-1 rounded-lg py-1.5 text-[11px] font-semibold transition-colors disabled:opacity-60 ${
+                (prefs.measureBy ?? "km") === m
+                  ? "bg-brand-500 text-white" : "bg-surface-700/50 text-surface-400 hover:text-surface-200"
+              }`}
+            >
+              {m === "km" ? "Distância (km)" : "Tempo (min)"}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[11px] leading-relaxed text-surface-500">
+          {(prefs.measureBy ?? "km") === "km"
+            ? "Os treinos aparecem em quilômetros."
+            : "Os treinos aparecem em minutos, convertidos pelo seu ritmo. A distância continua contando no volume da semana."}
+        </p>
+      </div>
+
       {/* Session types the athlete does not do */}
       <div>
         <p className="text-[10px] uppercase tracking-wide text-surface-500 font-semibold mb-1.5">

@@ -24,7 +24,8 @@ import { AdaptSessionControl } from "@/components/today/AdaptSession";
 import { ShoeHint } from "@/components/coach/ShoeHint";
 import type { DoneItem } from "@/lib/day-status";
 import { ScheduleTestSheet } from "@/components/coach/ScheduleTestSheet";
-import { isoDateOfWeekDay, localDateStr } from "@/lib/week";
+import { localDateStr } from "@/lib/week";
+import { sessionTarget, type MeasureBy } from "@/lib/measure";
 import type { PlannedTest } from "@/lib/planned-test";
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 
@@ -32,6 +33,7 @@ const km = (n: number) => `${Number(n.toFixed(1)).toString().replace(".", ",")} 
 
 export function RunCard({
   session, week, canAdapt, done, plannedTest, onPlanChanged, onDayChanged, onAsk, onTestChanged,
+  measureBy = "km",
 }: {
   session: WeeklyPlanDay;
   week: string;
@@ -45,11 +47,15 @@ export function RunCard({
   /** O teste marcado, quando é ele que ocupa este dia. */
   plannedTest?: PlannedTest | null;
   onTestChanged?: (test: PlannedTest | null) => void;
+  /** Km ou minutos: a unidade em que este atleta lê o plano. */
+  measureBy?: MeasureBy;
 }) {
   const tone = typeStyle(session.type);
   const isTest = session.type === "test" && !!plannedTest;
   const isTestToday = isTest && plannedTest?.date === localDateStr(new Date());
   const [rescheduling, setRescheduling] = useState(false);
+  /* O tamanho da sessão, na unidade que o atleta escolheu (`lib/measure.ts`). */
+  const alvo = sessionTarget(session, measureBy);
 
   return (
     <div className="space-y-3 rounded-2xl border border-surface-700 bg-surface-800/60 p-4">
@@ -68,11 +74,16 @@ export function RunCard({
         <h3 className="mt-1 text-lg font-bold leading-tight text-surface-100">{session.label}</h3>
         {/* Os números que o atleta procura primeiro, numa linha só. */}
         <p className="mt-1 flex flex-wrap items-baseline gap-x-2 text-sm text-surface-300">
-          {session.distance_km != null && (
-            <span className="font-semibold tabular-nums text-surface-100">{session.distance_km} km</span>
-          )}
-          {session.duration_min != null && (
-            <span className="font-semibold tabular-nums text-surface-100">{session.duration_min} min</span>
+          {/*
+            Um número, não dois.
+
+            Eram duas linhas separadas — distância e duração — e com a
+            preferência de unidade a sessão passou a ter as duas preenchidas:
+            "50 min · 50 min". `sessionTarget` decide qual delas é a resposta
+            para este atleta.
+          */}
+          {alvo && (
+            <span className="font-semibold tabular-nums text-surface-100">{alvo}</span>
           )}
           {session.pace && (
             <><span className="text-surface-600">·</span><span className="tabular-nums">{session.pace}</span></>
@@ -123,11 +134,8 @@ export function RunCard({
             structure={session.structure}
             label={session.label}
             sport={session.sport}
-            date={isoDateOfWeekDay(week, session.day) ?? undefined}
+            session={session}
             weekStart={week}
-            day={session.day}
-            distanceKm={session.distance_km}
-            durationMin={session.duration_min}
           />
         </Disclosure>
       )}

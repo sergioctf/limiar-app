@@ -198,6 +198,16 @@ export function IntervalsCard() {
             Sincroniza sozinho quando você abre o app e toda manhã. A HRV passa a
             pesar na prontidão depois de 7 noites — ela é comparada com a sua própria média.
           </p>
+
+          {/*
+            A via de volta.
+
+            O intervals.icu entrega a saúde do relógio para o app; por aqui o
+            app devolve os treinos ao relógio. A chave fica junto da conexão
+            porque é dela que depende — e ligada por padrão, porque conectar já
+            é dizer "quero meus treinos no pulso" (Sérgio, 15/10).
+          */}
+          <SendToWatchToggle />
         </>
       ) : (
         <>
@@ -263,5 +273,70 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
         <div className="text-xs mt-0.5 text-surface-400">{children}</div>
       </div>
     </li>
+  );
+}
+
+/**
+ * "Mandar a semana para o relógio sozinho."
+ *
+ * Esperar o atleta tocar "enviar" em cada treino, toda segunda, é esperar que
+ * ele não envie. Com a chave ligada, o cron que gera o plano põe a semana no
+ * calendário junto — e mover um treino de dia no app move o evento também.
+ *
+ * Carrega o estado antes de desenhar: um interruptor que nasce ligado e pula
+ * para desligado meio segundo depois é pior do que meio segundo de espera.
+ */
+function SendToWatchToggle() {
+  const [ligado, setLigado] = useState<boolean | null>(null);
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    let cancelado = false;
+    fetch("/api/coach/training-prefs")
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (!cancelado) setLigado(d?.prefs?.sendToWatch !== false); })
+      .catch(() => { if (!cancelado) setLigado(true); });
+    return () => { cancelado = true; };
+  }, []);
+
+  async function alternar() {
+    const proximo = !ligado;
+    setLigado(proximo);
+    setSalvando(true);
+    try {
+      await fetch("/api/coach/training-prefs", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sendToWatch: proximo }),
+      });
+    } catch {
+      setLigado(!proximo);   // não ficou salvo: a tela não pode dizer que ficou
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  if (ligado === null) return null;
+
+  return (
+    <div className="border-t border-surface-700/60 pt-3">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={ligado}
+        onClick={alternar}
+        disabled={salvando}
+        className="flex min-h-[44px] w-full items-center justify-between gap-3 rounded-lg bg-surface-700/50 px-3 text-left text-xs text-surface-300 disabled:opacity-60"
+      >
+        <span>Mandar os treinos da semana para o relógio</span>
+        <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${ligado ? "bg-brand-500" : "bg-surface-600"}`}>
+          <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${ligado ? "left-[18px]" : "left-0.5"}`} />
+        </span>
+      </button>
+      <p className="mt-1.5 text-[10px] leading-relaxed text-surface-500">
+        {ligado
+          ? "Toda segunda, junto com o plano. Mudar um treino de dia no app move ele no relógio também."
+          : "Desligado — você ainda pode enviar treino por treino, pelo botão dentro de cada um."}
+      </p>
+    </div>
   );
 }

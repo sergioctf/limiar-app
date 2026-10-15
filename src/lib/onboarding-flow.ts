@@ -52,6 +52,7 @@ export type StepKind = "scene" | "question" | "welcome" | "done";
 export type QuestionField =
   | "identity"      // nome, sobrenome, @username
   | "runDays"
+  | "measureBy"   // km ou minutos
   | "strength"      // dias e grupos musculares
   | "goal"          // objetivo ou prova alvo
   | "strava"
@@ -114,7 +115,7 @@ export const ONBOARDING_STEPS: OnboardingStepDef[] = [
     id: "welcome", kind: "welcome", skippable: true,
     title: "Bem-vindo ao Limiar",
     body:
-      "Quatro perguntas, um minuto, e sua primeira semana de treino já nasce com a sua cara. " +
+      "Cinco perguntas, um minuto, e sua primeira semana de treino já nasce com a sua cara. " +
       "Dá para pular qualquer uma — o que faltar fica na lista do painel.",
   },
 
@@ -138,6 +139,15 @@ export const ONBOARDING_STEPS: OnboardingStepDef[] = [
     body:
       "É a pergunta que mais muda o seu plano: ela decide onde caem o longão e o treino " +
       "forte. Sem resposta, o app chuta terça, quinta e sábado.",
+  },
+
+  {
+    id: "q-measure", kind: "question", field: "measureBy", skippable: true,
+    title: "Você mede seus treinos em quilômetros ou em minutos?",
+    body:
+      "As duas escolas funcionam. Quem está começando costuma se achar melhor em " +
+      "quilômetros — é o número que aparece na prova e no papo com os amigos. " +
+      "Dá para trocar quando quiser, sem refazer nada.",
   },
 
   {

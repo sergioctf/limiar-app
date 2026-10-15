@@ -10,7 +10,7 @@ import { isRepeatBlock } from "@/types";
 import { expandToKmSplits } from "@/lib/workout-builder";
 import { haptic } from "@/lib/haptics";
 import type { SportKey } from "@/lib/sports";
-import type { StructuredWorkout, WorkoutStep, WorkoutStepKind } from "@/types";
+import type { StructuredWorkout, WeeklyPlanDay, WorkoutStep, WorkoutStepKind } from "@/types";
 
 interface Props {
   structure: StructuredWorkout;
@@ -18,16 +18,13 @@ interface Props {
   /** Drives the sport recorded in the .FIT file and which target type it uses. */
   sport?: SportKey;
   /**
-   * Quando e de qual semana — o que falta para mandar ao relógio.
+   * A sessão e a semana dela — o que falta para mandar ao relógio.
    *
-   * Sem os três, só sobra o arquivo: um treino sem data não tem onde pousar no
-   * calendário, e sem semana/dia não dá para reenviá-lo sem duplicar.
+   * Sem as duas só sobra o arquivo: um treino sem semana e dia não tem onde
+   * pousar no calendário, nem como ser substituído sem duplicar.
    */
-  date?: string;
+  session?: WeeklyPlanDay;
   weekStart?: string;
-  day?: string;
-  distanceKm?: number;
-  durationMin?: number;
 }
 
 const KIND_UI: Record<WorkoutStepKind, { icon: React.ReactNode; label: string; color: string; bar: string }> = {
@@ -205,7 +202,7 @@ function KmTable({ structure }: { structure: StructuredWorkout }) {
 }
 
 export function WorkoutStepsView({
-  structure, label, sport = "corrida", date, weekStart, day, distanceKm, durationMin,
+  structure, label, sport = "corrida", session, weekStart,
 }: Props) {
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(false);
@@ -224,7 +221,7 @@ export function WorkoutStepsView({
   const [pushing, setPushing] = useState(false);
   const [pushed, setPushed] = useState(false);
   const [precisaConectar, setPrecisaConectar] = useState(false);
-  const podeEnviar = Boolean(date && weekStart && day);
+  const podeEnviar = Boolean(session && weekStart);
 
   async function enviarAoRelogio() {
     setPushing(true); setError(null); setPrecisaConectar(false);
@@ -232,7 +229,7 @@ export function WorkoutStepsView({
       const res = await fetch("/api/workouts/push", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, weekStart, day, label, structure, sport, distanceKm, durationMin }),
+        body: JSON.stringify({ weekStart, day: session?.day, session }),
       });
       const d = await res.json().catch(() => null);
       if (!res.ok) {

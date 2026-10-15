@@ -6,7 +6,8 @@
  *
  * Este arquivo guarda a decisão de 01/10, depois de um usuário novo se perder:
  * **o primeiro acesso pergunta o mínimo que faz a primeira semana existir, e
- * nada além disso.** Quinze telas viraram seis, e a vitrine virou escolha.
+ * nada além disso.** Quinze telas viraram seis (01/10), e a vitrine virou
+ * escolha. A sétima entrou em 15/10, com o argumento escrito abaixo.
  */
 import { describe, it, expect } from "vitest";
 import {
@@ -32,7 +33,7 @@ describe("ninguém fica preso", () => {
 describe("o mínimo que faz a primeira semana existir", () => {
   it("pergunta só o que o motor precisa", () => {
     const campos = questionSteps().map(s => s.field);
-    expect(campos).toEqual(["identity", "strava", "runDays", "test"]);
+    expect(campos).toEqual(["identity", "strava", "runDays", "measureBy", "test"]);
   });
 
   it("na ordem em que o plano depende delas", () => {
@@ -41,7 +42,8 @@ describe("o mínimo que faz a primeira semana existir", () => {
     // fazer sentido.
     const ids = ONBOARDING_STEPS.map(s => s.id);
     expect(ids.indexOf("q-strava")).toBeLessThan(ids.indexOf("q-run-days"));
-    expect(ids.indexOf("q-run-days")).toBeLessThan(ids.indexOf("q-test"));
+    expect(ids.indexOf("q-run-days")).toBeLessThan(ids.indexOf("q-measure"));
+    expect(ids.indexOf("q-measure")).toBeLessThan(ids.indexOf("q-test"));
   });
 
   it("não pede o que pode esperar", () => {
@@ -54,13 +56,28 @@ describe("o mínimo que faz a primeira semana existir", () => {
     }
   });
 
-  it("cabe em um minuto: no máximo quatro perguntas", () => {
-    expect(questionSteps().length).toBeLessThanOrEqual(4);
+  /*
+    O orçamento subiu de quatro perguntas para cinco, uma vez, com motivo.
+
+    Eram quinze telas; viraram seis em 01/10 porque um usuário novo se perdeu.
+    Esse limite não é burocracia — é o que impede a tela de voltar a crescer,
+    e afrouxá-lo sem dizer por quê é exatamente como ela cresceu da primeira
+    vez.
+
+    O que entrou: "km ou minutos" (15/10). Ela passa porque não é configuração
+    — é a unidade em que a pessoa vai ler o próprio treino todos os dias depois
+    disso, e perguntar depois significa mostrar a primeira semana inteira na
+    unidade errada. É um toque, com duas opções e uma frase cada.
+
+    A próxima pergunta que quiser entrar precisa de um argumento deste tamanho,
+    ou tira uma daqui.
+  */
+  it("cabe em um minuto: no máximo cinco perguntas", () => {
+    expect(questionSteps().length).toBeLessThanOrEqual(5);
   });
 
-  it("e em seis telas no total", () => {
-    // O orçamento é a decisão. Eram quinze.
-    expect(ONBOARDING_STEPS.length).toBeLessThanOrEqual(6);
+  it("e em sete telas no total", () => {
+    expect(ONBOARDING_STEPS.length).toBeLessThanOrEqual(7);
   });
 
   it("não mostra vitrine no caminho", () => {

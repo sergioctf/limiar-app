@@ -61,8 +61,19 @@ export async function PUT(request: NextRequest) {
 
   const merged = { ...stored, ...(body ?? {}) };
 
-  const runDays = cleanDays(merged.runDays);
-  if (runDays.length === 0) {
+  /*
+    Recusar semana sem dia de corrida — mas só para quem está mexendo neles.
+
+    A regra existia para o card de preferências, onde desmarcar os sete dias é
+    pedir um plano impossível. Aplicada a qualquer PUT, ela passou a barrar
+    quem salva **outra** coisa sem ter dias ainda: no primeiro acesso, pular
+    "que dias você corre" e responder "km ou minutos" devolvia 400, e a tela
+    simplesmente não avançava, sem dizer por quê (15/10).
+
+    Quem não manda `runDays` não está mexendo neles — `normalizePrefs` usa o
+    padrão, como sempre fez.
+  */
+  if (body?.runDays !== undefined && cleanDays(body.runDays).length === 0) {
     return NextResponse.json({ error: "Escolha ao menos um dia de corrida." }, { status: 400 });
   }
 

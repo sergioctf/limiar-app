@@ -608,6 +608,12 @@ export function normalizePrefs(raw: unknown): TrainingPrefs {
     otherDays:    cleanOtherDays(p.otherDays),
     excludedQuality: cleanExcludedQuality(p.excludedQuality),
     lightDays:    cleanDays(p.lightDays),
+    // Quilômetro é o padrão: é o que o motor prescreve e o que o iniciante
+    // entende sem traduzir. Tempo é escolha explícita.
+    measureBy:    p.measureBy === "time" ? "time" : "km",
+    // Indefinido é "ligado": quem conectou o intervals.icu já disse que quer os
+    // treinos no relógio. Só um "não" explícito desliga.
+    sendToWatch:  p.sendToWatch !== false,
   };
 }
 

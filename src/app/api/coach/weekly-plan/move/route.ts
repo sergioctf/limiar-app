@@ -13,6 +13,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { applyPlanEdits } from "@/lib/plan-edit";
 import { loadWeeklyPlan, mondayOf, nextMondayOf, previousMondayOf } from "@/lib/weekly-plan";
+import { loadIcuConnection, pushIcuSession, removeIcuDay } from "@/lib/icu-push";
+import { normalizePrefs } from "@/lib/workout-builder";
+import { isoDateOfWeekDay } from "@/lib/week";
 import type { WeeklyPlanDay } from "@/types";
 
 const DAYS: WeeklyPlanDay["day"][] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -65,5 +68,41 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Não foi possível salvar a mudança." }, { status: 500 });
   }
 
+  /*
+    O relógio acompanha a mudança.
+
+    Mover a quarta para a sexta no app e deixar o treino antigo na quarta é o
+    relógio apitando por um treino que já não existe — e dois treinos na semana
+    onde só há um (Sérgio, 15/10). O dia de origem é limpo e o de destino
+    recebe o treino.
+
+    Melhor esforço, depois da escrita: a mudança de dia já aconteceu e já está
+    salva. O intervals.icu fora do ar não pode desfazê-la.
+  */
+  void syncWatch(admin, user.id, moved, week, from, to).catch(() => {});
+
   return NextResponse.json({ plan: moved, changes });
+}
+
+async function syncWatch(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  plan: Awaited<ReturnType<typeof loadWeeklyPlan>>["plan"],
+  week: string,
+  from: WeeklyPlanDay["day"],
+  to: WeeklyPlanDay["day"],
+) {
+  const conn = await loadIcuConnection(admin, userId);
+  if (!conn) return;
+
+  const { data: perfil } = await admin.from("profiles").select("training_prefs").eq("id", userId).maybeSingle();
+  const { measureBy } = normalizePrefs((perfil as { training_prefs?: unknown } | null)?.training_prefs);
+
+  const dataOrigem = isoDateOfWeekDay(week, from);
+  if (dataOrigem) await removeIcuDay(conn, dataOrigem, week, from);
+
+  const destino = plan?.days?.find(d => d.day === to);
+  if (destino && destino.type !== "rest" && destino.sport !== "musculacao") {
+    await pushIcuSession(conn, { session: destino, weekStart: week, measureBy });
+  }
 }

@@ -15,6 +15,7 @@ import { dateOfWeekDay } from "@/lib/week";
 import { stripStrengthTail } from "@/lib/day-description";
 import { DayState } from "@/components/coach/week/DayState";
 import { RunCard } from "@/components/coach/week/RunCard";
+import type { MeasureBy } from "@/lib/measure";
 import { StrengthCard } from "@/components/coach/week/StrengthCard";
 import type { DayProgress } from "@/lib/day-progress";
 import type { DoneItem } from "@/lib/day-status";
@@ -24,7 +25,8 @@ import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 const km = (n: number) => `${Number(n.toFixed(1)).toString().replace(".", ",")} km`;
 
 export function DayPanel({
-  day, week, isToday, canAdapt, progress, done, plannedTest, onPlanChanged, onDayChanged, onAsk, onTestChanged,
+  day, week, isToday, canAdapt, progress, done, plannedTest, onPlanChanged, onDayChanged, onAsk,
+  onTestChanged, measureBy = "km",
 }: {
   day: WeeklyPlanDay | null;
   week: string;
@@ -39,6 +41,8 @@ export function DayPanel({
   /** O teste de 3 km marcado, quando cai neste dia. */
   plannedTest?: PlannedTest | null;
   onTestChanged?: (test: PlannedTest | null) => void;
+  /** Km ou minutos: a unidade em que este atleta lê o plano. */
+  measureBy?: MeasureBy;
 }) {
   if (!day) {
     return (
@@ -79,6 +83,7 @@ export function DayPanel({
           onDayChanged={onDayChanged}
           onAsk={onAsk}
           onTestChanged={onTestChanged}
+          measureBy={measureBy}
         />
       )}
 

@@ -8,6 +8,7 @@ import { testDateOptions } from "@/lib/planned-test";
 import { formatTestDate } from "@/components/coach/ScheduleTestSheet";
 import { localDateStr } from "@/lib/week";
 import type { DayKey } from "@/types";
+import type { MeasureBy } from "@/lib/measure";
 
 const DAYS: Array<{ key: DayKey; short: string }> = [
   { key: "Mon", short: "Seg" }, { key: "Tue", short: "Ter" }, { key: "Wed", short: "Qua" },
@@ -38,6 +39,7 @@ export function OnboardingQuestion({
   switch (field) {
     case "identity": return <IdentityQuestion onSaved={onSaved} />;
     case "runDays":  return <RunDaysQuestion onSaved={onSaved} />;
+    case "measureBy": return <MeasureQuestion onSaved={onSaved} />;
     case "strength": return <StrengthQuestion onSaved={onSaved} />;
     case "strava":   return <StravaQuestion />;
     case "test":     return <TestQuestion onSaved={onSaved} />;
@@ -142,6 +144,61 @@ function RunDaysQuestion({ onSaved }: { onSaved: () => void }) {
         O longão cai no último dia da sequência — dá para mudar depois.
       </p>
       <SaveButton saving={saving} saved={saved} onClick={save} disabled={days.length === 0} />
+    </div>
+  );
+}
+
+/**
+ * Quilômetros ou minutos.
+ *
+ * Não é uma pergunta de configuração: é a unidade em que a pessoa vai ler o
+ * próprio treino todo dia. Por isso vem logo depois dos dias de corrida, e por
+ * isso cada opção diz o que acontece, não só o nome dela.
+ *
+ * O padrão sugerido é quilômetro — a escolha do Sérgio para quem começa, porque
+ * é o número que aparece na prova e na conversa com os amigos (15/10).
+ */
+function MeasureQuestion({ onSaved }: { onSaved: () => void }) {
+  const [escolha, setEscolha] = useState<MeasureBy>("km");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved]   = useState(false);
+
+  async function save() {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/coach/training-prefs", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ measureBy: escolha }),
+      });
+      if (res.ok) { setSaved(true); setTimeout(onSaved, 600); }
+    } catch { /* pulável por desenho */ }
+    finally { setSaving(false); }
+  }
+
+  const opcoes: Array<{ key: MeasureBy; titulo: string; detalhe: string }> = [
+    { key: "km",   titulo: "Quilômetros", detalhe: '"Corra 8 km hoje" — recomendado para quem está começando.' },
+    { key: "time", titulo: "Minutos",     detalhe: '"Corra 45 minutos hoje" — o esforço fica igual nos dias ruins.' },
+  ];
+
+  return (
+    <div className="space-y-2">
+      {opcoes.map(o => {
+        const on = escolha === o.key;
+        return (
+          <button
+            key={o.key}
+            onClick={() => setEscolha(o.key)}
+            aria-pressed={on}
+            className={`w-full rounded-xl border p-3 text-left transition-colors ${
+              on ? "border-brand-500/60 bg-brand-500/10" : "border-surface-700 hover:border-surface-600"
+            }`}
+          >
+            <p className={`text-sm font-bold ${on ? "text-brand-300" : "text-surface-200"}`}>{o.titulo}</p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-surface-500">{o.detalhe}</p>
+          </button>
+        );
+      })}
+      <SaveButton saving={saving} saved={saved} onClick={save} />
     </div>
   );
 }

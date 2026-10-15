@@ -41,6 +41,7 @@ import { ProactiveAdjustBanner } from "@/components/coach/ProactiveAdjustBanner"
 import { MacroPlanCard } from "@/components/coach/MacroPlanCard";
 import type { WeekAdherence } from "@/lib/plan-adherence";
 import type { DayActivity, DayRun } from "@/lib/day-status";
+import type { MeasureBy } from "@/lib/measure";
 import type { CoachReport, MacroPlan, PerformanceTest, WeeklyPlanData } from "@/types";
 
 interface Props {
@@ -52,11 +53,13 @@ interface Props {
   /** O que foi registrado nas últimas semanas — a semana mostra o feito ao lado do previsto. */
   doneRuns?: DayRun[];
   doneActivities?: DayActivity[];
+  /** Km ou minutos: a unidade em que este atleta lê o plano. */
+  measureBy?: MeasureBy;
 }
 
 export function CoachContent({
   reports, tests, adherenceHistory = [], macroPlan = null, weeklyActualKm = {},
-  doneRuns = [], doneActivities = [],
+  doneRuns = [], doneActivities = [], measureBy = "km",
 }: Props) {
   const router = useRouter();
 
@@ -160,6 +163,7 @@ export function CoachContent({
         paces={pacesForPlan}
         doneRuns={doneRuns}
         doneActivities={doneActivities}
+        measureBy={measureBy}
       />
 
       {/* Lê tudo que está acima e propõe; nunca edita sozinho. */}

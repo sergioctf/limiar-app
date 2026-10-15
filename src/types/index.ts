@@ -86,6 +86,22 @@ export interface TrainingPrefs {
   /** Quality sessions the athlete does not do ("Não faço treino em ladeira"). */
   excludedQuality?: import("@/lib/mesocycle").QualityKind[];
   /**
+   * Em que unidade o atleta lê o plano: quilômetros ou minutos.
+   *
+   * Não muda o motor — ele continua prescrevendo em km, que é onde vivem a
+   * rampa de volume, o teto do longão e a adesão. Muda a leitura, e o alvo que
+   * vai para o relógio. Ver `src/lib/measure.ts`.
+   */
+  measureBy?: import("@/lib/measure").MeasureBy;
+  /**
+   * Mandar a semana para o relógio sozinho, quando o plano é gerado.
+   *
+   * Vale só para quem conectou o intervals.icu — sem ele não há por onde. O
+   * padrão é ligado para quem conectou: conectar já é dizer "quero meus treinos
+   * no relógio", e esperar sete toques por semana é esperar que não aconteça.
+   */
+  sendToWatch?: boolean;
+  /**
    * Running days the athlete wants kept light: no quality session and no long
    * run there while another day can take them. Learned from the agenda ("você
    * costuma precisar encurtar o treino de quarta") and set only by the athlete.

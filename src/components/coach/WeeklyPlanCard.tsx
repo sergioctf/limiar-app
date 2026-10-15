@@ -32,6 +32,7 @@ import { WeekHeader } from "@/components/coach/week/WeekHeader";
 import { WeekFocus } from "@/components/coach/week/WeekFocus";
 import { WeekAgenda } from "@/components/coach/week/WeekAgenda";
 import { DayPanel } from "@/components/coach/week/DayPanel";
+import type { MeasureBy } from "@/lib/measure";
 import { WeekChat, type PendingProposal } from "@/components/coach/week/WeekChat";
 import { WeekSkeleton } from "@/components/coach/week/WeekSkeleton";
 import { formatWeekRange } from "@/components/coach/week/tone";
@@ -67,13 +68,15 @@ interface Props {
   /** O teste de 3 km marcado: entra na semana por cima do plano guardado. */
   plannedTest?: PlannedTest | null;
   onTestChanged?: (test: PlannedTest | null) => void;
+  /** Km ou minutos: a unidade em que este atleta lê o plano. */
+  measureBy?: MeasureBy;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function WeeklyPlanCard({
   initialPlan, initialReportId, paces, doneRuns = [], doneActivities = [], plannedTest = null,
-  onTestChanged,
+  onTestChanged, measureBy = "km",
 }: Props) {
   const currentMonday = getCurrentMondayStr();
   const nextMonday    = getNextMondayStr();
@@ -641,6 +644,7 @@ export function WeeklyPlanCard({
               onDayChanged={onDayChanged}
               onAsk={onAsk}
               onTestChanged={onTestChanged}
+              measureBy={measureBy}
             />
           </div>
         </div>

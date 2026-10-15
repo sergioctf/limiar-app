@@ -12,6 +12,7 @@
  * registered, planned or not. Every sport is a session like any other.
  */
 import { SPORTS, activityCalories, toSportKey, type SportKey } from "@/lib/sports";
+import { sessionTarget, type MeasureBy } from "@/lib/measure";
 import { looksLikeForgottenWatch, movingSeconds } from "@/lib/run-time";
 import type { WeeklyPlanDay } from "@/types";
 
@@ -76,7 +77,11 @@ export interface DayStatus {
 const km = (n: number) => `${Number(n.toFixed(1)).toString().replace(".", ",")} km`;
 
 /** The sessions a plan day asks for: the run owns the day, lifting rides along. */
-export function plannedSessionsOf(day: WeeklyPlanDay | null | undefined): Array<Omit<PlannedSession, "done">> {
+export function plannedSessionsOf(
+  day: WeeklyPlanDay | null | undefined,
+  /** A unidade em que o atleta lê o plano — km ou minutos. */
+  measureBy: MeasureBy = "km",
+): Array<Omit<PlannedSession, "done">> {
   if (!day) return [];
   const out: Array<Omit<PlannedSession, "done">> = [];
   const sport = day.sport as SportKey | undefined;
@@ -88,7 +93,7 @@ export function plannedSessionsOf(day: WeeklyPlanDay | null | undefined): Array<
       sport: key,
       type: day.type,
       label: day.label,
-      detail: day.distance_km ? km(day.distance_km) : day.duration_min ? `${day.duration_min} min` : null,
+      detail: sessionTarget(day, measureBy),
     });
   }
   if (isStrengthDay || day.strength) {
@@ -104,6 +109,8 @@ export function dayStatus(input: {
   runs: DayRun[];
   activities: DayActivity[];
   weightKg?: number | null;
+  /** A unidade em que o atleta lê o plano; só muda o texto, nunca a conta. */
+  measureBy?: MeasureBy;
 }): DayStatus {
   const done: DoneItem[] = [
     ...input.runs
@@ -129,7 +136,7 @@ export function dayStatus(input: {
       }),
   ];
 
-  const sessions: PlannedSession[] = plannedSessionsOf(input.planned).map(s => {
+  const sessions: PlannedSession[] = plannedSessionsOf(input.planned, input.measureBy).map(s => {
     const match = done.find(d => !d.planned && d.sport === s.sport);
     if (match) match.planned = true;
     return { ...s, done: !!match };

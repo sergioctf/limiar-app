@@ -22,7 +22,7 @@
 2. **O deploy é feito da máquina local**, com `npx vercel deploy --prod` na pasta. Não há CI, não há deploy a partir do GitHub. O que está em produção é o que estava no disco de Sérgio no momento do último deploy.
 3. **O banco não é reconstruível a partir do repositório.** As tabelas `activities`, `performance_tests` e `races` são usadas intensamente pelo código, mas **não existe DDL delas em nenhum `.sql`**. Foram criadas por rotas `/api/admin/*` que já foram apagadas. Além disso, as migrations 002–027 foram aplicadas **à mão** no SQL Editor do Supabase (não existe runner nem `DATABASE_URL`), e há infraestrutura que vive só no Supabase (job `pg_cron` e segredo no Vault — ver seção 18).
 4. **Possível vazamento de dados entre usuários (crítico, a confirmar no banco).** A migration `002_social.sql` cria a policy `"Authenticated can search profiles"` com `for select using (auth.role() = 'authenticated')`. RLS filtra linhas, não colunas: qualquer usuário logado pode, com a anon key, ler **todas as colunas de todos os perfis** — e-mail, data de nascimento, altura, sexo e o `wellness_token`, que autentica o endpoint público `/api/ingest/wellness`, permitindo gravar dados de saúde no nome de outra pessoa. Não verifiquei se a policy ainda existe em produção. Verifique com `select * from pg_policies where tablename = 'profiles';`. No mesmo nível de risco: **o webhook do Strava aceita eventos forjados** e um POST com `aspect_type: "delete"` apaga (soft delete) a corrida de qualquer usuário pelo ID da atividade (dívida A9).
-5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.708 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
+5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.734 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
 6. **Há usuários reais.** São 7 contas por convite (Sérgio e amigos). O plano da semana é lido e seguido por pessoas. Regra de ouro que custou caro: **nunca reescrever uma semana que já começou** (ver ADR sobre congelamento de semana).
 
 ---
@@ -1458,6 +1458,26 @@ Detalhes em **`docs/enviar-pro-relogio-14-10.md`**.
 - **Falta a ponta que só o Sérgio confere:** que o treino chega no relógio. Verifiquei a perna que o Limiar controla e a capacidade da outra; a confirmação final é tocar o botão num treino real e abrir o Connect.
 - Atualiza a feature incompleta "Export `.FIT`" da seção 14 e o bônus do brainstorm de 14/09 ("enviar a semana ao Garmin pelo calendário do intervals.icu").
 
+## 6.55 Km ou minutos, e o calendário que acompanha o plano ✅ (novo, 15/10)
+
+Detalhes em **`docs/km-ou-tempo-e-calendario-15-10.md`**. O relógio **funcionou** na mão do Sérgio (confirmado 15/10), o que fecha a pendência de 6.54.
+
+**O calendário acompanha o plano.** `src/lib/icu-push.ts` virou o lugar de onde o botão, a mudança de dia e o cron falam com o intervals.icu.
+
+- **Mover um treino move o evento:** a rota de mover limpa o dia de origem e põe no destino. Só o que leva o nosso `external_id` é apagado — o calendário é do atleta, e uma prova que ele marcou à mão não é nossa para apagar.
+- **A semana vai junto com o plano:** o cron de segunda manda a semana que começou para quem tem intervals.icu conectado. Só ela — a seguinte ainda vai mudar, e quinze dias de treino provisório é pior que sete definitivos.
+- **A rodagem simples vai também** (`sessionAsStructure` monta um passo único): sem isso o envio automático entregaria só os dias de tiro, porque `structure` só existe em qualidade e longão. **Musculação fica de fora** de propósito — séries e RIR o relógio não mostra.
+- **Chave em Configurações**, junto da conexão, ligada por padrão para quem conectou.
+- **Verificado na conta real** (semana de 28/12, depois apagada): criar → 1 evento; tocar de novo → continua 1; mover qua→sex → quarta vazia e sexta com o treino; semana inteira → 2 enviados, 2 pulados, 0 falhas.
+
+**Km ou minutos** (`src/lib/measure.ts`).
+
+- **O motor não mudou:** continua prescrevendo em km, que é onde estão a rampa de volume, o teto do longão e a adesão. Muda a **unidade de leitura**: os mesmos 8 km viram "50 min", convertidos pelo **meio da faixa** de ritmo (pela ponta rápida, "corra leve" viraria "corra leve no limite do leve").
+- `distance_km` segue sendo a verdade; `duration_min` anda junto. Trocar a preferência **não regenera nada**. Sem ritmo (atleta sem teste) volta para km: "45 min" inventado é pior que "8 km" honesto.
+- **No onboarding**, depois de "que dias você corre", e **no app**, em Treinador → Minha semana. Padrão: quilômetros, inclusive para iniciante (escolha do Sérgio: é o número que aparece na prova e na conversa com os amigos).
+- **O orçamento do onboarding subiu para 5 perguntas / 7 telas**, uma vez e com o motivo escrito dentro do teste: não é configuração, é a unidade em que a pessoa lê o treino todo dia, e perguntar depois é mostrar a primeira semana inteira na unidade errada. A próxima que quiser entrar precisa de argumento do mesmo tamanho, ou tira uma de lá.
+- **Bug achado no caminho:** `/api/coach/training-prefs` recusava qualquer PUT que resultasse em zero dias de corrida. A regra era para o card de preferências, mas barrava quem salva **outra** coisa sem ter dias ainda — pular "que dias você corre" no primeiro acesso e responder "km ou minutos" dava 400 e a tela não avançava, sem dizer por quê. Agora vale só para quem mexe nos dias.
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
@@ -2352,7 +2372,7 @@ combustível em treino: > 75 min → 50 g/h (leve) | 75 g/h (prova); gel ≈ 25 
 | **Onboarding** | Fluxo completo | Estado no servidor; métricas de conclusão | — |
 | **LGPD** | Nada | Exportar dados, excluir conta, política de privacidade, consentimento para dados de saúde | Base de amigos |
 | **Admin** | Convites, diagnóstico de push | Painel de saúde dos crons, uso de IA, usuários | — |
-| **Export `.FIT`** | ~~Arquivo por treino~~ **resolvido em 14/10**: o treino vai ao calendário do intervals.icu, que entrega ao relógio (`docs/enviar-pro-relogio-14-10.md`). O `.FIT` ficou como saída de computador | Confirmar com o Sérgio que chegou no relógio | — |
+| **Export `.FIT`** | ~~Arquivo por treino~~ **resolvido em 14/10 e confirmado em 15/10**: o treino vai ao calendário do intervals.icu e chega no relógio. Em 15/10 o calendário passou a acompanhar o plano — mover um dia move o evento, e a semana vai sozinha na segunda (`docs/km-ou-tempo-e-calendario-15-10.md`) | — | — |
 
 ---
 
@@ -2661,7 +2681,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 
 ## 19.1 O que existe
 
-- **Vitest 2.1**, `npm test` (= `vitest run`). **97 arquivos, 1.708 testes, todos passando** (rodado em 14/10/2026, ~8 s).
+- **Vitest 2.1**, `npm test` (= `vitest run`). **98 arquivos, 1.734 testes, todos passando** (rodado em 15/10/2026, ~10 s).
 - **Só funções puras de `src/lib/`.** Sem banco, sem rede, sem DOM.
 - **Fixture central** (`tests/fixtures.ts`): atleta com teste de 3 km em 13:00 e FC média 178 → **VDOT ≈ 43,7, LTHR = 165**. Falhas se leem como "isso deu errado para um corredor de VDOT 43".
 - **`tests/README.md`:** tabela dos bugs reais que cada teste protege. Leitura obrigatória.
@@ -2707,7 +2727,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 | Dimensão | Estado | Nota |
 |---|---|---|
 | **Proposta de valor** | Clara: treinador de corrida (e força) que prescreve com ciência, se adapta ao corpo e explica o porquê | 🟢 |
-| **Motor de treino** | Maduro, determinístico, ~1.708 testes, corrigido contra casos reais | 🟢 |
+| **Motor de treino** | Maduro, determinístico, ~1.734 testes, corrigido contra casos reais | 🟢 |
 | **Saúde/recuperação** | Nova (14/09), funcional com Garmin via intervals.icu e sem relógio; score não validado contra desfecho | 🟡 |
 | **UX** | Rica e animada no dashboard e na Saúde; telas antigas inconsistentes; muita navegação (10 itens) | 🟡 |
 | **Usuários** | 7 contas por convite; push chega a 4; **sem métricas de uso** (nenhum analytics) | 🔴 para decidir produto |

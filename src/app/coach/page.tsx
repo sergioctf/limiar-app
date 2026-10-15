@@ -5,6 +5,7 @@ import { AppShell }     from "@/components/layout/AppShell";
 import { CoachContent } from "@/components/coach/CoachContent";
 import { computeAdherenceHistory } from "@/lib/plan-adherence";
 import { loadActiveMacroPlan } from "@/lib/macro-plan";
+import { normalizePrefs } from "@/lib/workout-builder";
 import type { PerformanceTest } from "@/types";
 
 export default async function CoachPage() {
@@ -93,6 +94,11 @@ export default async function CoachPage() {
 
   // Long-term macro plan + actual km per week (for progress display)
   const macroPlan = await loadActiveMacroPlan(admin, user.id).catch(() => null);
+
+  // Em que unidade este atleta lê o plano — km ou minutos (`src/lib/measure.ts`).
+  const { data: perfil } = await admin
+    .from("profiles").select("training_prefs").eq("id", user.id).maybeSingle();
+  const { measureBy } = normalizePrefs((perfil as { training_prefs?: unknown } | null)?.training_prefs);
   const weeklyActualKm: Record<string, number> = {};
   for (const r of runRows) {
     const d = new Date(`${r.date}T12:00:00`);
@@ -111,6 +117,7 @@ export default async function CoachPage() {
         weeklyActualKm={weeklyActualKm}
         doneRuns={doneRuns}
         doneActivities={doneActivities}
+        measureBy={measureBy}
       />
     </AppShell>
   );
