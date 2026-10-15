@@ -1,5 +1,6 @@
 import { isRepeatBlock, type StructuredWorkout, type WorkoutStep } from "@/types";
-import type { PrimarySport } from "@/lib/sports";
+import type { StrengthExercisePrescription } from "@/lib/strength-builder";
+import type { PrimarySport, SportKey } from "@/lib/sports";
 
 /**
  * O treino do Limiar escrito na língua do intervals.icu.
@@ -55,8 +56,27 @@ const SPORT_ICU: Record<PrimarySport, string> = {
   musculacao: "WeightTraining",
 };
 
-export function icuSportType(sport: PrimarySport): string {
-  return SPORT_ICU[sport] ?? "Run";
+/**
+ * O esporte no vocabulário do intervals.icu, ou `null`.
+ *
+ * `null` é a resposta certa para pilates, vôlei e companhia: são **fatos da
+ * semana do atleta**, não sessões que o motor dimensiona (ver `otherDays` em
+ * `TrainingPrefs`). Mandá-las para o relógio exigiria inventar duração e alvo,
+ * e o caminho fácil — cair em "Run" quando não reconhece — mandaria o vôlei de
+ * quinta como uma corrida.
+ */
+export function icuSportType(sport: SportKey | undefined): string | null {
+  return sport && sport in SPORT_ICU ? SPORT_ICU[sport as PrimarySport] : null;
+}
+
+/**
+ * Que tipo de alvo o relógio deve cobrar.
+ *
+ * Ritmo para quem corre e nada; para a bicicleta, `AUTO` — ritmo de bike não
+ * é como ninguém pedala, e o que o motor prescreve ali é tempo e zona de FC.
+ */
+export function icuTarget(sport: SportKey | undefined): "PACE" | "AUTO" {
+  return sport === "ciclismo" ? "AUTO" : "PACE";
 }
 
 /** Como cada tipo de passo se chama no visor. */
@@ -144,13 +164,43 @@ export function icuWorkoutText(structure: StructuredWorkout): string {
   return linhas.join("\n");
 }
 
+/**
+ * A musculação escrita para ser lida, não executada passo a passo.
+ *
+ * A sintaxe do intervals.icu sabe falar de duração, distância e alvo — não de
+ * "4 séries de 8 a 10 com duas repetições em reserva". Fingir o contrário
+ * exigiria inventar um tempo para cada exercício, e o relógio conduziria o
+ * atleta por números que ninguém prescreveu.
+ *
+ * Então vai o que é honesto: a sessão aparece no dia, com a duração estimada e
+ * a lista do que fazer. Quem conduz série a série é o modo de execução do app,
+ * que tem cronômetro de descanso e registro (Sérgio, 15/10).
+ */
+export function icuStrengthText(session: {
+  exercises: Array<Pick<StrengthExercisePrescription, "name" | "sets" | "reps" | "rir" | "unilateral" | "timeBased">>;
+  estimatedMinutes?: number;
+}): string {
+  if (session.exercises.length === 0) return "";
+  const linhas = session.exercises.map(ex => {
+    const reps = ex.timeBased
+      ? `${ex.reps[0]}-${ex.reps[1]}s`
+      : ex.reps[0] === ex.reps[1] ? `${ex.reps[0]}` : `${ex.reps[0]}-${ex.reps[1]}`;
+    return `${ex.name} — ${ex.sets}×${reps} (RIR ${ex.rir})${ex.unilateral ? " · cada lado" : ""}`;
+  });
+  return [
+    ...linhas,
+    "",
+    "As séries e o descanso você acompanha no Limiar.",
+  ].join("\n");
+}
+
 export interface IcuEvent {
   category: "WORKOUT";
   start_date_local: string;
   type: string;
   name: string;
   description: string;
-  target: "PACE";
+  target: "PACE" | "AUTO";
   /** Nosso identificador, para não criar o mesmo treino duas vezes. */
   external_id: string;
   moving_time?: number;
@@ -167,22 +217,29 @@ export interface IcuEvent {
 export function icuEventPayload(args: {
   date: string;
   label: string;
-  structure: StructuredWorkout;
-  sport: PrimarySport;
+  /** Ausente para a musculação, que vai como texto legível e não como passos. */
+  structure?: StructuredWorkout | null;
+  /** Texto pronto, quando não há estrutura para converter. */
+  description?: string;
+  sport: SportKey;
   weekStart: string;
   day: string;
   distanceKm?: number;
   durationMin?: number;
 }): IcuEvent | null {
-  const description = icuWorkoutText(args.structure);
-  if (!description) return null;
+  const type = icuSportType(args.sport);
+  if (!type) return null;
+
+  const description = args.structure ? icuWorkoutText(args.structure) : (args.description ?? "");
+  if (!description.trim()) return null;
+
   return {
     category: "WORKOUT",
     start_date_local: `${args.date}T00:00:00`,
-    type: icuSportType(args.sport),
+    type,
     name: args.label,
     description,
-    target: "PACE",
+    target: icuTarget(args.sport),
     external_id: `limiar-${args.weekStart}-${args.day}`,
     ...(args.durationMin ? { moving_time: Math.round(args.durationMin * 60) } : {}),
     ...(args.distanceKm ? { distance: Math.round(args.distanceKm * 1000) } : {}),

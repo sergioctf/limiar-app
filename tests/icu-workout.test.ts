@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  alvoDeRitmo, icuEventPayload, icuSportType, icuWorkoutText, linhaDoPasso, tempoOuDistancia,
+  alvoDeRitmo, icuEventPayload, icuSportType, icuStrengthText, icuTarget, icuWorkoutText,
+  linhaDoPasso, tempoOuDistancia,
 } from "@/lib/icu-workout";
 import type { StructuredWorkout, WorkoutStep } from "@/types";
 
@@ -205,5 +206,93 @@ describe("o evento do calendário", () => {
     expect(icuSportType("ciclismo")).toBe("Ride");
     expect(icuSportType("natacao")).toBe("Swim");
     expect(icuSportType("musculacao")).toBe("WeightTraining");
+  });
+});
+
+describe("quais esportes o relógio recebe", () => {
+  it("corrida, natação e ciclismo têm tradução", () => {
+    expect(icuSportType("corrida")).toBe("Run");
+    expect(icuSportType("natacao")).toBe("Swim");
+    expect(icuSportType("ciclismo")).toBe("Ride");
+  });
+
+  it("musculação também — ela só não vai sozinha", () => {
+    expect(icuSportType("musculacao")).toBe("WeightTraining");
+  });
+
+  it("pilates e vôlei não viram corrida", () => {
+    // O caminho fácil seria cair em "Run" para o que não reconhece, e aí o
+    // vôlei de quinta chegaria no relógio como um treino de corrida.
+    expect(icuSportType("pilates")).toBeNull();
+    expect(icuSportType("volei")).toBeNull();
+    expect(icuSportType(undefined)).toBeNull();
+  });
+
+  it("bike não cobra ritmo — não é assim que se pedala", () => {
+    expect(icuTarget("ciclismo")).toBe("AUTO");
+    expect(icuTarget("corrida")).toBe("PACE");
+    expect(icuTarget("natacao")).toBe("PACE");
+  });
+
+  it("um esporte sem tradução não vira evento nenhum", () => {
+    expect(icuEventPayload({
+      date: "2026-10-15", label: "Vôlei", sport: "volei",
+      structure: { blocks: [{ kind: "run", duration_min: 60 }] },
+      weekStart: "2026-10-12", day: "Thu",
+    })).toBeNull();
+  });
+});
+
+describe("a musculação escrita para ler", () => {
+  const sessao = {
+    estimatedMinutes: 51,
+    exercises: [
+      { name: "Agachamento livre", sets: 4, reps: [6, 8] as [number, number], rir: 2, unilateral: false, timeBased: false },
+      { name: "Búlgaro",           sets: 3, reps: [10, 10] as [number, number], rir: 2, unilateral: true,  timeBased: false },
+      { name: "Prancha",           sets: 3, reps: [30, 45] as [number, number], rir: 1, unilateral: false, timeBased: true },
+    ],
+  };
+
+  it("lista exercício, séries, faixa e RIR", () => {
+    const t = icuStrengthText(sessao);
+    expect(t).toContain("Agachamento livre — 4×6-8 (RIR 2)");
+  });
+
+  it("não repete a faixa quando o número é só um", () => {
+    expect(icuStrengthText(sessao)).toContain("Búlgaro — 3×10 (RIR 2)");
+  });
+
+  it("diz quando é cada lado", () => {
+    expect(icuStrengthText(sessao)).toContain("cada lado");
+  });
+
+  it("exercício por tempo vem em segundos", () => {
+    expect(icuStrengthText(sessao)).toContain("Prancha — 3×30-45s (RIR 1)");
+  });
+
+  it("diz onde ficam as séries e o descanso, para o relógio não prometer o que não faz", () => {
+    expect(icuStrengthText(sessao)).toContain("As séries e o descanso você acompanha no Limiar.");
+  });
+
+  it("nunca escreve passos — a sintaxe do intervals.icu não sabe dizer 4×8 com RIR 2", () => {
+    for (const linha of icuStrengthText(sessao).split("\n")) {
+      expect(linha.startsWith("- ")).toBe(false);
+    }
+  });
+
+  it("sessão sem exercício não vira texto", () => {
+    expect(icuStrengthText({ exercises: [] })).toBe("");
+  });
+
+  it("vira um evento de musculação com a duração estimada", () => {
+    const ev = icuEventPayload({
+      date: "2026-10-15", label: "Musculação", sport: "musculacao",
+      description: icuStrengthText(sessao), durationMin: 51,
+      weekStart: "2026-10-12", day: "Thu",
+    })!;
+    expect(ev.type).toBe("WeightTraining");
+    expect(ev.moving_time).toBe(3060);
+    expect(ev.distance).toBeUndefined();
+    expect(ev.description).toContain("Agachamento livre");
   });
 });

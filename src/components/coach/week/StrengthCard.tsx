@@ -12,7 +12,9 @@
  */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MessageCircle, PlayCircle } from "lucide-react";
+import Link from "next/link";
+import { Check, Loader2, MessageCircle, PlayCircle, Watch } from "lucide-react";
+import { haptic } from "@/lib/haptics";
 import { SPORTS } from "@/lib/sports";
 import { SessionRunner } from "@/components/coach/SessionRunner";
 import { isoDateOfWeekDay, localDateStr } from "@/lib/week";
@@ -102,6 +104,17 @@ export function StrengthCard({
         </button>
       )}
 
+      {/*
+        E o relógio, para quem quiser.
+
+        A musculação não vai sozinha com a semana: o que o motor prescreve ali
+        são séries e RIR, que o relógio não conduz, e quem conduz é o modo de
+        execução logo acima. Mas ter a sessão no pulso tem valor — o relógio
+        sabe que hoje tem academia, quanto tempo dura e o que fazer. Então é
+        oferta, não automatismo (Sérgio, 15/10).
+      */}
+      <PushStrengthButton day={day} week={week} />
+
       <Disclosure
         title="Ver os exercícios"
         summary={`${session.exercises.length} exercícios · ${isToday ? "conferir antes" : "e registrar as séries"}`}
@@ -137,6 +150,71 @@ export function StrengthCard({
           <MessageCircle className="h-3.5 w-3.5" /> Perguntar
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * "Mandar pro relógio" para a musculação.
+ *
+ * Discreto de propósito: a ação do dia é fazer o treino, logo acima. Esta é
+ * para quem gosta de ver a semana inteira no pulso — a sessão chega com a
+ * duração estimada e a lista de exercícios, e quem conduz série a série
+ * continua sendo o app.
+ */
+function PushStrengthButton({ day, week }: { day: WeeklyPlanDay; week: string }) {
+  const [enviando, setEnviando] = useState(false);
+  const [enviado, setEnviado] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [precisaConectar, setPrecisaConectar] = useState(false);
+
+  async function enviar() {
+    setEnviando(true); setErro(null); setPrecisaConectar(false);
+    try {
+      const res = await fetch("/api/workouts/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ weekStart: week, day: day.day, session: { ...day, sport: "musculacao" } }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) {
+        setPrecisaConectar(d?.needsConnection === true);
+        throw new Error(d?.error ?? "Não consegui enviar.");
+      }
+      haptic("success");
+      setEnviado(true);
+      setTimeout(() => setEnviado(false), 4000);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não consegui enviar.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={enviar}
+        disabled={enviando}
+        className="flex min-h-[44px] w-full items-center justify-center gap-2 text-[11px] font-medium text-surface-500 transition-colors hover:text-brand-300"
+      >
+        {enviando ? <><Loader2 className="h-3 w-3 animate-spin" /> Enviando…</>
+          : enviado ? <><Check className="h-3 w-3 text-green-400" /> No seu relógio</>
+          : <><Watch className="h-3 w-3" /> Mandar pro relógio</>}
+      </button>
+      {enviado && (
+        <p className="text-[10px] leading-relaxed text-surface-500">
+          A sessão e a lista de exercícios foram para o calendário. As séries e o descanso
+          continuam aqui no app.
+        </p>
+      )}
+      {erro && (
+        <p className="text-[11px] leading-relaxed text-red-400">
+          {erro}
+          {precisaConectar && <> <Link href="/settings" className="underline hover:text-red-300">Abrir Configurações</Link></>}
+        </p>
+      )}
     </div>
   );
 }

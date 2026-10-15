@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { applyPlanEdits } from "@/lib/plan-edit";
 import { loadWeeklyPlan, mondayOf, nextMondayOf, previousMondayOf } from "@/lib/weekly-plan";
-import { loadIcuConnection, pushIcuSession, removeIcuDay } from "@/lib/icu-push";
+import { AUTO_SPORTS, loadIcuConnection, pushIcuSession, removeIcuDay } from "@/lib/icu-push";
 import { normalizePrefs } from "@/lib/workout-builder";
 import { isoDateOfWeekDay } from "@/lib/week";
 import type { WeeklyPlanDay } from "@/types";
@@ -99,10 +99,22 @@ async function syncWatch(
   const { measureBy } = normalizePrefs((perfil as { training_prefs?: unknown } | null)?.training_prefs);
 
   const dataOrigem = isoDateOfWeekDay(week, from);
-  if (dataOrigem) await removeIcuDay(conn, dataOrigem, week, from);
+  const apagados = dataOrigem ? await removeIcuDay(conn, dataOrigem, week, from) : 0;
 
   const destino = plan?.days?.find(d => d.day === to);
-  if (destino && destino.type !== "rest" && destino.sport !== "musculacao") {
+  if (!destino || destino.type === "rest") return;
+
+  /*
+    O que estava lá, vai junto.
+
+    Corrida, natação e bike são reenviadas sempre — são o que vai ao relógio
+    sozinho. A musculação só é reenviada se **já havia** um evento nosso no dia
+    de origem: ela não é automática, e mover um treino não é o momento de criar
+    no relógio algo que o atleta nunca mandou. Mas se ele mandou, mover o dia
+    tem que mover o que ele mandou.
+  */
+  const automatico = AUTO_SPORTS.includes(destino.sport ?? "corrida");
+  if (automatico || apagados > 0) {
     await pushIcuSession(conn, { session: destino, weekStart: week, measureBy });
   }
 }

@@ -1,8 +1,8 @@
 import { icuAuthHeader, ICU_API_BASE } from "@/lib/intervals";
-import { icuEventPayload } from "@/lib/icu-workout";
+import { icuEventPayload, icuStrengthText } from "@/lib/icu-workout";
 import { isoDateOfWeekDay } from "@/lib/week";
 import { sessionAsStructure } from "@/lib/measure";
-import type { PrimarySport } from "@/lib/sports";
+import type { SportKey } from "@/lib/sports";
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 
 /**
@@ -94,9 +94,22 @@ export async function removeIcuDay(
   }
 }
 
+/**
+ * Os esportes que vão ao relógio sozinhos.
+ *
+ * Corrida, natação e ciclismo — as três coisas que o motor dimensiona em
+ * distância, tempo e ritmo, e que o relógio sabe conduzir (Sérgio, 15/10).
+ *
+ * **Musculação não entra aqui** porque não é automática: ela tem o próprio
+ * botão, no card do dia, abaixo de "Começar treino". E **pilates, vôlei e
+ * companhia** não entram porque não são sessões do motor — são fatos da semana
+ * do atleta, sem duração nem alvo prescritos por ninguém.
+ */
+export const AUTO_SPORTS: SportKey[] = ["corrida", "natacao", "ciclismo"];
+
 export type PushResult =
   | { ok: true; eventId: number | null }
-  | { ok: false; reason: "unauthorized" | "no_structure" | "error"; detail?: string };
+  | { ok: false; reason: "unauthorized" | "no_structure" | "unsupported_sport" | "error"; detail?: string };
 
 /**
  * Põe uma sessão no calendário, substituindo a que estava naquele dia.
@@ -116,20 +129,32 @@ export async function pushIcuSession(
   const date = isoDateOfWeekDay(weekStart, session.day);
   if (!date) return { ok: false, reason: "error", detail: "dia inválido" };
 
-  const structure = sessionAsStructure(session, args.measureBy ?? "km");
-  if (!structure) return { ok: false, reason: "no_structure" };
+  const sport: SportKey = session.sport ?? "corrida";
+
+  /*
+    A musculação vai como texto legível, não como passos.
+
+    A sintaxe do intervals.icu não sabe dizer "4×8-10 com RIR 2"; fingir que
+    sabe exigiria inventar um tempo para cada exercício. Ver `icuStrengthText`.
+  */
+  const ehForca = sport === "musculacao";
+  const structure = ehForca ? null : sessionAsStructure(session, args.measureBy ?? "km");
+  const description = ehForca && session.strength ? icuStrengthText(session.strength) : undefined;
+  if (!ehForca && !structure) return { ok: false, reason: "no_structure" };
+  if (ehForca && !description) return { ok: false, reason: "no_structure" };
 
   const evento = icuEventPayload({
     date,
     label: session.label,
     structure,
-    sport: (session.sport ?? "corrida") as PrimarySport,
+    description,
+    sport,
     weekStart,
     day: session.day,
-    distanceKm: session.distance_km,
-    durationMin: session.duration_min,
+    distanceKm: ehForca ? undefined : session.distance_km,
+    durationMin: ehForca ? session.strength?.estimatedMinutes : session.duration_min,
   });
-  if (!evento) return { ok: false, reason: "no_structure" };
+  if (!evento) return { ok: false, reason: "unsupported_sport" };
 
   await removeIcuDay(conn, date, weekStart, session.day);
 
@@ -152,11 +177,9 @@ export async function pushIcuSession(
 }
 
 /**
- * A semana inteira de uma vez.
+ * A semana inteira de uma vez — corrida, natação e ciclismo.
  *
- * Sessões de corrida e dos outros esportes de resistência. **Musculação fica
- * de fora**: o que o motor prescreve ali são exercícios, séries e RIR, que o
- * relógio não sabe mostrar e que o modo de execução do app já conduz melhor.
+ * O que fica de fora e por quê está em `AUTO_SPORTS`.
  */
 export async function pushIcuWeek(
   conn: IcuConnection,
@@ -166,10 +189,10 @@ export async function pushIcuWeek(
 ): Promise<{ enviados: number; pulados: number; falhas: number }> {
   let enviados = 0, pulados = 0, falhas = 0;
   for (const day of plan.days ?? []) {
-    if (day.type === "rest" || day.sport === "musculacao") { pulados++; continue; }
+    if (day.type === "rest" || !AUTO_SPORTS.includes(day.sport ?? "corrida")) { pulados++; continue; }
     const r = await pushIcuSession(conn, { session: day, weekStart, measureBy });
     if (r.ok) enviados++;
-    else if (r.reason === "no_structure") pulados++;
+    else if (r.reason === "no_structure" || r.reason === "unsupported_sport") pulados++;
     else falhas++;
     // Uma chave recusada não melhora na próxima sessão.
     if (!r.ok && r.reason === "unauthorized") break;
