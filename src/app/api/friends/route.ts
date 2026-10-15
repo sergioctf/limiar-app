@@ -41,8 +41,12 @@ export async function GET() {
 
   const profileMap = new Map<string, { name: string | null; username: string | null }>();
   if (otherIds.length > 0) {
+    /* `public_profiles`: a view com as três colunas que um atleta pode saber
+      de outro. Ler `profiles` daqui exigiria uma policy que libera a tabela
+      inteira — foi assim que e-mail, nascimento e `wellness_token` de todo
+      mundo ficaram legíveis por quatro meses (migration 039). */
     const { data: profiles } = await supabase
-      .from("profiles")
+      .from("public_profiles")
       .select("id, name, username")
       .in("id", otherIds);
     for (const p of profiles ?? []) {
@@ -84,7 +88,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Informe um username" }, { status: 400 });
   }
 
-  const query = supabase.from("profiles").select("id, name, username");
+  const query = supabase.from("public_profiles").select("id, name, username");
   const { data: target } = userId
     ? await query.eq("id", userId).maybeSingle()
     : await query.ilike("username", username!).maybeSingle();

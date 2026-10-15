@@ -22,7 +22,7 @@
 2. **O deploy é feito da máquina local**, com `npx vercel deploy --prod` na pasta. Não há CI, não há deploy a partir do GitHub. O que está em produção é o que estava no disco de Sérgio no momento do último deploy.
 3. **O banco não é reconstruível a partir do repositório.** As tabelas `activities`, `performance_tests` e `races` são usadas intensamente pelo código, mas **não existe DDL delas em nenhum `.sql`**. Foram criadas por rotas `/api/admin/*` que já foram apagadas. Além disso, as migrations 002–027 foram aplicadas **à mão** no SQL Editor do Supabase (não existe runner nem `DATABASE_URL`), e há infraestrutura que vive só no Supabase (job `pg_cron` e segredo no Vault — ver seção 18).
 4. **Possível vazamento de dados entre usuários (crítico, a confirmar no banco).** A migration `002_social.sql` cria a policy `"Authenticated can search profiles"` com `for select using (auth.role() = 'authenticated')`. RLS filtra linhas, não colunas: qualquer usuário logado pode, com a anon key, ler **todas as colunas de todos os perfis** — e-mail, data de nascimento, altura, sexo e o `wellness_token`, que autentica o endpoint público `/api/ingest/wellness`, permitindo gravar dados de saúde no nome de outra pessoa. Não verifiquei se a policy ainda existe em produção. Verifique com `select * from pg_policies where tablename = 'profiles';`. No mesmo nível de risco: **o webhook do Strava aceita eventos forjados** e um POST com `aspect_type: "delete"` apaga (soft delete) a corrida de qualquer usuário pelo ID da atividade (dívida A9).
-5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.747 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
+5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.756 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
 6. **Há usuários reais.** São 7 contas por convite (Sérgio e amigos). O plano da semana é lido e seguido por pessoas. Regra de ouro que custou caro: **nunca reescrever uma semana que já começou** (ver ADR sobre congelamento de semana).
 
 ---
@@ -1489,6 +1489,20 @@ Detalhes em **`docs/relogio-esportes-15-10.md`**.
 - **Verificado na conta real:** natação → `Swim`/PACE com passo de 2.000 m; bike → `Ride`/AUTO com 4.500 s; musculação → `WeightTraining` com 3.060 s e a lista no texto, sem passos; pilates → **recusado**, nenhum evento criado.
 - **Falta conferir no pulso:** se a Garmin mostra a musculação, já que ela chega sem passos e a Garmin pode ignorar treino sem passo. A corrida o Sérgio já confirmou em 15/10.
 
+## 6.57 Item 1 — o webhook do Strava fechado, a policy escrita ⏳ (15/10)
+
+Detalhes em **`docs/seguranca-15-10.md`**.
+
+**Correção do que eu disse antes:** recomendei "corrigir e depois publicar, porque publicar torna as falhas descobríveis". Errado — `002_social.sql` e `strava/webhook/route.ts` estão públicos no GitHub **desde junho**. As duas falhas estão expostas há quatro meses, e o push não muda a exposição. O que muda é que elas são urgentes **por si**.
+
+**Dívida A9 ✅ resolvida.** O webhook apagava uma corrida só pelo id da atividade: um POST forjado com `aspect_type: "delete"` e um `object_id` qualquer marcava `deleted_at` na corrida de quem quer que fosse o dono — e ids do Strava são sequenciais e públicos. Duas travas: **o dono** (`owner_id` → `user_id` via `strava_connections`, e a corrida só é tocada se for dele; não depende de configuração e é a que fecha o buraco) e **a assinatura** (`STRAVA_SUBSCRIPTION_ID = 364100`, lido da API do Strava e posto na Vercel; barra o ruído, mas o id não é segredo e sozinho não bastaria). Verificado em produção: forjada → 403, sem assinatura → 403, correta → 200. Nove testes em `tests/strava-webhook-auth.test.ts`.
+
+**Dívida C3 ⏸ escrita, não aplicada.** `039_profiles_leak.sql` troca a policy larga por (1) a view `public_profiles` com id, nome e username — ela atravessa o RLS mas **não pode devolver coluna que não está escrita nela** — e (2) leitura do próprio perfil. A migration lista as policies antes e depois, porque `profiles` nasceu fora das migrations (C4) e não dá para saber daqui quais existem. O código já acompanha: `/api/friends` lê a view, `/api/friends/suggestions` passou para o cliente administrativo com a lista de colunas escrita na rota. **Não apliquei porque a sessão do Supabase no Chrome expirou** — precisa do login do Sérgio.
+
+**Rotação dos `wellness_token`:** decisão do Sérgio. Ficaram legíveis por quatro meses; são oito contas de amigos, risco real baixo, mas o número honesto é "não dá para saber". Rotacionar quebra o Atalho do iPhone de quem já configurou até copiar o token novo.
+
+**O push ⏸** espera a 039 — não pelo código (histórico conferido, nenhum segredo, só placeholders), mas pelo `HANDOFF.md`, que descreve a falha com nome e impacto. Publicar isso enquanto está aberta é entregar o mapa.
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
@@ -2276,7 +2290,7 @@ combustível em treino: > 75 min → 50 g/h (leve) | 75 g/h (prova); gel ≈ 25 
 | A6 | **Home carrega o histórico inteiro de corridas** (parcial em 20/09) | `src/app/page.tsx` | O `select("*")` com `strava_raw_json` e `map_polyline` acabou em 18/09; em 20/09 o recorte de 180 dias caiu de novo, porque "Seus números" e os recordes falam da vida toda. Hoje são ~10 colunas numéricas por corrida, serializadas para o cliente — o payload ainda cresce com o histórico, só que ~40× menor | Agregar no servidor (total, soma, sequência) e mandar só os recordes calculados |
 | A7 | ~~**Contexto de IA sem limite**~~ **resolvida em 13/10** (`ai-history.ts`: comparáveis + recentes + volume mês a mês; prompt de 6.912 → 850 tokens) | `analyzeRun`/`generateWeeklySummary` enviavam todas as corridas | Não era só custo: com 170 corridas, uma análise usava 7.512 de um teto de **8.000 tokens/minuto**, e a segunda chamada de qualquer feature levava 429. Ver `docs/ia-limite-por-minuto-13-10.md` | — |
 | A8 | ~~**Carga de treino só de corrida**~~ **resolvida em 16/09** (`activityTSS`) | `training-load.ts` | TSB e recuperação subestimam fadiga de quem faz força 3×/semana (caso de Sérgio) | TSS por sRPE × duração para `activities`; calibrar com o atleta |
-| A9 | **Webhook do Strava aceita eventos forjados** | `strava/webhook/route.ts` não confere `subscription_id`; o delete marca `runs.deleted_at` só pelo `object_id` | Qualquer pessoa pode apagar (soft delete) corridas de usuários conhecendo o ID da atividade no Strava; eventos falsos geram custo de API/IA | Validar `subscription_id`; no delete, confirmar com a API do Strava (404) antes de marcar |
+| A9 | ~~**Webhook do Strava aceita eventos forjados**~~ **resolvida em 15/10**: o delete é filtrado pelo dono (`owner_id` → `user_id`) e `subscription_id` é conferido contra `STRAVA_SUBSCRIPTION_ID`. Verificado em produção (403/403/200) e com 9 testes | `strava/webhook/route.ts` | Qualquer pessoa podia apagar corridas de outros conhecendo o id da atividade — e eles são sequenciais | — |
 | A10 | **Análise por IA síncrona no webhook do Strava** | `strava/webhook/route.ts` | Webhook lento → Strava reenvia; atividade só é salva se a função não estourar | Salvar e responder 200; análise em job posterior (fila simples em tabela) |
 | A11 | ~~**Card de adesão mostra a semana seguinte como "esta semana"**~~ **resolvida em 21/09** (`computeAdherenceHistory` ignora semanas que ainda não começaram) | `plan-adherence.ts` | — | — |
 | A12 | ~~**Musculação do dia conta como perdida antes de o dia acabar**~~ **resolvida em 21/09** (a regra "hoje ainda está pendente" passou a valer para qualquer esporte) | `plan-adherence.ts` | — | — |
@@ -2692,7 +2706,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 
 ## 19.1 O que existe
 
-- **Vitest 2.1**, `npm test` (= `vitest run`). **98 arquivos, 1.747 testes, todos passando** (rodado em 15/10/2026, ~9 s).
+- **Vitest 2.1**, `npm test` (= `vitest run`). **99 arquivos, 1.756 testes, todos passando** (rodado em 15/10/2026, ~10 s).
 - **Só funções puras de `src/lib/`.** Sem banco, sem rede, sem DOM.
 - **Fixture central** (`tests/fixtures.ts`): atleta com teste de 3 km em 13:00 e FC média 178 → **VDOT ≈ 43,7, LTHR = 165**. Falhas se leem como "isso deu errado para um corredor de VDOT 43".
 - **`tests/README.md`:** tabela dos bugs reais que cada teste protege. Leitura obrigatória.
@@ -2738,7 +2752,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 | Dimensão | Estado | Nota |
 |---|---|---|
 | **Proposta de valor** | Clara: treinador de corrida (e força) que prescreve com ciência, se adapta ao corpo e explica o porquê | 🟢 |
-| **Motor de treino** | Maduro, determinístico, ~1.747 testes, corrigido contra casos reais | 🟢 |
+| **Motor de treino** | Maduro, determinístico, ~1.756 testes, corrigido contra casos reais | 🟢 |
 | **Saúde/recuperação** | Nova (14/09), funcional com Garmin via intervals.icu e sem relógio; score não validado contra desfecho | 🟡 |
 | **UX** | Rica e animada no dashboard e na Saúde; telas antigas inconsistentes; muita navegação (10 itens) | 🟡 |
 | **Usuários** | 7 contas por convite; push chega a 4; **sem métricas de uso** (nenhum analytics) | 🔴 para decidir produto |

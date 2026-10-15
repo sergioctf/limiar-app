@@ -9,7 +9,7 @@
  * being small this becomes a materialised view, not a bigger query.
  */
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { suggestFriends, shortfallNote, type Edge, type SuggestionCandidate } from "@/lib/friend-suggestions";
 import { localMondayStr } from "@/lib/week";
 
@@ -22,12 +22,27 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const [{ data: profiles }, { data: rows }] = await Promise.all([
-    supabase.from("profiles")
+  /*
+    Esta rota compara esportes, dias de treino e idade de todo mundo para
+    sugerir quem treina parecido — e devolve só os nomes que passaram no
+    filtro. Ela precisa ler colunas que ninguém pode ler de ninguém.
+
+    Por isso lê pelo cliente administrativo, no servidor, com a lista de
+    colunas escrita aqui — e não por uma policy que libera `profiles` inteira
+    para a anon key que vai no navegador (migration 039).
+  */
+  const admin = createAdminClient();
+  const [perfis, { data: rows }] = await Promise.all([
+    admin.from("profiles")
       .select("id, name, username, created_at, sports, training_prefs, birth_date")
       .limit(MAX_SCAN),
     supabase.from("friendships").select("requester_id, addressee_id, status"),
   ]);
+  /* O cliente administrativo não é tipado; a forma das linhas fica escrita aqui. */
+  const profiles = (perfis.data ?? []) as Array<{
+    id: string; name: string | null; username: string | null;
+    created_at?: string | null; sports?: unknown; training_prefs?: unknown; birth_date?: string | null;
+  }>;
 
   const edges: Edge[] = (rows ?? []).map(f => ({
     a: f.requester_id as string,

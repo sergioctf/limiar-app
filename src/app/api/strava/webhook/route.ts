@@ -56,18 +56,53 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
+  /*
+    Esta rota é pública, e até aqui ela acreditava em qualquer um.
+
+    O Strava precisa poder chamá-la sem autenticação — é um webhook. Mas o que
+    chegava não era conferido de nenhuma forma, e o caminho de `delete` apagava
+    uma corrida **só pelo id da atividade**:
+
+        POST /api/strava/webhook
+        { "object_type":"activity", "aspect_type":"delete", "object_id": 123 }
+
+    ...marcava `deleted_at` na corrida 123 de quem quer que fosse o dono. Ids de
+    atividade do Strava são sequenciais e públicos para atividades públicas:
+    apagar o histórico de um atleta era um laço de `for` (dívida A9, aberta
+    desde agosto).
+
+    Duas travas, nesta ordem de importância:
+
+    1. **O dono.** O evento diz de quem é a atividade (`owner_id`); a corrida só
+       é tocada se pertencer a esse atleta. Esta trava não depende de
+       configuração nenhuma e é a que fecha o buraco.
+    2. **A assinatura.** `subscription_id` tem que ser a nossa. Barra o ruído e
+       o forjador preguiçoso; sozinha não bastaria, porque o id da assinatura
+       não é segredo.
+  */
+  const esperada = process.env.STRAVA_SUBSCRIPTION_ID?.trim();
+  if (esperada && String(body.subscription_id ?? "") !== esperada) {
+    console.warn("[strava/webhook] assinatura desconhecida:", body.subscription_id);
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   // Só processa atividades (não atletas)
   if (body.object_type !== "activity") {
     return NextResponse.json({ ok: true });
   }
 
-  // Soft-delete: marca como deletado no banco
+  // Soft-delete: marca como deletado no banco, na conta de quem é dono dela.
   if (body.aspect_type === "delete") {
     const admin = createAdminClient();
-    await admin
-      .from("runs")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("strava_activity_id", body.object_id);
+    const dono = await ownerUserId(admin, body.owner_id);
+    // Atleta que não conectou o Strava aqui não tem corrida nossa para apagar.
+    if (dono) {
+      await admin
+        .from("runs")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("strava_activity_id", body.object_id)
+        .eq("user_id", dono);
+    }
     return NextResponse.json({ ok: true });
   }
 
@@ -340,5 +375,27 @@ export async function POST(request: NextRequest) {
     console.error("[Webhook] Error processing event:", err);
     // Mesmo em erro, retornar 200 pro Strava (evita reenvio infinito)
     return NextResponse.json({ ok: true, error: "Internal error — logged" });
+  }
+}
+
+/**
+ * De quem é esta atividade, aqui dentro.
+ *
+ * `owner_id` é o id do atleta no Strava; o que nos interessa é o usuário do
+ * Limiar por trás dele. Devolve `null` para quem nunca conectou — e `null`
+ * significa "não há nada a fazer", nunca "pode fazer em todo mundo".
+ */
+async function ownerUserId(
+  admin: ReturnType<typeof createAdminClient>, ownerId: number,
+): Promise<string | null> {
+  try {
+    const { data } = await admin
+      .from("strava_connections")
+      .select("user_id")
+      .eq("athlete_id", ownerId)
+      .maybeSingle();
+    return (data as { user_id?: string } | null)?.user_id ?? null;
+  } catch {
+    return null;
   }
 }
