@@ -24,7 +24,7 @@ import { AdaptSessionControl } from "@/components/today/AdaptSession";
 import { ShoeHint } from "@/components/coach/ShoeHint";
 import type { DoneItem } from "@/lib/day-status";
 import { ScheduleTestSheet } from "@/components/coach/ScheduleTestSheet";
-import { localDateStr } from "@/lib/week";
+import { isoDateOfWeekDay, localDateStr } from "@/lib/week";
 import type { PlannedTest } from "@/lib/planned-test";
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 
@@ -123,6 +123,11 @@ export function RunCard({
             structure={session.structure}
             label={session.label}
             sport={session.sport}
+            date={isoDateOfWeekDay(week, session.day) ?? undefined}
+            weekStart={week}
+            day={session.day}
+            distanceKm={session.distance_km}
+            durationMin={session.duration_min}
           />
         </Disclosure>
       )}

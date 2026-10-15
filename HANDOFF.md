@@ -22,7 +22,7 @@
 2. **O deploy é feito da máquina local**, com `npx vercel deploy --prod` na pasta. Não há CI, não há deploy a partir do GitHub. O que está em produção é o que estava no disco de Sérgio no momento do último deploy.
 3. **O banco não é reconstruível a partir do repositório.** As tabelas `activities`, `performance_tests` e `races` são usadas intensamente pelo código, mas **não existe DDL delas em nenhum `.sql`**. Foram criadas por rotas `/api/admin/*` que já foram apagadas. Além disso, as migrations 002–027 foram aplicadas **à mão** no SQL Editor do Supabase (não existe runner nem `DATABASE_URL`), e há infraestrutura que vive só no Supabase (job `pg_cron` e segredo no Vault — ver seção 18).
 4. **Possível vazamento de dados entre usuários (crítico, a confirmar no banco).** A migration `002_social.sql` cria a policy `"Authenticated can search profiles"` com `for select using (auth.role() = 'authenticated')`. RLS filtra linhas, não colunas: qualquer usuário logado pode, com a anon key, ler **todas as colunas de todos os perfis** — e-mail, data de nascimento, altura, sexo e o `wellness_token`, que autentica o endpoint público `/api/ingest/wellness`, permitindo gravar dados de saúde no nome de outra pessoa. Não verifiquei se a policy ainda existe em produção. Verifique com `select * from pg_policies where tablename = 'profiles';`. No mesmo nível de risco: **o webhook do Strava aceita eventos forjados** e um POST com `aspect_type: "delete"` apaga (soft delete) a corrida de qualquer usuário pelo ID da atividade (dívida A9).
-5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.681 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
+5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.708 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
 6. **Há usuários reais.** São 7 contas por convite (Sérgio e amigos). O plano da semana é lido e seguido por pessoas. Regra de ouro que custou caro: **nunca reescrever uma semana que já começou** (ver ADR sobre congelamento de semana).
 
 ---
@@ -1444,6 +1444,20 @@ Detalhes em **`docs/ia-limite-por-minuto-13-10.md`**.
 - **O erro parou de mentir:** `AiUnavailable` leva o motivo até a rota — 429 vira *"A IA atingiu o limite de uso do minuto. Tente de novo em 20 segundos"*, com os segundos que a própria Groq informa.
 - **Orçamento da resposta** de 600 → 900 tokens: o pedido é de "3 a 5 parágrafos" e 600 não dava para três.
 
+## 6.54 Enviar pro relógio, de verdade ✅ (novo, 14/10)
+
+Detalhes em **`docs/enviar-pro-relogio-14-10.md`**.
+
+- **Por que nunca funcionou:** o botão gerava um `.FIT` e **baixava**. O Garmin Connect do **celular não importa treino de arquivo** — só o do computador — e o celular é exatamente onde a pessoa está quando toca "enviar pro relógio". O arquivo era gerado certo e não chegava a relógio nenhum.
+- **O caminho:** TrainingPeaks e afins empurram para o calendário do Garmin Connect via Training API, que está fechada para apps novos (ADR-12). O **intervals.icu é parceiro antigo**, tem a porta aberta, e o atleta já está conectado lá pela saúde. Conferido na conta de produção antes de codar: `icu_garmin_training: true`, `icu_garmin_upload_workouts: true`, `icu_garmin_last_upload: 2026-09-19`.
+- **A armadilha da sintaxe:** o intervals.icu lê os passos do texto da descrição, e nele **`m` é MINUTO — metro é `mtr`**. Um 6×800 m escrito `800m` vira oitenta horas de corrida no relógio. Por isso `tempoOuDistancia` é testada caso a caso, e existe um teste só para garantir que o texto gerado nunca contém `800m`.
+- **Outras regras do formato:** repetição é linha `6x` cercada de linhas em branco (sem aninhar); **não se mistura FC com ritmo** no mesmo treino (aqui vale só o ritmo); e o motor escreve ritmo com **travessão** (`6:12–5:48/km`) enquanto o intervals.icu quer hífen e unidade dos dois lados — o travessão não quebra nada, só devolve um treino sem alvo, calado.
+- **Verificado contra a conta real:** evento criado em 30/12 (data distante, para não pôr treino falso no relógio hoje), lido de volta e apagado; calendário conferido vazio. Ele interpretou: aquecimento 2.000 m, `reps: 6` com **`distance: 800`** e trote de `duration: 120` s, volta à calma 1.000 m, ritmos em secs/km. 9,58 km em ~50 min.
+- **Na tela:** "Enviar pro relógio" virou a ação principal; o `.FIT` ficou um nível abaixo, em letra miúda, para computador ou relógio que não fala com o intervals.icu. Sem conexão, o atleta recebe o convite para conectar com link para Configurações, não um erro.
+- **Reenviar não duplica:** o evento carrega `external_id` = `limiar-<semana>-<dia>`, e a rota apaga o anterior daquele dia antes de criar.
+- **Falta a ponta que só o Sérgio confere:** que o treino chega no relógio. Verifiquei a perna que o Limiar controla e a capacidade da outra; a confirmação final é tocar o botão num treino real e abrir o Connect.
+- Atualiza a feature incompleta "Export `.FIT`" da seção 14 e o bônus do brainstorm de 14/09 ("enviar a semana ao Garmin pelo calendário do intervals.icu").
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
@@ -2338,7 +2352,7 @@ combustível em treino: > 75 min → 50 g/h (leve) | 75 g/h (prova); gel ≈ 25 
 | **Onboarding** | Fluxo completo | Estado no servidor; métricas de conclusão | — |
 | **LGPD** | Nada | Exportar dados, excluir conta, política de privacidade, consentimento para dados de saúde | Base de amigos |
 | **Admin** | Convites, diagnóstico de push | Painel de saúde dos crons, uso de IA, usuários | — |
-| **Export `.FIT`** | Arquivo por treino | Envio direto ao relógio (via intervals.icu ou nativo) | Garmin Training API fechada |
+| **Export `.FIT`** | ~~Arquivo por treino~~ **resolvido em 14/10**: o treino vai ao calendário do intervals.icu, que entrega ao relógio (`docs/enviar-pro-relogio-14-10.md`). O `.FIT` ficou como saída de computador | Confirmar com o Sérgio que chegou no relógio | — |
 
 ---
 
@@ -2647,7 +2661,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 
 ## 19.1 O que existe
 
-- **Vitest 2.1**, `npm test` (= `vitest run`). **96 arquivos, 1.681 testes, todos passando** (rodado em 13/10/2026, ~7 s).
+- **Vitest 2.1**, `npm test` (= `vitest run`). **97 arquivos, 1.708 testes, todos passando** (rodado em 14/10/2026, ~8 s).
 - **Só funções puras de `src/lib/`.** Sem banco, sem rede, sem DOM.
 - **Fixture central** (`tests/fixtures.ts`): atleta com teste de 3 km em 13:00 e FC média 178 → **VDOT ≈ 43,7, LTHR = 165**. Falhas se leem como "isso deu errado para um corredor de VDOT 43".
 - **`tests/README.md`:** tabela dos bugs reais que cada teste protege. Leitura obrigatória.
@@ -2693,7 +2707,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 | Dimensão | Estado | Nota |
 |---|---|---|
 | **Proposta de valor** | Clara: treinador de corrida (e força) que prescreve com ciência, se adapta ao corpo e explica o porquê | 🟢 |
-| **Motor de treino** | Maduro, determinístico, ~1.681 testes, corrigido contra casos reais | 🟢 |
+| **Motor de treino** | Maduro, determinístico, ~1.708 testes, corrigido contra casos reais | 🟢 |
 | **Saúde/recuperação** | Nova (14/09), funcional com Garmin via intervals.icu e sem relógio; score não validado contra desfecho | 🟡 |
 | **UX** | Rica e animada no dashboard e na Saúde; telas antigas inconsistentes; muita navegação (10 itens) | 🟡 |
 | **Usuários** | 7 contas por convite; push chega a 4; **sem métricas de uso** (nenhum analytics) | 🔴 para decidir produto |

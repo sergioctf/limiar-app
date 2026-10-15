@@ -1,9 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Flame, Wind, Snowflake, Repeat2, Watch, Loader2, Check, Footprints, Heart, AlertCircle } from "lucide-react";
+import Link from "next/link";
+import {
+  Flame, Wind, Snowflake, Repeat2, Watch, Loader2, Check, Footprints, Heart,
+  AlertCircle, Download,
+} from "lucide-react";
 import { isRepeatBlock } from "@/types";
 import { expandToKmSplits } from "@/lib/workout-builder";
+import { haptic } from "@/lib/haptics";
 import type { SportKey } from "@/lib/sports";
 import type { StructuredWorkout, WorkoutStep, WorkoutStepKind } from "@/types";
 
@@ -12,6 +17,17 @@ interface Props {
   label: string;       // workout name, e.g. "Tiro 800m"
   /** Drives the sport recorded in the .FIT file and which target type it uses. */
   sport?: SportKey;
+  /**
+   * Quando e de qual semana — o que falta para mandar ao relógio.
+   *
+   * Sem os três, só sobra o arquivo: um treino sem data não tem onde pousar no
+   * calendário, e sem semana/dia não dá para reenviá-lo sem duplicar.
+   */
+  date?: string;
+  weekStart?: string;
+  day?: string;
+  distanceKm?: number;
+  durationMin?: number;
 }
 
 const KIND_UI: Record<WorkoutStepKind, { icon: React.ReactNode; label: string; color: string; bar: string }> = {
@@ -188,11 +204,50 @@ function KmTable({ structure }: { structure: StructuredWorkout }) {
   );
 }
 
-export function WorkoutStepsView({ structure, label, sport = "corrida" }: Props) {
+export function WorkoutStepsView({
+  structure, label, sport = "corrida", date, weekStart, day, distanceKm, durationMin,
+}: Props) {
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"steps" | "km">("steps");
+
+  /*
+    O envio de verdade.
+
+    O `.FIT` baixado nunca chegou a relógio nenhum: o Garmin Connect do celular
+    não importa treino de arquivo, e era lá que o atleta estava quando tocava o
+    botão (Sérgio, 13/10). Agora o treino vai para o calendário do intervals.icu
+    e de lá para o relógio — ver `src/lib/icu-workout.ts`. O arquivo continua
+    disponível, um nível abaixo, para quem está no computador.
+  */
+  const [pushing, setPushing] = useState(false);
+  const [pushed, setPushed] = useState(false);
+  const [precisaConectar, setPrecisaConectar] = useState(false);
+  const podeEnviar = Boolean(date && weekStart && day);
+
+  async function enviarAoRelogio() {
+    setPushing(true); setError(null); setPrecisaConectar(false);
+    try {
+      const res = await fetch("/api/workouts/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, weekStart, day, label, structure, sport, distanceKm, durationMin }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) {
+        setPrecisaConectar(d?.needsConnection === true);
+        throw new Error(d?.error ?? "Não consegui enviar o treino.");
+      }
+      haptic("success");
+      setPushed(true);
+      setTimeout(() => setPushed(false), 4000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não consegui enviar o treino.");
+    } finally {
+      setPushing(false);
+    }
+  }
 
   if (!structure?.blocks?.length) return null;
 
@@ -261,19 +316,48 @@ export function WorkoutStepsView({ structure, label, sport = "corrida" }: Props)
         <KmTable structure={structure} />
       )}
 
+      {podeEnviar && (
+        <button
+          onClick={enviarAoRelogio}
+          disabled={pushing}
+          className="btn-primary mt-2.5 min-h-[48px] w-full justify-center"
+        >
+          {pushing ? <><Loader2 className="h-4 w-4 animate-spin" /> Enviando…</>
+            : pushed ? <><Check className="h-4 w-4" /> No seu relógio</>
+            : <><Watch className="h-4 w-4" /> Enviar pro relógio</>}
+        </button>
+      )}
+
+      {pushed && (
+        <p className="mt-1.5 text-[10px] leading-relaxed text-surface-500">
+          Está no seu calendário do intervals.icu e segue para o relógio na próxima
+          sincronização. No Garmin, abra o Connect uma vez para apressar.
+        </p>
+      )}
+
+      {error && (
+        <p className="mt-1.5 text-[11px] leading-relaxed text-red-400">
+          {error}
+          {precisaConectar && (
+            <>
+              {" "}
+              <Link href="/settings" className="underline hover:text-red-300">Abrir Configurações</Link>
+            </>
+          )}
+        </p>
+      )}
+
+      {/* O arquivo continua aqui, um nível abaixo: serve para quem está no
+          computador, ou para relógio que não fala com o intervals.icu. */}
       <button
         onClick={exportFit}
         disabled={exporting}
-        className="mt-2.5 w-full flex items-center justify-center gap-2 text-xs font-semibold rounded-lg py-2 bg-surface-700 text-surface-300 hover:text-brand-300 hover:bg-surface-600 transition-colors active:scale-[0.99]"
+        className="mt-2 flex min-h-[44px] w-full items-center justify-center gap-2 text-[11px] font-medium text-surface-500 transition-colors hover:text-surface-300"
       >
-        {exporting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Gerando…</>
-          : exported ? <><Check className="w-3.5 h-3.5 text-green-400" /> Baixado!</>
-          : <><Watch className="w-3.5 h-3.5" /> Enviar pro relógio (.FIT)</>}
+        {exporting ? <><Loader2 className="h-3 w-3 animate-spin" /> Gerando…</>
+          : exported ? <><Check className="h-3 w-3 text-green-400" /> Arquivo baixado</>
+          : <><Download className="h-3 w-3" /> Baixar .FIT para importar à mão</>}
       </button>
-      {error && <p className="text-[10px] text-red-400 mt-1">{error}</p>}
-      <p className="text-[10px] text-surface-500 mt-1.5 leading-relaxed">
-        Garmin: importe em Connect → Treinos. Coros/Zepp: importe no app. O relógio te guia passo a passo com alertas de ritmo.
-      </p>
     </div>
   );
 }
