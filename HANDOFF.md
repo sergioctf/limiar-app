@@ -22,7 +22,7 @@
 2. **O deploy é feito da máquina local**, com `npx vercel deploy --prod` na pasta. Não há CI, não há deploy a partir do GitHub. O que está em produção é o que estava no disco de Sérgio no momento do último deploy.
 3. **O banco não é reconstruível a partir do repositório.** As tabelas `activities`, `performance_tests` e `races` são usadas intensamente pelo código, mas **não existe DDL delas em nenhum `.sql`**. Foram criadas por rotas `/api/admin/*` que já foram apagadas. Além disso, as migrations 002–027 foram aplicadas **à mão** no SQL Editor do Supabase (não existe runner nem `DATABASE_URL`), e há infraestrutura que vive só no Supabase (job `pg_cron` e segredo no Vault — ver seção 18).
 4. **Possível vazamento de dados entre usuários (crítico, a confirmar no banco).** A migration `002_social.sql` cria a policy `"Authenticated can search profiles"` com `for select using (auth.role() = 'authenticated')`. RLS filtra linhas, não colunas: qualquer usuário logado pode, com a anon key, ler **todas as colunas de todos os perfis** — e-mail, data de nascimento, altura, sexo e o `wellness_token`, que autentica o endpoint público `/api/ingest/wellness`, permitindo gravar dados de saúde no nome de outra pessoa. Não verifiquei se a policy ainda existe em produção. Verifique com `select * from pg_policies where tablename = 'profiles';`. No mesmo nível de risco: **o webhook do Strava aceita eventos forjados** e um POST com `aspect_type: "delete"` apaga (soft delete) a corrida de qualquer usuário pelo ID da atividade (dívida A9).
-5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.756 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
+5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.768 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
 6. **Há usuários reais.** São 7 contas por convite (Sérgio e amigos). O plano da semana é lido e seguido por pessoas. Regra de ouro que custou caro: **nunca reescrever uma semana que já começou** (ver ADR sobre congelamento de semana).
 
 ---
@@ -1503,6 +1503,17 @@ Detalhes em **`docs/seguranca-15-10.md`**.
 
 **O push ⏸** espera a 039 — não pelo código (histórico conferido, nenhum segredo, só placeholders), mas pelo `HANDOFF.md`, que descreve a falha com nome e impacto. Publicar isso enquanto está aberta é entregar o mapa.
 
+## 6.58 O `wellness_token` deixou de ser legível ✅ (novo, 18/10)
+
+Detalhes em **`docs/wellness-token-18-10.md`**. É um **contorno**: o GitHub do Sérgio está fora do ar, o Supabase entra por GitHub, e **não existe `DATABASE_URL` em lugar nenhum** (nem `.env.local`, nem Vercel — conferido). Sem o dashboard não há caminho para DDL neste projeto, que é a dívida C4 cobrando juros.
+
+- **O que era:** `profiles.wellness_token` guardava o token **em claro**, e a policy larga deixava qualquer usuário logado lê-lo com a anon key do navegador. Esse token autentica `/api/ingest/wellness` — dava para **inventar a noite de outra pessoa**.
+- **O que ficou:** o banco guarda o **SHA-256**, não o token (`src/lib/wellness-token.ts`). Mesma coluna de texto, outro conteúdo — zero DDL. Ler a coluna rende 64 hex que não autenticam nada. Sem sal de propósito: 48 hex de `randomBytes` não têm dicionário, e a busca precisa ser por igualdade exata, que é o que o PostgREST faz.
+- **O app não sabe mais o token.** O GET responde só *se existe um*; o valor aparece uma vez, ao ser gerado. E o GET **parou de criar token só porque alguém abriu a tela**.
+- **Custo real zero:** dos 8 perfis, **1** tinha token (o do Sérgio, formato antigo) e o Atalho **nunca** mandou uma linha — as 68 de wellness vieram todas do intervals.icu. O token em claro foi limpo (com backup antes, fora do projeto) e a coluna ficou vazia. Nenhuma desconexão, porque não havia conexão. Vale como informação de produto: **"calorias pelo Atalho do iPhone" nunca saiu do papel para ninguém**.
+- **Verificado em produção:** token inventado → 401, token antigo → 401, sem token → 401; nenhum valor em claro restante. 12 testes.
+- **C3 fica PARCIALMENTE mitigada:** saiu a chave da casa, ficou a janela. **E-mail, data de nascimento, altura e sexo de todos seguem legíveis** por qualquer logado até a `039_profiles_leak.sql` rodar.
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
@@ -2274,7 +2285,7 @@ combustível em treino: > 75 min → 50 g/h (leve) | 75 g/h (prova); gel ≈ 25 
 |---|---|---|---|---|
 | C1 | **3 meses de código fora do git** | Último commit 16/06/2026; 102 modificados, 186 novos, 11 apagados | Uma sincronização ruim do OneDrive, um disco perdido ou um `git checkout` descuidado apaga o motor, a Saúde, os testes e tudo de jul–set | `git add -A && git commit && git push` **antes de qualquer outra coisa**. Revisar `.gitignore` antes (nenhum `.env*` pode entrar) |
 | C2 | **Deploy feito do disco local** | `npx vercel deploy --prod` | Produção sem rastreabilidade; impossível saber que código está no ar ou fazer rollback por commit | Conectar a Vercel ao GitHub; deploy só por push na `main` |
-| C3 | **Possível vazamento de todas as colunas de `profiles`** | Policy `"Authenticated can search profiles"` em `002_social.sql` (`for select using (auth.role() = 'authenticated')`) | E-mail, data de nascimento, altura, sexo e **`wellness_token`** de todos legíveis por qualquer usuário logado com a anon key. Com o token dá para gravar dados de saúde falsos em nome de outro | Verificar `pg_policies` em produção; trocar por view `public_profiles (id, username, name)` ou por RPC; mover `wellness_token` para tabela sem policy; rotacionar todos os tokens |
+| C3 | **Vazamento de todas as colunas de `profiles`** — **confirmado e parcialmente mitigado em 18/10**: o `wellness_token` virou hash e a coluna foi esvaziada, então a parte explorável (gravar saúde no nome de outro) está fechada. E-mail, nascimento, altura e sexo **seguem expostos** até `039_profiles_leak.sql` rodar, o que depende do SQL Editor do Supabase. | Policy `"Authenticated can search profiles"` em `002_social.sql` (`for select using (auth.role() = 'authenticated')`) | E-mail, data de nascimento, altura, sexo e **`wellness_token`** de todos legíveis por qualquer usuário logado com a anon key. Com o token dá para gravar dados de saúde falsos em nome de outro | Verificar `pg_policies` em produção; trocar por view `public_profiles (id, username, name)` ou por RPC; mover `wellness_token` para tabela sem policy; rotacionar todos os tokens |
 | C4 | **Banco não reconstruível** | Sem DDL de `activities`, `performance_tests`, `races`; migrations coladas à mão; `pg_cron`/Vault só no Supabase | Novo ambiente (staging, dev, recuperação de desastre) exige engenharia reversa | `supabase db dump --schema-only` do projeto de produção → `supabase/migrations/000_baseline.sql`; adotar Supabase CLI; versionar o SQL do job `limiar-morning` (sem o segredo) |
 | C5 | **Backups não verificados** | Supabase plano gratuito **(não verifiquei se há backup diário acessível)** | Perda de dados irreversível em caso de erro humano | Verificar o plano; agendar `pg_dump` externo |
 
@@ -2706,7 +2717,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 
 ## 19.1 O que existe
 
-- **Vitest 2.1**, `npm test` (= `vitest run`). **99 arquivos, 1.756 testes, todos passando** (rodado em 15/10/2026, ~10 s).
+- **Vitest 2.1**, `npm test` (= `vitest run`). **100 arquivos, 1.768 testes, todos passando** (rodado em 18/10/2026, ~9 s).
 - **Só funções puras de `src/lib/`.** Sem banco, sem rede, sem DOM.
 - **Fixture central** (`tests/fixtures.ts`): atleta com teste de 3 km em 13:00 e FC média 178 → **VDOT ≈ 43,7, LTHR = 165**. Falhas se leem como "isso deu errado para um corredor de VDOT 43".
 - **`tests/README.md`:** tabela dos bugs reais que cada teste protege. Leitura obrigatória.
@@ -2752,7 +2763,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 | Dimensão | Estado | Nota |
 |---|---|---|
 | **Proposta de valor** | Clara: treinador de corrida (e força) que prescreve com ciência, se adapta ao corpo e explica o porquê | 🟢 |
-| **Motor de treino** | Maduro, determinístico, ~1.756 testes, corrigido contra casos reais | 🟢 |
+| **Motor de treino** | Maduro, determinístico, ~1.768 testes, corrigido contra casos reais | 🟢 |
 | **Saúde/recuperação** | Nova (14/09), funcional com Garmin via intervals.icu e sem relógio; score não validado contra desfecho | 🟡 |
 | **UX** | Rica e animada no dashboard e na Saúde; telas antigas inconsistentes; muita navegação (10 itens) | 🟡 |
 | **Usuários** | 7 contas por convite; push chega a 4; **sem métricas de uso** (nenhum analytics) | 🔴 para decidir produto |

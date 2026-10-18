@@ -22,6 +22,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { upsertWellness } from "@/lib/wellness-upsert";
 import { athleteDateStr } from "@/lib/week";
+import { hashWellnessToken } from "@/lib/wellness-token";
 
 const SOURCES = new Set(["healthconnect", "healthkit", "garmin", "ios_shortcut", "manual_import"]);
 
@@ -96,11 +97,17 @@ export async function POST(request: NextRequest) {
   const token = (body.token as string | undefined) || bearer;
   if (!token || token.length < 16) return NextResponse.json({ error: "Token ausente" }, { status: 401 });
 
+  /*
+    O banco guarda a impressão digital do token, não ele — ver
+    `src/lib/wellness-token.ts`. Então o que chega é hasheado aqui e comparado
+    com o que está lá. Quem consegue ler a coluna lê um SHA-256, que não
+    autentica coisa nenhuma.
+  */
   const admin = createAdminClient();
   const { data: profile } = await admin
     .from("profiles")
     .select("id")
-    .eq("wellness_token", token)
+    .eq("wellness_token", hashWellnessToken(token))
     .maybeSingle();
   if (!profile) return NextResponse.json({ error: "Token inválido" }, { status: 401 });
 

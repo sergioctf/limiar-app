@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Copy, Check, ChevronDown, ChevronUp, Loader2, RefreshCw, Wifi, AlertCircle, Flame } from "lucide-react";
+import { Copy, Check, ChevronDown, ChevronUp, Loader2, RefreshCw, Wifi, AlertCircle, Flame, KeyRound } from "lucide-react";
 
 const INGEST_URL = "https://limiar-app.vercel.app/api/ingest/wellness";
 
@@ -46,6 +46,8 @@ const kcal = (v: number | null) => (v == null ? "—" : v.toLocaleString("pt-BR"
 export function AppleHealthSyncCard() {
   const [open, setOpen] = useState(false);
   const [token, setToken] = useState<string | null>(null);
+  /** Existe um token nesta conta? O valor, não — só o app que o gerou o viu. */
+  const [jaExiste, setJaExiste] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<WellnessStatus | null>(null);
   const [checking, setChecking] = useState(false);
@@ -69,21 +71,28 @@ export function AppleHealthSyncCard() {
    */
   useEffect(() => { void checkConnection(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /*
+    O app não sabe mais o token — o banco guarda o hash dele.
+
+    Antes esta tela pedia o token e o mostrava para sempre. Agora ela só
+    pergunta se existe um; o valor aparece uma única vez, no instante em que é
+    gerado. É como funciona qualquer chave de API, e é o que fecha a leitura da
+    coluna por qualquer usuário logado (ver `src/lib/wellness-token.ts`).
+  */
   useEffect(() => {
-    if (open && token === null) {
-      setLoading(true);
-      fetch("/api/health/wellness-token")
-        .then(r => r.json()).then(d => setToken(d.token ?? null))
-        .catch(() => setToken(null)).finally(() => setLoading(false));
-    }
-  }, [open, token]);
+    if (!open || jaExiste !== null) return;
+    setLoading(true);
+    fetch("/api/health/wellness-token")
+      .then(r => r.json()).then(d => setJaExiste(d.hasToken === true))
+      .catch(() => setJaExiste(false)).finally(() => setLoading(false));
+  }, [open, jaExiste]);
 
   async function regenerate() {
     setLoading(true);
     try {
       const r = await fetch("/api/health/wellness-token", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ regenerate: true }) });
       const d = await r.json();
-      if (d.token) setToken(d.token);
+      if (d.token) { setToken(d.token); setJaExiste(true); }
     } finally { setLoading(false); }
   }
 
@@ -141,19 +150,44 @@ export function AppleHealthSyncCard() {
           {/* Token + URL */}
           <div className="bg-surface-700/30 rounded-xl p-3 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-surface-500 uppercase tracking-wide">Seu token (cole no Atalho)</span>
+              <span className="text-[11px] uppercase tracking-wide text-surface-500">Seu token (cole no Atalho)</span>
               {token && <CopyButton value={token} />}
             </div>
-            {loading ? <Loader2 className="w-4 h-4 animate-spin text-surface-500" />
-              : <code className="block text-xs text-surface-300 break-all bg-surface-800 rounded p-2">{token ?? "—"}</code>}
+
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-surface-500" />
+            ) : token ? (
+              <>
+                <code className="block break-all rounded bg-surface-800 p-2 text-xs text-surface-300">{token}</code>
+                <p className="text-[11px] leading-relaxed text-yellow-400/90">
+                  Copie agora: ele aparece uma vez só. Perdeu, é só gerar outro.
+                </p>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={regenerate}
+                  disabled={loading}
+                  className="btn-secondary min-h-[44px] w-full justify-center text-xs"
+                >
+                  <KeyRound className="h-3.5 w-3.5" />
+                  {jaExiste ? "Gerar um novo token" : "Gerar meu token"}
+                </button>
+                <p className="text-[11px] leading-relaxed text-surface-500">
+                  {jaExiste
+                    ? "Já existe um token nesta conta. O app não guarda o valor — gerar outro invalida o anterior."
+                    : "O token aparece uma vez só, no momento em que é gerado."}
+                </p>
+              </>
+            )}
             <div className="flex items-center justify-between pt-1">
               <span className="text-[11px] text-surface-500 uppercase tracking-wide">Endereço (URL)</span>
               <CopyButton value={INGEST_URL} />
             </div>
             <code className="block text-xs text-surface-300 break-all bg-surface-800 rounded p-2">{INGEST_URL}</code>
             {token && (
-              <button onClick={regenerate} disabled={loading} className="inline-flex items-center gap-1 text-[11px] text-surface-500 hover:text-red-400 pt-1">
-                <RefreshCw className="w-3 h-3" /> gerar novo token (invalida o antigo)
+              <button onClick={regenerate} disabled={loading} className="inline-flex items-center gap-1 pt-1 text-[11px] text-surface-500 hover:text-red-400">
+                <RefreshCw className="h-3 w-3" /> gerar outro (invalida este)
               </button>
             )}
           </div>
