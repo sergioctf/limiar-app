@@ -22,7 +22,7 @@
 2. **O deploy é feito da máquina local**, com `npx vercel deploy --prod` na pasta. Não há CI, não há deploy a partir do GitHub. O que está em produção é o que estava no disco de Sérgio no momento do último deploy.
 3. **O banco não é reconstruível a partir do repositório.** As tabelas `activities`, `performance_tests` e `races` são usadas intensamente pelo código, mas **não existe DDL delas em nenhum `.sql`**. Foram criadas por rotas `/api/admin/*` que já foram apagadas. Além disso, as migrations 002–027 foram aplicadas **à mão** no SQL Editor do Supabase (não existe runner nem `DATABASE_URL`), e há infraestrutura que vive só no Supabase (job `pg_cron` e segredo no Vault — ver seção 18).
 4. **Possível vazamento de dados entre usuários (crítico, a confirmar no banco).** A migration `002_social.sql` cria a policy `"Authenticated can search profiles"` com `for select using (auth.role() = 'authenticated')`. RLS filtra linhas, não colunas: qualquer usuário logado pode, com a anon key, ler **todas as colunas de todos os perfis** — e-mail, data de nascimento, altura, sexo e o `wellness_token`, que autentica o endpoint público `/api/ingest/wellness`, permitindo gravar dados de saúde no nome de outra pessoa. Não verifiquei se a policy ainda existe em produção. Verifique com `select * from pg_policies where tablename = 'profiles';`. No mesmo nível de risco: **o webhook do Strava aceita eventos forjados** e um POST com `aspect_type: "delete"` apaga (soft delete) a corrida de qualquer usuário pelo ID da atividade (dívida A9).
-5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.768 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
+5. **O app "falha certo".** Os motores de treino e saúde raramente dão erro; quando estão errados, prescrevem a coisa errada com cara de certeza. Quase todo bug sério encontrado foi desse tipo. Por isso existe uma suíte de ~1.789 testes de funções puras — **rode `npm test` antes de mexer em qualquer motor**.
 6. **Há usuários reais.** São 7 contas por convite (Sérgio e amigos). O plano da semana é lido e seguido por pessoas. Regra de ouro que custou caro: **nunca reescrever uma semana que já começou** (ver ADR sobre congelamento de semana).
 
 ---
@@ -1514,6 +1514,38 @@ Detalhes em **`docs/wellness-token-18-10.md`**. É um **contorno**: o GitHub do 
 - **Verificado em produção:** token inventado → 401, token antigo → 401, sem token → 401; nenhum valor em claro restante. 12 testes.
 - **C3 fica PARCIALMENTE mitigada:** saiu a chave da casa, ficou a janela. **E-mail, data de nascimento, altura e sexo de todos seguem legíveis** por qualquer logado até a `039_profiles_leak.sql` rodar.
 
+## 6.59 A policy de `profiles` fechada, e os crons deixando recibo ✅ (novo, 09/11)
+
+Detalhes em **`docs/observabilidade-09-11.md`**. O GitHub do Sérgio voltou, o que destravou o SQL Editor.
+
+**Dívida C3 ✅ RESOLVIDA.** `039_profiles_leak.sql` aplicada. As três policies em produção eram `Authenticated can search profiles` (SELECT, `auth.role()='authenticated'`), `Users can view own profile` e `Users can update own profile` — **a de leitura própria já existia**, então derrubar a larga não trancou ninguém fora do próprio perfil. Entrou a view `public_profiles` (id, nome, username, `security_invoker=false`), com SELECT só para `authenticated`.
+
+Medido de dentro do banco, repetindo o ataque com `set_config('role','authenticated')`:
+
+| pergunta | antes | depois |
+|---|---|---|
+| perfis visíveis para um usuário logado | 8 (todos) | **1** |
+| vê a linha de outro atleta? | SIM | **NÃO** |
+| vê `wellness_token` de outro? | SIM | **NÃO** |
+| vê a view da busca de amigos | — | 8 perfis |
+
+E em produção, com a sessão real: `GET /api/friends` → 200, três amigos, os três com nome resolvido pela view.
+
+**Dívida A5 ✅ RESOLVIDA (a classe que mordia).** `040_job_runs.sql` + `src/lib/job-run.ts` + `src/lib/job-health.ts`.
+
+- **O diagnóstico:** resumo semanal morto por meses, IA por semanas, mapa por um mês, relógio desde sempre — **nenhum deles gerou exceção**. O que faltava não era captura de erro, era saber se o trabalho aconteceu.
+- **`job_runs`:** uma linha por execução, inserida **no começo** (tarefa que trava nunca chega ao fim, e é a que mais interessa). RLS ligado sem policy: só `service_role`.
+- **`withJobReceipt`** embrulha cada cron numa linha. 401 **apaga** o recibo — bater na porta não é entrar, e contar a batida deixaria "rodou hoje" verde por engano. Nunca derruba o cron.
+- **`job-health`** dá a cada tarefa um intervalo esperado e **uma frase do que o atleta perde** ("corridas do Strava param de entrar sozinhas", não "strava-sync atrasado"). Margem de 2×. Estados: ok, atrasado, falhou, **travado** (começou e não voltou), nunca, **aguardando**.
+- **O aviso sai sozinho:** o `wellness-sync` (último cron diário) manda push quando algo está em silêncio, e cala quando está tudo bem. `ADMIN_USER_ID` posto na Vercel.
+- **A tela:** `GET /api/admin/health` (+ `?format=txt`), autenticada pela **sessão do dono**, não por segredo na URL — porque **`ADMIN_SECRET` está vazio em produção** e a primeira versão nasceu morta por causa disso. Recusa com 404, não 401.
+
+**Dois bugs achados pelo próprio recibo, em menos de uma hora:** (1) faltava `export const dynamic = "force-dynamic"` nos dez crons, então o `next build` os executava e gravava execuções falsas no banco a partir da máquina de quem compila — o Next engolia esse erro havia meses; (2) meu próprio invólucro deixava recibo órfão no 401, que `job-health` leria como "travado" para sempre. É o argumento inteiro para o instrumento existir.
+
+**Partida a frio:** na estreia nenhum cron semanal tem recibo, e chamar isso de "nunca" seriam oito alarmes falsos. Enquanto a vigilância for mais nova que o intervalo da tarefa, o estado é `aguardando`. Conferido em produção: *"Todas as tarefas rodaram quando deviam."*
+
+**O que isto não é:** Sentry. Erro de JS no navegador do atleta continua invisível — mas nenhum dos quatro bugs acima era isso.
+
 # 7. TELAS E NAVEGAÇÃO
 
 ## 7.1 Mapa de navegação
@@ -2285,7 +2317,7 @@ combustível em treino: > 75 min → 50 g/h (leve) | 75 g/h (prova); gel ≈ 25 
 |---|---|---|---|---|
 | C1 | **3 meses de código fora do git** | Último commit 16/06/2026; 102 modificados, 186 novos, 11 apagados | Uma sincronização ruim do OneDrive, um disco perdido ou um `git checkout` descuidado apaga o motor, a Saúde, os testes e tudo de jul–set | `git add -A && git commit && git push` **antes de qualquer outra coisa**. Revisar `.gitignore` antes (nenhum `.env*` pode entrar) |
 | C2 | **Deploy feito do disco local** | `npx vercel deploy --prod` | Produção sem rastreabilidade; impossível saber que código está no ar ou fazer rollback por commit | Conectar a Vercel ao GitHub; deploy só por push na `main` |
-| C3 | **Vazamento de todas as colunas de `profiles`** — **confirmado e parcialmente mitigado em 18/10**: o `wellness_token` virou hash e a coluna foi esvaziada, então a parte explorável (gravar saúde no nome de outro) está fechada. E-mail, nascimento, altura e sexo **seguem expostos** até `039_profiles_leak.sql` rodar, o que depende do SQL Editor do Supabase. | Policy `"Authenticated can search profiles"` em `002_social.sql` (`for select using (auth.role() = 'authenticated')`) | E-mail, data de nascimento, altura, sexo e **`wellness_token`** de todos legíveis por qualquer usuário logado com a anon key. Com o token dá para gravar dados de saúde falsos em nome de outro | Verificar `pg_policies` em produção; trocar por view `public_profiles (id, username, name)` ou por RPC; mover `wellness_token` para tabela sem policy; rotacionar todos os tokens |
+| C3 | ~~**Vazamento de todas as colunas de `profiles`**~~ **RESOLVIDA em 09/11**: `039_profiles_leak.sql` aplicada — a policy larga saiu e entrou a view `public_profiles`. Medido de dentro do banco: um usuário logado via 8 perfis, agora vê **1** (o próprio). O `wellness_token` já tinha virado hash em 18/10. | Policy `"Authenticated can search profiles"` em `002_social.sql` (`for select using (auth.role() = 'authenticated')`) | E-mail, data de nascimento, altura, sexo e **`wellness_token`** de todos legíveis por qualquer usuário logado com a anon key. Com o token dá para gravar dados de saúde falsos em nome de outro | Verificar `pg_policies` em produção; trocar por view `public_profiles (id, username, name)` ou por RPC; mover `wellness_token` para tabela sem policy; rotacionar todos os tokens |
 | C4 | **Banco não reconstruível** | Sem DDL de `activities`, `performance_tests`, `races`; migrations coladas à mão; `pg_cron`/Vault só no Supabase | Novo ambiente (staging, dev, recuperação de desastre) exige engenharia reversa | `supabase db dump --schema-only` do projeto de produção → `supabase/migrations/000_baseline.sql`; adotar Supabase CLI; versionar o SQL do job `limiar-morning` (sem o segredo) |
 | C5 | **Backups não verificados** | Supabase plano gratuito **(não verifiquei se há backup diário acessível)** | Perda de dados irreversível em caso de erro humano | Verificar o plano; agendar `pg_dump` externo |
 
@@ -2297,7 +2329,7 @@ combustível em treino: > 75 min → 50 g/h (leve) | 75 g/h (prova); gel ≈ 25 
 | A2 | ~~**Ajuste proativo por IA reescreve a semana em andamento**~~ **resolvida em 21/09** (rota e `adjustWeeklyPlanProactive` removidas; o banner agora usa `fitWeek` sobre os dias que sobraram, com prévia e confirmação) | `ProactiveAdjustBanner` + `week-fit.ts` | — | — |
 | A3 | **Autorização por convenção** | Maioria das rotas usa `createAdminClient()` + `.eq("user_id", user.id)` | Um filtro esquecido = vazamento entre usuários; nenhum teste cobre rotas | Cliente com RLS nas rotas do próprio usuário; testes de autorização nas rotas sensíveis; revisar cada `createAdminClient` |
 | A4 | **Next.js 14.2.35 com vulnerabilidades** | `npm audit` (5 avisos no `next`; a correção pede Next 16) | Exposição a CVEs do framework | Planejar upgrade 14 → 15 → 16 (mudanças em cookies/headers assíncronos, cache) com smoke tests |
-| A5 | **Sem observabilidade** | Sem Sentry; crons sem alerta; IA falha para `null`; logs só na Vercel (retenção curta no Hobby) | Falhas silenciosas (o resumo semanal morto passou meses sem ninguém notar) | Sentry (ou Axiom/Logtail); o cron grava resultado em tabela `job_runs`; alerta se um cron não roda |
+| A5 | ~~**Sem observabilidade**~~ **resolvida em 09/11** para a classe que mordia: `job_runs` + `withJobReceipt` nos dez crons + `/api/admin/health` + push diário quando algo fica em silêncio (`docs/observabilidade-09-11.md`). Achou dois bugs na primeira hora. **Sentry continua de fora** — erro de JS no navegador do atleta segue invisível, mas nenhum dos quatro bugs históricos era isso | — | — |
 | A6 | **Home carrega o histórico inteiro de corridas** (parcial em 20/09) | `src/app/page.tsx` | O `select("*")` com `strava_raw_json` e `map_polyline` acabou em 18/09; em 20/09 o recorte de 180 dias caiu de novo, porque "Seus números" e os recordes falam da vida toda. Hoje são ~10 colunas numéricas por corrida, serializadas para o cliente — o payload ainda cresce com o histórico, só que ~40× menor | Agregar no servidor (total, soma, sequência) e mandar só os recordes calculados |
 | A7 | ~~**Contexto de IA sem limite**~~ **resolvida em 13/10** (`ai-history.ts`: comparáveis + recentes + volume mês a mês; prompt de 6.912 → 850 tokens) | `analyzeRun`/`generateWeeklySummary` enviavam todas as corridas | Não era só custo: com 170 corridas, uma análise usava 7.512 de um teto de **8.000 tokens/minuto**, e a segunda chamada de qualquer feature levava 429. Ver `docs/ia-limite-por-minuto-13-10.md` | — |
 | A8 | ~~**Carga de treino só de corrida**~~ **resolvida em 16/09** (`activityTSS`) | `training-load.ts` | TSB e recuperação subestimam fadiga de quem faz força 3×/semana (caso de Sérgio) | TSS por sRPE × duração para `activities`; calibrar com o atleta |
@@ -2717,7 +2749,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 
 ## 19.1 O que existe
 
-- **Vitest 2.1**, `npm test` (= `vitest run`). **100 arquivos, 1.768 testes, todos passando** (rodado em 18/10/2026, ~9 s).
+- **Vitest 2.1**, `npm test` (= `vitest run`). **100 arquivos, 1.789 testes, todos passando** (rodado em 09/11/2026, ~8 s).
 - **Só funções puras de `src/lib/`.** Sem banco, sem rede, sem DOM.
 - **Fixture central** (`tests/fixtures.ts`): atleta com teste de 3 km em 13:00 e FC média 178 → **VDOT ≈ 43,7, LTHR = 165**. Falhas se leem como "isso deu errado para um corredor de VDOT 43".
 - **`tests/README.md`:** tabela dos bugs reais que cada teste protege. Leitura obrigatória.
@@ -2763,7 +2795,7 @@ Tudo em planos gratuitos até onde sei (Vercel Hobby, Supabase gratuito, Groq). 
 | Dimensão | Estado | Nota |
 |---|---|---|
 | **Proposta de valor** | Clara: treinador de corrida (e força) que prescreve com ciência, se adapta ao corpo e explica o porquê | 🟢 |
-| **Motor de treino** | Maduro, determinístico, ~1.768 testes, corrigido contra casos reais | 🟢 |
+| **Motor de treino** | Maduro, determinístico, ~1.789 testes, corrigido contra casos reais | 🟢 |
 | **Saúde/recuperação** | Nova (14/09), funcional com Garmin via intervals.icu e sem relógio; score não validado contra desfecho | 🟡 |
 | **UX** | Rica e animada no dashboard e na Saúde; telas antigas inconsistentes; muita navegação (10 itens) | 🟡 |
 | **Usuários** | 7 contas por convite; push chega a 4; **sem métricas de uso** (nenhum analytics) | 🔴 para decidir produto |

@@ -13,6 +13,7 @@
  * Anyone whose test is fresh hears nothing.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { withJobReceipt } from "@/lib/job-run";
 import { createAdminClient } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
 import { testStatus, TEST_AGING_WEEKS } from "@/lib/test-status";
@@ -20,6 +21,15 @@ import { brtDateStr, toBrt } from "@/lib/plan-notify";
 import { authorizeCron } from "@/lib/cron-auth";
 import type { PerformanceTest } from "@/types";
 
+/*
+  Nunca prerenderizar.
+
+  Sem isto o `next build` tenta gerar a rota estaticamente, executa o handler
+  e ele estoura em `request.headers`. O Next engolia esse erro — até o recibo
+  de `job_runs` começar a registrá-lo, e a build passar a gravar execuções
+  falsas no banco a partir da máquina de quem compila (09/11).
+*/
+export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /** Runs needed before we bother asking a brand-new athlete to test. */
@@ -30,7 +40,7 @@ function weekIndex(d: Date): number {
   return Math.floor(toBrt(d).getTime() / (7 * 86400_000));
 }
 
-export async function GET(request: NextRequest) {
+async function handler(request: NextRequest) {
   if (!authorizeCron(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -109,3 +119,12 @@ export async function GET(request: NextRequest) {
     candidates: runCount.size, sent: sentCount, results,
   });
 }
+
+/*
+  O recibo desta execução vai para `job_runs`.
+
+  Este app nunca sofreu de exceção não capturada — sofreu de trabalho que
+  simplesmente não acontecia, calado, por meses. O invólucro existe para que a
+  pergunta "o cron rodou?" tenha resposta (dívida A5, `src/lib/job-run.ts`).
+*/
+export const GET = withJobReceipt("test-reminder", handler);

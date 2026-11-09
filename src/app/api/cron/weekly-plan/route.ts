@@ -7,15 +7,25 @@
  * waiting on the AI. Existing plans are kept — only missing weeks are created.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { withJobReceipt } from "@/lib/job-run";
 import { createAdminClient } from "@/lib/supabase/server";
 import { ensureWeeklyPlan, loadWeeklyPlan, mondayOf, nextMondayOf } from "@/lib/weekly-plan";
 import { loadIcuConnection, pushIcuWeek } from "@/lib/icu-push";
 import { normalizePrefs } from "@/lib/workout-builder";
 import { authorizeCron } from "@/lib/cron-auth";
 
+/*
+  Nunca prerenderizar.
+
+  Sem isto o `next build` tenta gerar a rota estaticamente, executa o handler
+  e ele estoura em `request.headers`. O Next engolia esse erro — até o recibo
+  de `job_runs` começar a registrá-lo, e a build passar a gravar execuções
+  falsas no banco a partir da máquina de quem compila (09/11).
+*/
+export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-export async function GET(request: NextRequest) {
+async function handler(request: NextRequest) {
   if (!authorizeCron(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -88,3 +98,12 @@ async function sendWeekToWatch(
   const r = await pushIcuWeek(conn, plan, week, prefs.measureBy ?? "km");
   return `watch:${r.enviados}sent/${r.pulados}skipped/${r.falhas}failed`;
 }
+
+/*
+  O recibo desta execução vai para `job_runs`.
+
+  Este app nunca sofreu de exceção não capturada — sofreu de trabalho que
+  simplesmente não acontecia, calado, por meses. O invólucro existe para que a
+  pergunta "o cron rodou?" tenha resposta (dívida A5, `src/lib/job-run.ts`).
+*/
+export const GET = withJobReceipt("weekly-plan", handler);

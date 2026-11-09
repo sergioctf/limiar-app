@@ -8,18 +8,28 @@
  * pacing with the taper already absorbed.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { withJobReceipt } from "@/lib/job-run";
 import { createAdminClient } from "@/lib/supabase/server";
 import { generateStrategyForGoal, daysUntil } from "@/lib/race-strategy";
 import { sendPushToUser } from "@/lib/push";
 import type { Goal } from "@/types";
 import { authorizeCron } from "@/lib/cron-auth";
 
+/*
+  Nunca prerenderizar.
+
+  Sem isto o `next build` tenta gerar a rota estaticamente, executa o handler
+  e ele estoura em `request.headers`. O Next engolia esse erro — até o recibo
+  de `job_runs` começar a registrá-lo, e a build passar a gravar execuções
+  falsas no banco a partir da máquina de quem compila (09/11).
+*/
+export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 /** Days before the race at which we refresh the strategy. */
 const CHECKPOINTS = [14, 3];
 
-export async function GET(request: NextRequest) {
+async function handler(request: NextRequest) {
   if (!authorizeCron(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -83,3 +93,12 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ ok: true, ran_at: now.toISOString(), checkpoints: CHECKPOINTS, results });
 }
+
+/*
+  O recibo desta execução vai para `job_runs`.
+
+  Este app nunca sofreu de exceção não capturada — sofreu de trabalho que
+  simplesmente não acontecia, calado, por meses. O invólucro existe para que a
+  pergunta "o cron rodou?" tenha resposta (dívida A5, `src/lib/job-run.ts`).
+*/
+export const GET = withJobReceipt("race-strategy", handler);

@@ -11,11 +11,21 @@
  * only for athletes who have some. Silence is the normal outcome.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { withJobReceipt } from "@/lib/job-run";
 import { createAdminClient } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
 import { authorizeCron } from "@/lib/cron-auth";
 import { mondayOf } from "@/lib/weekly-plan";
 
+/*
+  Nunca prerenderizar.
+
+  Sem isto o `next build` tenta gerar a rota estaticamente, executa o handler
+  e ele estoura em `request.headers`. O Next engolia esse erro — até o recibo
+  de `job_runs` começar a registrá-lo, e a build passar a gravar execuções
+  falsas no banco a partir da máquina de quem compila (09/11).
+*/
+export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 interface Row {
@@ -28,7 +38,7 @@ interface Row {
 
 const RANK: Record<string, number> = { alta: 0, media: 1, baixa: 2 };
 
-export async function GET(request: NextRequest) {
+async function handler(request: NextRequest) {
   if (!authorizeCron(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -78,3 +88,12 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ ok: true, week, athletes: byUser.size, results });
 }
+
+/*
+  O recibo desta execução vai para `job_runs`.
+
+  Este app nunca sofreu de exceção não capturada — sofreu de trabalho que
+  simplesmente não acontecia, calado, por meses. O invólucro existe para que a
+  pergunta "o cron rodou?" tenha resposta (dívida A5, `src/lib/job-run.ts`).
+*/
+export const GET = withJobReceipt("notify-advisor", handler);
