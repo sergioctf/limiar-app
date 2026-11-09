@@ -16,7 +16,7 @@ interface Payload {
 
 const VERDICT_UI: Record<ExecutedKm["verdict"], { bar: string; text: string; icon: React.ReactNode | null }> = {
   dentro:   { bar: "bg-green-500",  text: "text-green-400",  icon: <Check className="w-3 h-3" /> },
-  rapido:   { bar: "bg-orange-400", text: "text-orange-400", icon: <ChevronsRight className="w-3 h-3" /> },
+  rapido:   { bar: "bg-amber-400", text: "text-amber-400", icon: <ChevronsRight className="w-3 h-3" /> },
   lento:    { bar: "bg-blue-400",   text: "text-blue-400",   icon: <ChevronsLeft className="w-3 h-3" /> },
   sem_alvo: { bar: "bg-surface-600", text: "text-surface-500", icon: null },
 };
@@ -110,9 +110,7 @@ export function ExecutionCard({ runId, hasStrava, splitsLoaded }: {
 
       {unplanned && (
         <p className="text-xs text-surface-500">
-          {data.reason === "no_plan"
-            ? "Não havia plano nesta semana, então não há prescrição para comparar."
-            : "Treino extra — não estava no plano."}
+          Esta corrida está sem vínculo com uma sessão planejada.
           {" "}O ritmo km a km continua valendo.
         </p>
       )}
@@ -180,7 +178,7 @@ export function ExecutionCard({ runId, hasStrava, splitsLoaded }: {
 
               {k.actualHr != null && (
                 <span className={`w-12 shrink-0 font-mono flex items-center gap-0.5 justify-end ${
-                  k.targetHr && k.actualHr > k.targetHr.max + 5 ? "text-orange-400" : "text-surface-500"
+                  k.targetHr && k.actualHr > k.targetHr.max + 5 ? "text-amber-400" : "text-surface-500"
                 }`}>
                   <Heart className="w-2.5 h-2.5" />{k.actualHr}
                 </span>
@@ -192,7 +190,7 @@ export function ExecutionCard({ runId, hasStrava, splitsLoaded }: {
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-surface-500 pt-1 border-t border-surface-700/50">
         <span className="flex items-center gap-1"><Check className="w-3 h-3 text-green-400" /> no alvo</span>
-        <span className="flex items-center gap-1"><ChevronsRight className="w-3 h-3 text-orange-400" /> mais rápido</span>
+        <span className="flex items-center gap-1"><ChevronsRight className="w-3 h-3 text-amber-400" /> mais rápido</span>
         <span className="flex items-center gap-1"><ChevronsLeft className="w-3 h-3 text-blue-400" /> mais lento</span>
         {analysis.splitDeltaSec != null && (
           <span className="ml-auto font-mono">

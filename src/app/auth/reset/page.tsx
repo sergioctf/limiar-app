@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BrandLockup } from "@/components/brand/BrandLockup";
 import { createClient } from "@/lib/supabase/client";
 import { Lock, Loader2, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 
@@ -49,8 +50,7 @@ export default function ResetPasswordPage() {
   return (
     <div className="min-h-screen bg-surface-900 flex flex-col items-center justify-center p-4">
       <div className="flex flex-col items-center mb-10">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/limiar_logo.png" alt="Limiar" className="w-72 max-w-[85vw] select-none" draggable={false} />
+        <BrandLockup />
       </div>
 
       <div className="w-full max-w-sm card p-6">

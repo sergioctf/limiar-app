@@ -6,7 +6,8 @@
  *   Recent history plus the load suggestion for each exercise.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { athleteDateStr } from "@/lib/week";
 import { nextTarget, summarizeSessions, type LoggedSet } from "@/lib/strength-progression";
 import { exerciseById } from "@/lib/exercises";
 import { normalizeStrengthPrefs } from "@/lib/strength-prefs";
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => null);
   const date = typeof body?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
-    ? body.date : new Date().toISOString().slice(0, 10);
+    ? body.date : athleteDateStr(new Date());
 
   const rawSets = Array.isArray(body?.sets) ? body.sets : [];
   if (rawSets.length === 0) {
@@ -30,6 +31,7 @@ export async function POST(request: NextRequest) {
     .slice(0, 100)
     .map((s: Record<string, unknown>, i: number) => {
       const num = (v: unknown, min: number, max: number) => {
+        if (v === null || v === undefined || v === "") return null;
         const n = Number(v);
         return Number.isFinite(n) && n >= min && n <= max ? n : null;
       };
@@ -50,13 +52,30 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Preencha ao menos repetições ou carga." }, { status: 400 });
   }
 
-  const { error } = await supabase
-    .from("strength_logs")
-    .upsert(rows, { onConflict: "user_id,date,exercise_id,set_index" });
+  let activityId: string | null = null;
+  let error;
+  if (body?.recordActivity === true) {
+    const started = typeof body.startedAt === "string" ? Date.parse(body.startedAt) : NaN;
+    const finished = typeof body.finishedAt === "string" ? Date.parse(body.finishedAt) : NaN;
+    const usableWindow = Number.isFinite(started) && Number.isFinite(finished)
+      && finished > started && finished - started <= 6 * 60 * 60 * 1000
+      && finished <= Date.now() + 60_000 && athleteDateStr(new Date(started)) === date;
+    const result = await createAdminClient().rpc("record_strength_session", {
+      athlete: user.id, day: date, series: rows,
+      started: usableWindow ? new Date(started).toISOString() : null,
+      finished: usableWindow ? new Date(finished).toISOString() : null,
+    });
+    activityId = result.data;
+    error = result.error;
+  } else {
+    ({ error } = await supabase
+      .from("strength_logs")
+      .upsert(rows, { onConflict: "user_id,date,exercise_id,set_index" }));
+  }
 
   if (error) {
     return NextResponse.json(
-      { error: "Não foi possível salvar. A tabela strength_logs já existe?" },
+      { error: "Não foi possível salvar o treino. Suas séries podem ser enviadas novamente." },
       { status: 500 },
     );
   }
@@ -99,7 +118,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, saved: rows.length, rosterUpdated });
+  return NextResponse.json({ ok: true, saved: rows.length, rosterUpdated, activityId });
 }
 
 export async function GET(request: NextRequest) {

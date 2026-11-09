@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/AppShell";
 import { SportGlyph } from "@/components/shared/SportGlyph";
 import { DeleteActivityButton } from "@/components/runs/DeleteActivityButton";
+import { ActivityFeedbackCard } from "@/components/debrief/ActivityFeedback";
 import { SPORTS, activityCalories, toSportKey } from "@/lib/sports";
 import { formatDate } from "@/lib/utils";
 
@@ -66,6 +67,8 @@ export default async function ActivityPage({ params }: { params: { id: string } 
             ))}
           </div>
         )}
+
+        <ActivityFeedbackCard activityId={a.id} />
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Link href="/calendar" className="inline-flex items-center gap-1.5 min-h-[44px] text-sm text-brand-400">

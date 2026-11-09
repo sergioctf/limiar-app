@@ -116,7 +116,7 @@ export function FriendProfile(p: Props) {
         <Stat label="Km na semana" value={`${p.weekKm}`} sub={`${p.monthKm} km no mês`}
               icon={<MapPin className="w-3.5 h-3.5 text-brand-400" />} />
         <Stat label="Sequência" value={`${p.streak}`} sub={p.streak === 1 ? "dia" : "dias"}
-              icon={<Flame className="w-3.5 h-3.5 text-orange-400" />} />
+              icon={<Flame className="w-3.5 h-3.5 text-brand-400" />} />
       </div>
 
       {/* Sport mix */}

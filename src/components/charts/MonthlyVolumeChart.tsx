@@ -32,10 +32,10 @@ export function MonthlyVolumeChart({ data, height = 220 }: { data: MonthlyVolume
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(71,85,105,0.4)" vertical={false} />
         <XAxis dataKey="monthLabel" tick={{ fill: "#64748b", fontSize: 11 }} tickLine={false} axisLine={false} />
         <YAxis tick={{ fill: "#64748b", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}k`} />
-        <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(249,115,22,0.08)" }} />
+        <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(139,92,246,0.08)" }} />
         <Bar dataKey="totalKm" radius={[6, 6, 0, 0]} maxBarSize={48}>
           {data.map((entry, i) => (
-            <Cell key={i} fill={entry.totalKm === max ? "#f97316" : "#334155"} />
+            <Cell key={i} fill={entry.totalKm === max ? "#8b5cf6" : "#334155"} />
           ))}
         </Bar>
       </BarChart>

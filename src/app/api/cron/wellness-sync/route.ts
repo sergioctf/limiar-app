@@ -65,7 +65,9 @@ async function handler(request: NextRequest) {
   */
   const vigia = await checarSaude(admin);
 
-  return NextResponse.json({ ok: true, athletes: Object.keys(results).length, results, morning, vigia });
+  return NextResponse.json({ ok: true, athletes: Object.keys(results).length,
+    failures: Object.values(results).filter(result => result && typeof result === "object" && "error" in result).length,
+    results, morning, vigia });
 }
 
 async function checarSaude(admin: ReturnType<typeof createAdminClient>): Promise<string> {

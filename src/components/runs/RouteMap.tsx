@@ -55,14 +55,14 @@ export function RouteMap({ polyline, distanceKm, latlng }: Props) {
 
       // Full route (faint) + traveled overlay (bright)
       L.polyline(pts, { color: "#52525b", weight: 4, opacity: 0.6 }).addTo(map);
-      traveledRef.current = L.polyline([pts[0]], { color: "#f97316", weight: 4 }).addTo(map);
+      traveledRef.current = L.polyline([pts[0]], { color: "#8b5cf6", weight: 4 }).addTo(map);
 
       // Start (green) and finish (red) markers
       L.circleMarker(pts[0], { radius: 6, color: "#0a0a0a", weight: 2, fillColor: "#34d399", fillOpacity: 1 }).addTo(map);
       L.circleMarker(pts[pts.length - 1], { radius: 6, color: "#0a0a0a", weight: 2, fillColor: "#f87171", fillOpacity: 1 }).addTo(map);
 
       // Moving marker for replay
-      markerRef.current = L.circleMarker(pts[0], { radius: 7, color: "#0a0a0a", weight: 2, fillColor: "#fb923c", fillOpacity: 1 }).addTo(map);
+      markerRef.current = L.circleMarker(pts[0], { radius: 7, color: "#0a0a0a", weight: 2, fillColor: "#b18aff", fillOpacity: 1 }).addTo(map);
 
       map.fitBounds(L.polyline(pts).getBounds(), { padding: [24, 24] });
       setReady(true);

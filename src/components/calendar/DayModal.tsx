@@ -108,7 +108,7 @@ export function DayModal({ date, entries, onClose, onAddGym, onDelete }: Props) 
                 )}
                 {e.calories && (
                   <span className="flex items-center gap-1">
-                    <Flame className="w-3 h-3 text-orange-400" />
+                    <Flame className="w-3 h-3 text-brand-400" />
                     {e.calories} kcal
                   </span>
                 )}

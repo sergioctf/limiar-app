@@ -41,7 +41,7 @@ export const SESSION_TONES: Record<string, SessionTone> = {
     nenhum tipo de corrida.
   */
   strength:  { bg: "bg-blue-500/10", border: "border-blue-500/30", text: "text-blue-300", dot: "bg-blue-400", label: "Musculação" },
-  hiit:      { bg: "bg-orange-500/10",  border: "border-orange-500/30",  text: "text-orange-400",  dot: "bg-orange-500",  label: "HIIT" },
+  hiit:      { bg: "bg-amber-500/10",  border: "border-amber-500/30",  text: "text-amber-400",  dot: "bg-amber-500",  label: "HIIT" },
 };
 
 export function sessionTone(type: string | null | undefined): SessionTone {

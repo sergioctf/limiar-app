@@ -37,6 +37,10 @@ export function morningNotification(
   const workout = formatWorkoutNotification(session, "Hoje");
   const tag = `limiar-morning-${recovery.date}`;
 
+  if (recovery.sessionUnresolved) {
+    return { title: recovery.advice.headline, body: recovery.advice.detail, url: "/coach", tag };
+  }
+
   if (ctx.connected && ctx.nightArrived && recovery.score != null) {
     const act = recovery.offer && !recovery.offer.undo
       ? " Abra para trocar o treino com um toque."

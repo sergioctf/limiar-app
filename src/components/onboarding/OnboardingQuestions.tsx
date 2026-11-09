@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2, Check, Link2, Bell, Trophy } from "lucide-react";
 import { MUSCLE_LABEL, type MuscleGroup } from "@/lib/exercises";
 import type { QuestionField } from "@/lib/onboarding-flow";
@@ -34,14 +34,14 @@ export function OnboardingQuestion({
 }: {
   field: QuestionField;
   /** Called after a successful save so the flow can advance. */
-  onSaved: () => void;
+  onSaved: (skipRunningSteps?: boolean) => void;
 }) {
   switch (field) {
     case "identity": return <IdentityQuestion onSaved={onSaved} />;
     case "runDays":  return <RunDaysQuestion onSaved={onSaved} />;
     case "measureBy": return <MeasureQuestion onSaved={onSaved} />;
     case "strength": return <StrengthQuestion onSaved={onSaved} />;
-    case "strava":   return <StravaQuestion />;
+    case "strava":   return <StravaQuestion onSaved={onSaved} />;
     case "test":     return <TestQuestion onSaved={onSaved} />;
     case "push":     return <PushQuestion />;
     case "goal":     return <GoalQuestion />;
@@ -120,30 +120,66 @@ function IdentityQuestion({ onSaved }: { onSaved: () => void }) {
   );
 }
 
-function RunDaysQuestion({ onSaved }: { onSaved: () => void }) {
+function RunDaysQuestion({ onSaved }: { onSaved: (skipRunningSteps?: boolean) => void }) {
+  const [focus, setFocus] = useState<"run" | "strength" | "both">("run");
   const [days, setDays] = useState<DayKey[]>([]);
+  const [strengthDays, setStrengthDays] = useState<DayKey[]>([]);
+  const [equipment, setEquipment] = useState<"academia" | "casa">("academia");
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved]   = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const running = focus !== "strength";
+  const lifting = focus !== "run";
 
   async function save() {
     setSaving(true);
+    setProblem(null);
     try {
       const res = await fetch("/api/coach/training-prefs", {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ runDays: days, runDaysConfirmed: true }),
+        body: JSON.stringify({
+          ...(running ? { runDays: days, runDaysConfirmed: true } : {}),
+          ...(lifting ? { strengthDays, onboardingEquipment: equipment } : {}),
+          onboardingSports: [...(running ? ["corrida"] : []), ...(lifting ? ["musculacao"] : [])],
+        }),
       });
-      if (res.ok) { setSaved(true); setTimeout(onSaved, 600); }
-    } catch { /* skippable by design */ }
-    finally { setSaving(false); }
+      const result = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(result?.error ?? "Não foi possível salvar sua rotina.");
+      onSaved(!running);
+    } catch (err) {
+      setProblem(err instanceof Error ? err.message : "Falha na conexão.");
+    } finally { setSaving(false); }
   }
 
   return (
-    <div className="space-y-2">
-      <DayPicker value={days} onChange={setDays} />
-      <p className="text-[10px] text-surface-500">
-        O longão cai no último dia da sequência — dá para mudar depois.
-      </p>
-      <SaveButton saving={saving} saved={saved} onClick={save} disabled={days.length === 0} />
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2" aria-label="Foco do treino">
+        {([["run", "Corrida"], ["strength", "Musculação"], ["both", "Os dois"]] as const).map(([id, label]) => (
+          <button key={id} type="button" aria-pressed={focus === id} disabled={saving}
+            onClick={() => setFocus(id)}
+            className={focus === id ? "btn-primary min-h-[44px]" : "btn-ghost min-h-[44px]"}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {running && <div className="space-y-1"><p className="text-sm">Dias de corrida</p><DayPicker value={days} onChange={setDays} /></div>}
+      {lifting && (
+        <div className="space-y-2">
+          <p className="text-sm">Dias de musculação</p>
+          <DayPicker value={strengthDays} onChange={setStrengthDays} />
+          <div className="flex gap-2" aria-label="Local da musculação">
+            {([["academia", "Na academia"], ["casa", "Em casa, sem equipamento"]] as const).map(([id, label]) => (
+              <button key={id} type="button" aria-pressed={equipment === id} disabled={saving}
+                onClick={() => setEquipment(id)}
+                className={equipment === id ? "btn-secondary min-h-[44px]" : "btn-ghost min-h-[44px]"}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {problem && <p role="alert" className="text-sm text-red-400">{problem}</p>}
+      <SaveButton saving={saving} saved={false} onClick={save}
+        disabled={(running && !days.length) || (lifting && !strengthDays.length)} />
     </div>
   );
 }
@@ -161,17 +197,21 @@ function RunDaysQuestion({ onSaved }: { onSaved: () => void }) {
 function MeasureQuestion({ onSaved }: { onSaved: () => void }) {
   const [escolha, setEscolha] = useState<MeasureBy>("km");
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved]   = useState(false);
+  const [problem, setProblem] = useState("");
 
   async function save() {
+    if (saving) return;
     setSaving(true);
+    setProblem("");
     try {
       const res = await fetch("/api/coach/training-prefs", {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ measureBy: escolha }),
       });
-      if (res.ok) { setSaved(true); setTimeout(onSaved, 600); }
-    } catch { /* pulável por desenho */ }
+      const result = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(result?.error ?? "Não foi possível salvar a unidade.");
+      onSaved();
+    } catch (err) { setProblem(err instanceof Error ? err.message : "Não foi possível salvar a unidade."); }
     finally { setSaving(false); }
   }
 
@@ -198,7 +238,8 @@ function MeasureQuestion({ onSaved }: { onSaved: () => void }) {
           </button>
         );
       })}
-      <SaveButton saving={saving} saved={saved} onClick={save} />
+      {problem && <p role="alert" className="text-sm text-surface-200">{problem}</p>}
+      <SaveButton saving={saving} saved={false} onClick={save} />
     </div>
   );
 }
@@ -248,12 +289,55 @@ function StrengthQuestion({ onSaved }: { onSaved: () => void }) {
   );
 }
 
-function StravaQuestion() {
+function StravaQuestion({ onSaved }: { onSaved: () => void }) {
+  const [connected, setConnected] = useState<boolean | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("strava_error")) setProblem("A conexão não foi concluída. Tente novamente ou continue sem o Strava.");
+    const controller = new AbortController();
+    fetch("/api/onboarding/status", { cache: "no-store", signal: controller.signal })
+      .then(async res => {
+        if (!res.ok) throw new Error();
+        setConnected((await res.json()).stravaConnected === true);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setConnected(false);
+        setProblem("Não foi possível verificar a conexão. Você pode tentar conectar novamente.");
+      });
+    return () => controller.abort();
+  }, []);
+
+  async function importRuns() {
+    setSyncing(true);
+    setProblem(null);
+    try {
+      const res = await fetch("/api/strava/sync", { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || data?.success !== true) throw new Error(data?.error ?? "Não foi possível importar as atividades.");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("strava_connected");
+      url.searchParams.delete("strava_error");
+      window.history.replaceState(null, "", url);
+      onSaved();
+    } catch (err) {
+      setProblem(err instanceof Error ? err.message : "Falha na conexão. Tente novamente.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   return (
-    <a href="/api/strava/connect"
-       className="btn-primary w-full justify-center">
-      <Link2 className="w-4 h-4" /> Conectar o Strava
-    </a>
+    <div className="space-y-2">
+      {connected === null ? <p className="text-sm text-surface-300">Verificando conexão…</p>
+        : connected ? <SaveButton saving={syncing} saved={false} onClick={importRuns} label="Importar e continuar" />
+        : <a href="/api/strava/connect?from=onboarding" className="btn-primary w-full justify-center">
+            <Link2 className="w-4 h-4" /> Conectar o Strava
+          </a>}
+      {problem && <p role="alert" className="text-sm text-red-400">{problem}</p>}
+    </div>
   );
 }
 
@@ -290,19 +374,23 @@ function GoalQuestion() {
 function TestQuestion({ onSaved }: { onSaved: () => void }) {
   const [date, setDate] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [problem, setProblem] = useState("");
   const options = testDateOptions(localDateStr(new Date())).slice(0, 6);
 
   async function save() {
     if (!date) return;
+    if (saving) return;
     setSaving(true);
+    setProblem("");
     try {
       const res = await fetch("/api/coach/planned-test", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date }),
       });
-      if (res.ok) { setSaved(true); setTimeout(onSaved, 600); }
-    } catch { /* skippable by design */ }
+      const result = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(result?.error ?? "Não foi possível marcar o teste.");
+      onSaved();
+    } catch (err) { setProblem(err instanceof Error ? err.message : "Não foi possível marcar o teste."); }
     finally { setSaving(false); }
   }
 
@@ -326,7 +414,8 @@ function TestQuestion({ onSaved }: { onSaved: () => void }) {
       <p className="text-[10px] text-surface-500">
         6 km no dia: 2 de aquecimento, 3 no limite e 1 de volta à calma. Dá para remarcar depois.
       </p>
-      <SaveButton saving={saving} saved={saved} onClick={save} disabled={!date} label="Marcar o teste" />
+      {problem && <p role="alert" className="text-sm text-surface-200">{problem}</p>}
+      <SaveButton saving={saving} saved={false} onClick={save} disabled={!date} label="Marcar o teste" />
     </div>
   );
 }

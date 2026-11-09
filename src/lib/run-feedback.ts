@@ -1,4 +1,5 @@
 import type { WeeklyPlanDay } from "@/types";
+import { validPerception, validRpe, type Perception } from "@/lib/debrief";
 import { parsePaceRange } from "@/lib/workout-execution";
 import { compareSessions, parseProposal, parsedLabel } from "@/lib/session-adapt";
 
@@ -27,7 +28,8 @@ export const CONTEXTS = {
  */
 export const HARD_REASONS = {
   sleep: "Dormi pouco", stress: "Estresse", fatigue: "Cansaço acumulado", personal: "Questão pessoal",
-  pain: "Dor/incômodo", weather: "Clima", session_too_hard: "O treino estava pesado demais", other: "Outro",
+  pain: "Dor/incômodo", weather: "Clima", schedule: "Falta de tempo", work: "Trabalho",
+  session_too_hard: "O treino estava pesado demais", other: "Outro",
 } as const;
 
 export type RunContext = keyof typeof CONTEXTS | keyof typeof HARD_REASONS;
@@ -65,6 +67,9 @@ export interface RunFeedback {
   /** The athlete's description of what they did instead ("8 × 400 m"). */
   executed_text?: string | null;
   updated_at?: string;
+  rpe?: number | null;
+  perception?: Perception | null;
+  adjusted_sessions?: string[] | null;
 }
 
 export type Execution = "as_planned" | "adapted" | "other";
@@ -76,6 +81,7 @@ export const EXECUTIONS: Record<Execution, string> = {
 export interface FeedbackRun {
   id: string; name: string; date: string; distance_km: number;
   avg_pace_seconds_per_km: number | null; avg_hr: number | null;
+  duration_seconds?: number | null;
 }
 export interface FeedbackItem {
   run: FeedbackRun; feedback: RunFeedback | null; planned: WeeklyPlanDay | null;
@@ -90,6 +96,8 @@ export interface FeedbackInput {
   reduce?: boolean;
   execution?: Execution;
   executedText?: string;
+  rpe?: number | null;
+  perception?: Perception | null;
 }
 
 export function validFeedbackInput(body: unknown): body is FeedbackInput {
@@ -101,6 +109,7 @@ export function validFeedbackInput(body: unknown): body is FeedbackInput {
     || b.effort < 1 || b.effort > 5 || typeof b.context !== "string") return false;
   // The reason has to belong to the question that was actually asked.
   if (!contextQuestion(b.effort).options.some(([key]) => key === b.context)) return false;
+  if (!validRpe(b.rpe) || (b.perception != null && !validPerception(b.perception))) return false;
   if (b.note !== undefined && (typeof b.note !== "string" || b.note.length > 300)) return false;
   if (b.execution !== undefined && b.execution !== null
     && !(typeof b.execution === "string" && Object.prototype.hasOwnProperty.call(EXECUTIONS, b.execution))) return false;
@@ -192,7 +201,9 @@ export function evaluateRunFeedback({ run, feedback, planned }: FeedbackItem) {
         ? {
           title: "Próximos treinos mais leves",
           evidence,
-          next: "Você achou o treino pesado demais e pediu para aliviar: as próximas corridas leves e o longão desta semana ficaram um pouco mais curtos, e a semana seguinte não aumenta o volume.",
+          next: feedback.adjusted_sessions?.length === 0
+            ? "Seu pedido ficou registrado. A semana atual não tinha corridas leves ou longão restantes para encurtar. A próxima semana não aumenta o volume."
+            : "Você pediu para aliviar. As corridas leves e o longão restantes desta semana ficaram um pouco mais curtos, e a semana seguinte não aumenta o volume.",
         }
         : {
           title: "Treino pesado, plano mantido",

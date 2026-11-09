@@ -10,17 +10,6 @@ import type { ReadinessVerdict } from "@/lib/readiness";
 
 const VERDICT_TONE: Record<ReadinessVerdict, Tone> = { alta: "good", moderada: "warn", baixa: "alert" };
 
-/*
- * The glow behind the ring is the verdict before any word is read. Whoop does
- * this with the whole screen; a tinted wash at the top of one card carries the
- * same signal without turning a bad day into a red page.
- */
-const GLOW: Record<ReadinessVerdict, string> = {
-  alta:     "from-emerald-500/15",
-  moderada: "from-amber-500/15",
-  baixa:    "from-red-500/15",
-};
-
 interface Props {
   recovery: RecoveryToday;
   trend: { avg: number; change: number | null } | null;
@@ -43,7 +32,7 @@ export function RecoveryHero({ recovery, trend, checkedIn, onCheckin }: Props) {
   const watchy = recovery.basis === "watch" || recovery.calibratingNights != null;
 
   return (
-    <div className={`relative overflow-hidden rounded-3xl border border-surface-700 bg-surface-800 bg-gradient-to-b ${GLOW[verdict]} to-transparent p-5`}>
+    <div className="limiar-feature p-5">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-surface-500">Recuperação</p>
         <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium ${
@@ -55,7 +44,7 @@ export function RecoveryHero({ recovery, trend, checkedIn, onCheckin }: Props) {
       </div>
 
       <div className="flex flex-col items-center pt-4 pb-2">
-        <Ring ratio={scored ? recovery.score! / 100 : 0} size={184} thickness={15} tone={tone} label="de 100">
+        <Ring ratio={scored ? recovery.score! / 100 : 0} size={170} thickness={12} tone={tone} label={scored ? "de 100" : undefined} chrome>
           {scored ? <CountUp value={recovery.score!} duration={1100} className="text-5xl" /> : <span className="text-4xl">—</span>}
         </Ring>
 

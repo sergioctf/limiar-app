@@ -161,7 +161,7 @@ export function StrengthSessionView({ session, date, day, weekStart }: {
                   aria-label="O que é RIR"
                   className="flex min-h-[44px] items-center gap-1 text-[11px] text-surface-400 transition-colors hover:text-surface-200"
                 >
-                  <Flame className="w-3 h-3 text-orange-400" /> RIR {ex.rir}
+                  <Flame className="w-3 h-3 text-brand-400" /> RIR {ex.rir}
                   <HelpCircle className="w-3 h-3 text-surface-600" />
                 </button>
                 <span className="text-[11px] text-surface-500 flex items-center gap-1">
@@ -245,8 +245,8 @@ function CardioRow({ cardio, session }: {
   // Without a structured session, fall back to the bare summary line.
   if (!session) {
     return (
-      <div className="flex items-center gap-2.5 bg-orange-500/10 border border-orange-500/20 rounded-lg px-2.5 py-2">
-        <Timer className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+      <div className="flex items-center gap-2.5 bg-brand-500/10 border border-brand-500/20 rounded-lg px-2.5 py-2">
+        <Timer className="w-3.5 h-3.5 text-brand-400 shrink-0" />
         <p className="text-[11px] text-surface-300">
           <span className="font-semibold capitalize">{cardio.machine}</span> · {cardio.minutes} min
           <span className="text-surface-500"> ({cardio.position} do treino)</span>
@@ -256,9 +256,9 @@ function CardioRow({ cardio, session }: {
   }
 
   return (
-    <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-2.5 space-y-2">
+    <div className="bg-brand-500/10 border border-brand-500/20 rounded-lg p-2.5 space-y-2">
       <div className="flex items-start gap-2">
-        <Timer className="w-3.5 h-3.5 text-orange-400 shrink-0 mt-0.5" />
+        <Timer className="w-3.5 h-3.5 text-brand-400 shrink-0 mt-0.5" />
         <div className="min-w-0">
           <p className="text-[11px] font-semibold text-surface-200 capitalize">
             {session.machine} · {session.minutes} min

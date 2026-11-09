@@ -20,11 +20,8 @@ export function MobileBottomNav({ nav = NAV_ALL_VISIBLE }: { nav?: NavData }) {
   const current = areaOf(pathname);
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40
-                    bg-surface-800/95 backdrop-blur-md
-                    border-t border-surface-700
-                    flex items-center
-                    pb-safe">
+    <nav aria-label="Navegação principal" className={cn("limiar-dock lg:hidden fixed bottom-0 inset-x-0 z-40 flex items-center pb-safe",
+      pathname === "/ia" || pathname.startsWith("/ia/") ? "" : "pr-[62px]")}>
       {BOTTOM.filter(a => isAreaVisible(a.key, nav)).map(({ key, href, icon: Icon, label }) => {
         const active = current?.key === key;
         return (
@@ -34,10 +31,10 @@ export function MobileBottomNav({ nav = NAV_ALL_VISIBLE }: { nav?: NavData }) {
             aria-current={active ? "page" : undefined}
             className={cn(
               "flex-1 flex flex-col items-center gap-0.5 py-3.5 px-1 text-[11px] font-medium transition-colors duration-150 min-h-16 justify-center",
-              active ? "text-brand-400" : "text-surface-500 hover:text-surface-300"
+              active ? "limiar-dock-active text-brand-400" : "text-surface-500 hover:text-surface-300"
             )}
           >
-            <Icon className={cn("w-[22px] h-[22px]", active && "drop-shadow-[0_0_8px_rgba(249,115,22,0.7)]")} />
+            <Icon className="h-[22px] w-[22px]" aria-hidden />
             {label}
           </Link>
         );

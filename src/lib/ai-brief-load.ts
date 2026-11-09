@@ -12,6 +12,9 @@
 import { buildBrief, type AthleteBrief } from "@/lib/ai-brief";
 import { loadRecoveryInputs } from "@/lib/recovery-load";
 import { buildToday } from "@/lib/today";
+import { loadSessionActivityLinks } from "@/lib/session-activity-link-db";
+import { normalizeSports, SPORTS, toSportKey } from "@/lib/sports";
+import { PERCEPTIONS, perceptionOf, validPerception } from "@/lib/debrief";
 import { weekMovement } from "@/lib/week-movement";
 import { buildSleepWeek } from "@/lib/health-view";
 import { computeMetrics } from "@/lib/performance";
@@ -52,9 +55,9 @@ export async function loadAthleteBrief(db: Db, admin: Db, userId: string, now: D
   const nextMonday = shift(monday, 7);
 
   const [
-    profile, runs, activities, reports, feedback, weekAnswers, races, goals, shoes, tests, shoeRuns,
+    profile, runs, activities, reports, feedback, weekAnswers, races, goals, shoes, tests, shoeRuns, runDebrief, activityDebrief, links,
   ] = await Promise.all([
-    (async () => { try { return (await db.from("profiles").select("name").eq("id", userId).maybeSingle()).data as { name: string | null } | null; } catch { return null; } })(),
+    (async () => { try { return (await db.from("profiles").select("name, sports").eq("id", userId).maybeSingle()).data as { name: string | null; sports?: string[] | null } | null; } catch { return null; } })(),
     // Cento e oitenta dias: a leitura de evolução compara com ~20 semanas atrás.
     safe<Run>(db.from("runs")
       .select("id, date, name, type, distance_km, duration_seconds, moving_time_seconds, elapsed_time_seconds, avg_hr, avg_pace_seconds_per_km, calories")
@@ -83,6 +86,13 @@ export async function loadAthleteBrief(db: Db, admin: Db, userId: string, now: D
     safe<{ shoe_id: string | null; distance_km: number | null }>(
       db.from("runs").select("shoe_id, distance_km")
         .eq("user_id", userId).is("deleted_at", null).not("shoe_id", "is", null)),
+    safe<{ run_id: string; perception: unknown; rpe: number | null }>(
+      db.from("run_feedback").select("run_id,perception,rpe").eq("user_id", userId)
+        .eq("status", "answered").order("updated_at", { ascending: false }).limit(12)),
+    safe<{ activity_id: string; perception: unknown; rpe: number | null }>(
+      db.from("activity_feedback").select("activity_id,perception,rpe").eq("user_id", userId)
+        .eq("status", "answered").order("updated_at", { ascending: false }).limit(12)),
+    loadSessionActivityLinks(db, userId, athleteDaysAgoStr(84, now), today),
   ]);
 
   // Recuperação, carga e plano da semana: o mesmo caminho que a Saúde e a Home usam.
@@ -98,20 +108,21 @@ export async function loadAthleteBrief(db: Db, admin: Db, userId: string, now: D
     : null;
 
   const todayView = buildToday({
-    plan, runs: weekRuns, activities: weekActivities, today, weekStart: monday, hasTest: !!latestTest,
+    plan, runs: weekRuns, activities: weekActivities, today, weekStart: monday,
+    hasTest: !!latestTest, runsEnabled: normalizeSports(profile?.sports).includes("corrida"), links,
   });
 
   const week = weekMovement({
     weekStart: monday, today, plan, runs: weekRuns, activities: weekActivities,
-    wellness: (recoveryInputs?.rows ?? []).filter(w => w.date >= monday),
+    wellness: (recoveryInputs?.rows ?? []).filter(w => w.date >= monday), links,
   });
 
   // ── A semana que fechou, exatamente como o Treinador a conta ───────────────
   const adherence = computeAdherenceHistory(
     reports,
     runs as unknown as Array<{ id: string; date: string; distance_km: number; duration_seconds: number; type: string }>,
-    activities.map(a => ({ date: a.date, sport_type: a.sport_type })),
-    4,
+    activities,
+    4, links,
   );
 
   const lastSunday = shift(lastMonday, 6);
@@ -163,6 +174,20 @@ export async function loadAthleteBrief(db: Db, admin: Db, userId: string, now: D
   );
 
   const name = profile?.name ?? null;
+  const memory: NonNullable<Parameters<typeof buildBrief>[0]["debrief"]> = [];
+  for (const row of runDebrief) {
+    const run = runs.find(run => run.id === row.run_id);
+    const perception = validPerception(row.perception) ? row.perception
+      : perceptionOf(feedback.find(f => f.run_id === row.run_id)?.effort ?? null);
+    if (run && perception) memory.push({ date: run.date, modality: "Corrida", perception: PERCEPTIONS[perception], rpe: row.rpe });
+  }
+  for (const row of activityDebrief) {
+    const activity = activities.find(a => a.id === row.activity_id);
+    const sport = toSportKey(activity?.sport_type);
+    if (activity && sport && validPerception(row.perception)) {
+      memory.push({ date: activity.date, modality: SPORTS[sport].label, perception: PERCEPTIONS[row.perception], rpe: row.rpe });
+    }
+  }
 
   return buildBrief({
     date: today,
@@ -182,6 +207,7 @@ export async function loadAthleteBrief(db: Db, admin: Db, userId: string, now: D
     goals,
     shoes,
     shoeRuns,
+    debrief: memory.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6),
   });
 }
 

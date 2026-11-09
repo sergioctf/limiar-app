@@ -32,7 +32,7 @@ export function WeekHeader({
     <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
       <div className="min-w-0">
         {/* "Sua semana": o plano é do motor (Daniels/Friel), a IA só escreve o recado. */}
-        <h2 className="text-xl font-bold leading-tight text-surface-100">Sua semana</h2>
+        <h2 className="text-3xl font-semibold tracking-tight leading-tight text-surface-100">Sua semana</h2>
         <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-surface-400">
           <span>{formatWeekRange(weekStart)}</span>
           {cycle && (

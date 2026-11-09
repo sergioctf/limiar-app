@@ -11,7 +11,7 @@ interface Props {
   onDone?: () => void;
 }
 
-const COLORS = ["#f97316", "#fb923c", "#fbbf24", "#34d399", "#60a5fa", "#f472b6"];
+const COLORS = ["#8b5cf6", "#b18aff", "#fbbf24", "#34d399", "#60a5fa", "#f472b6"];
 
 interface Particle {
   id: number;

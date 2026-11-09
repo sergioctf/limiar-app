@@ -36,7 +36,7 @@ export function resolveTheme(pref: ThemePreference, systemPrefersDark: boolean):
 
 /** The `<meta name="theme-color">` value, so the browser chrome matches. */
 export function themeColor(theme: ResolvedTheme): string {
-  return theme === "dark" ? "#0a0a0a" : "#f4f4f5";
+  return theme === "dark" ? "#08070d" : "#f5f4fa";
 }
 
 /**
@@ -55,7 +55,7 @@ var r=document.documentElement;
 r.classList.remove("dark","light");
 r.classList.add(d?"dark":"light");
 var m=document.querySelector('meta[name="theme-color"]');
-if(m)m.setAttribute("content",d?"#0a0a0a":"#f4f4f5");
+if(m)m.setAttribute("content",d?${JSON.stringify(themeColor("dark"))}:${JSON.stringify(themeColor("light"))});
 }catch(e){document.documentElement.classList.add("dark");}})();`;
 }
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut, TrendingUp } from "lucide-react";
+import { clearPrivateDeviceData } from "@/lib/device-data";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { LimiarMark } from "@/components/LimiarMark";
@@ -20,7 +21,8 @@ export function Sidebar({ nav = NAV_ALL_VISIBLE }: { nav?: NavData }) {
   const supabase = createClient();
 
   async function handleLogout() {
-    await supabase.auth.signOut();
+    await clearPrivateDeviceData();
+    await supabase.auth.signOut({ scope: "local" });
     window.location.href = "/auth";
   }
 

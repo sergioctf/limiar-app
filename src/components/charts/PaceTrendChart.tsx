@@ -58,10 +58,10 @@ export function PaceTrendChart({ data, height = 260 }: { data: PaceTrend[]; heig
         <Line
           type="monotone"
           dataKey="displayPace"
-          stroke="#f97316"
+          stroke="#8b5cf6"
           strokeWidth={2}
-          dot={<Dot r={3} fill="#f97316" />}
-          activeDot={{ r: 5, fill: "#f97316" }}
+          dot={<Dot r={3} fill="#8b5cf6" />}
+          activeDot={{ r: 5, fill: "#8b5cf6" }}
         />
       </LineChart>
     </ResponsiveContainer>

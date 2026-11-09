@@ -18,14 +18,15 @@ import { RunCard } from "@/components/coach/week/RunCard";
 import type { MeasureBy } from "@/lib/measure";
 import { StrengthCard } from "@/components/coach/week/StrengthCard";
 import type { DayProgress } from "@/lib/day-progress";
-import type { DoneItem } from "@/lib/day-status";
+import { adaptationApplies, type DayStatus } from "@/lib/day-status";
+import { LinkActivityControl } from "@/components/coach/week/LinkActivityControl";
 import type { PlannedTest } from "@/lib/planned-test";
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 
 const km = (n: number) => `${Number(n.toFixed(1)).toString().replace(".", ",")} km`;
 
 export function DayPanel({
-  day, week, isToday, canAdapt, progress, done, plannedTest, onPlanChanged, onDayChanged, onAsk,
+  day, week, isToday, canAdapt, progress, status, plannedTest, onPlanChanged, onDayChanged, onAsk,
   onTestChanged, measureBy = "km",
 }: {
   day: WeeklyPlanDay | null;
@@ -34,7 +35,7 @@ export function DayPanel({
   canAdapt: boolean;
   progress: DayProgress | null;
   /** Tudo que foi registrado nesse dia, previsto ou não. */
-  done: DoneItem[];
+  status: DayStatus | null;
   onPlanChanged: (plan: WeeklyPlanData) => void;
   onDayChanged: (day: WeeklyPlanDay) => void;
   onAsk: (session: WeeklyPlanDay) => void;
@@ -53,10 +54,15 @@ export function DayPanel({
   }
 
   /** O treino do dia que não é a musculação. */
-  const main = day.type !== "rest" && day.type !== "strength" && day.sport !== "musculacao" ? day : null;
+  const displayDay = status && day.adaptation?.when === "after" && !adaptationApplies(day, status)
+    ? { ...day, adaptation: undefined } : day;
+  const main = day.type !== "rest" && day.type !== "strength" && day.sport !== "musculacao" ? displayDay : null;
 
+  const done = status?.done ?? [];
+  const sessions = status?.sessions ?? [];
   const doneFor = (sport: string) => done.find(d => d.planned && d.sport === sport) ?? null;
-  const extras = done.filter(d => !d.planned);
+  const unresolved = (sport: string) => sessions.some(s => s.sport === sport && s.unresolved);
+  const extras = done.filter(d => !d.planned && (!d.sport || !unresolved(d.sport)));
 
   return (
     <div className="space-y-3">
@@ -72,11 +78,15 @@ export function DayPanel({
         {progress && <DayState progress={progress} />}
       </div>
 
+      {status && sessions.filter(session => session.unresolved || session.explicitlyLinked).map(session => (
+        <LinkActivityControl key={session.sport} date={status.date} session={session} candidates={done.filter(item => item.sport === session.sport && item.kind === (session.sport === "corrida" ? "run" : "activity"))} />
+      ))}
+
       {main && (
         <RunCard
           session={main}
           week={week}
-          canAdapt={canAdapt}
+          canAdapt={canAdapt && !unresolved(main.sport ?? "corrida")}
           done={doneFor(main.sport ?? "corrida")}
           plannedTest={plannedTest}
           onPlanChanged={onPlanChanged}
@@ -93,6 +103,7 @@ export function DayPanel({
           week={week}
           sharesDayWithRun={!!main}
           done={doneFor("musculacao")}
+          awaitingLink={unresolved("musculacao")}
           onPlanChanged={onPlanChanged}
           onAsk={onAsk}
         />
@@ -125,7 +136,7 @@ export function DayPanel({
           <ul className="mt-1.5 space-y-1">
             {extras.map((d, i) => (
               <li key={d.id ?? i} className="flex flex-wrap items-baseline gap-x-2 text-sm text-surface-300">
-                <span>{d.label}</span>
+                <span>{d.recordName || d.label}</span>
                 {d.km != null && <span className="text-xs tabular-nums text-surface-400">{km(d.km)}</span>}
                 {d.minutes > 0 && <span className="text-xs tabular-nums text-surface-400">{d.minutes} min</span>}
               </li>

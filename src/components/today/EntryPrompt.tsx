@@ -17,6 +17,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { promptCandidate, type FeedbackItem } from "@/lib/run-feedback";
 import { athleteDaysAgoStr } from "@/lib/week";
 import { RunFeedbackForm } from "@/components/runs/RunFeedbackForm";
+import { ActivityFeedbackForm } from "@/components/debrief/ActivityFeedback";
+import { activityDebriefCandidate, type ActivityFeedbackItem } from "@/lib/activity-feedback";
+import { X } from "lucide-react";
 import { WeekQuestionBody, fetchWeekQuestion, type WeekQuestionPayload } from "@/components/today/WeekQuestionCard";
 import { TodayCheckBody, fetchTodayCheck, type TodayCheckPayload } from "@/components/today/TodayCheck";
 
@@ -27,6 +30,7 @@ const laterKey = (weekStart: string) => `limiar:week-question-later:${weekStart}
 type Prompt =
   | { kind: "today"; payload: TodayCheckPayload }
   | { kind: "run"; item: FeedbackItem }
+  | { kind: "activity"; item: ActivityFeedbackItem }
   | { kind: "week"; payload: WeekQuestionPayload };
 
 export function EntryPrompt({ refreshKey = "" }: { refreshKey?: string }) {
@@ -36,7 +40,7 @@ export function EntryPrompt({ refreshKey = "" }: { refreshKey?: string }) {
   // One prompt per visit. Set when a prompt opens, so a run imported mid-visit
   // (the Strava sync refreshes the page) can still be asked about if nothing was.
   const shown = useRef(false);
-  const dialog = useRef<HTMLDivElement>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     if (shown.current) return;
@@ -55,10 +59,25 @@ export function EntryPrompt({ refreshKey = "" }: { refreshKey?: string }) {
           return;
         }
 
-        const response = await fetch("/api/run-feedback", { cache: "no-store", signal: controller.signal });
-        const data = response.ok ? await response.json() : null;
-        const item = Array.isArray(data?.items) ? promptCandidate(data.items, athleteDaysAgoStr(FRESH_DAYS)) : null;
-        if (item) { shown.current = true; setPrompt({ kind: "run", item }); return; }
+        const read = async (path: string) => {
+          const response = await fetch(path, { cache: "no-store", signal: controller.signal });
+          const body = response.ok ? await response.json() : null;
+          return Array.isArray(body?.items) ? body.items : [];
+        };
+        const [runs, activities] = await Promise.all([
+          read("/api/run-feedback").catch(() => []),
+          read("/api/activity-feedback").catch(() => []),
+        ]);
+        if (controller.signal.aborted) return;
+        const since = athleteDaysAgoStr(FRESH_DAYS);
+        const run = promptCandidate(runs, since);
+        const activity = activityDebriefCandidate(activities, since);
+        if (activity && (!run || activity.activity.date > run.run.date)) {
+          shown.current = true;
+          setPrompt({ kind: "activity", item: activity });
+          return;
+        }
+        if (run) { shown.current = true; setPrompt({ kind: "run", item: run }); return; }
 
         const payload = await fetchWeekQuestion(controller.signal);
         if (payload?.question && payload.weekStart) {
@@ -92,9 +111,11 @@ export function EntryPrompt({ refreshKey = "" }: { refreshKey?: string }) {
       try { if (current.payload.weekStart) localStorage.setItem(laterKey(current.payload.weekStart), "1"); } catch { /* sem storage */ }
       return;
     }
-    await fetch("/api/run-feedback", {
+    const run = current.kind === "run";
+    const target = run ? { runId: current.item.run.id } : { activityId: current.item.activity.id };
+    await fetch(run ? "/api/run-feedback" : "/api/activity-feedback", {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ runId: current.item.run.id, status }),
+      body: JSON.stringify({ ...target, status }),
     }).catch(() => {});
   }, [prompt, close]);
   const later = useCallback(() => putAside("deferred"), [putAside]);
@@ -102,32 +123,29 @@ export function EntryPrompt({ refreshKey = "" }: { refreshKey?: string }) {
   // Dismissing an unanswered prompt means "later"; after an answer it just closes.
   const dismiss = useCallback(() => { if (answered) close(); else void later(); }, [answered, close, later]);
 
+  const isOpen = prompt != null;
   useEffect(() => {
-    if (!prompt) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    dialog.current?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") dismiss(); };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [prompt, dismiss]);
+    if (!isOpen) return;
+    const el = dialog.current;
+    el?.showModal();
+    return () => el?.close();
+  }, [isOpen]);
 
   if (!prompt) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={dismiss}>
-      <div
-        ref={dialog}
-        role="dialog"
-        aria-modal="true"
-        aria-label={prompt.kind === "today" ? "Pergunta antes do treino" : prompt.kind === "run" ? "Check-in pós-treino" : "Pergunta sobre a semana passada"}
-        tabIndex={-1}
-        onClick={e => e.stopPropagation()}
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl border border-surface-700 bg-surface-900 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] animate-slide-up outline-none"
-      >
+    <dialog
+      ref={dialog}
+      aria-label={prompt.kind === "today" ? "Pergunta antes do treino" : prompt.kind === "week" ? "Pergunta sobre a semana passada" : "Limiar Debrief"}
+      onCancel={event => { event.preventDefault(); dismiss(); }}
+      className="limiar-entry-dialog w-full max-w-lg max-h-[88dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl border border-surface-700 bg-surface-900 text-surface-300 p-4 sm:p-5 pb-[max(1rem,env(safe-area-inset-bottom))]"
+    >
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="limiar-kicker">{prompt.kind === "today" || prompt.kind === "week" ? "Treinador" : "Pós-treino"}</span>
+          <button type="button" aria-label="Fechar" onClick={dismiss} className="btn-ghost !p-2 min-w-[44px]">
+            <X className="h-5 w-5" aria-hidden />
+          </button>
+        </div>
         {prompt.kind === "today" ? (
           <div className="space-y-4">
             <h2 className="text-lg font-bold text-surface-100">Antes do treino</h2>
@@ -142,7 +160,7 @@ export function EntryPrompt({ refreshKey = "" }: { refreshKey?: string }) {
           </div>
         ) : prompt.kind === "run" ? (
           <RunFeedbackForm
-            key={`${prompt.item.run.id}:${prompt.item.feedback?.status ?? "new"}`}
+            key={prompt.item.run.id}
             item={prompt.item}
             lightened={lightened}
             onLater={() => void later()}
@@ -154,10 +172,21 @@ export function EntryPrompt({ refreshKey = "" }: { refreshKey?: string }) {
               setPrompt(current => current?.kind === "run" ? { kind: "run", item: { ...current.item, feedback } } : current);
             }}
           />
+        ) : prompt.kind === "activity" ? (
+          <ActivityFeedbackForm
+            key={prompt.item.activity.id}
+            item={prompt.item}
+            onLater={() => void later()}
+            onNever={() => void putAside("skipped")}
+            onClose={close}
+            onSaved={feedback => {
+              setAnswered(true);
+              setPrompt(current => current?.kind === "activity" ? { kind: "activity", item: { ...current.item, feedback } } : current);
+            }}
+          />
         ) : (
           <WeekQuestionBody payload={prompt.payload} onLater={() => void later()} onClose={close} />
         )}
-      </div>
-    </div>
+    </dialog>
   );
 }

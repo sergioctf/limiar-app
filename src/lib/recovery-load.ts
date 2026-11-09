@@ -14,6 +14,7 @@ import { getMondayStr, toBrt } from "@/lib/plan-notify";
 import { isStrengthActivity } from "@/lib/sports";
 import { dayKeyOf } from "@/lib/session-swap";
 import { dayStatus } from "@/lib/day-status";
+import { loadSessionActivityLinks } from "@/lib/session-activity-link-db";
 import type { HealthCheckin, Run, WeeklyPlanData, WellnessData } from "@/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -46,7 +47,7 @@ export async function loadRecoveryInputs(db: Db, userId: string, now: Date = new
   const monday = getMondayStr(toBrt(now));
   const nextMonday = addDays(monday, 7);
 
-  const [wellnessRes, runsRes, testRes, checkinRes, plansRes, actsRes, loadActsRes] = await Promise.all([
+  const [wellnessRes, runsRes, testRes, checkinRes, plansRes, actsRes, loadActsRes, links] = await Promise.all([
     // Sixty days: thirty on screen, and thirty before them to judge the first against.
     db.from("wellness_data").select("*").eq("user_id", userId)
       .gte("date", addDays(today, -60)).order("date", { ascending: false }),
@@ -58,17 +59,18 @@ export async function loadRecoveryInputs(db: Db, userId: string, now: Date = new
      * relógios no mesmo número. Era por isso que o TSB do alerta de sobrecarga
      * e o da Saúde não batiam (visto em 21/09: −5,1 contra −3,7).
      */
-    db.from("runs").select("date, distance_km, duration_seconds, moving_time_seconds, elapsed_time_seconds, avg_pace_seconds_per_km, avg_hr")
+    db.from("runs").select("id, date, distance_km, duration_seconds, moving_time_seconds, elapsed_time_seconds, avg_pace_seconds_per_km, avg_hr")
       .eq("user_id", userId).gte("date", addDays(today, -180)).is("deleted_at", null),
     db.from("performance_tests").select("distance_km, time_seconds, avg_hr, max_hr")
       .eq("user_id", userId).order("test_date", { ascending: false }).limit(1),
     db.from("health_checkins").select("*").eq("user_id", userId).eq("date", today).maybeSingle(),
     db.from("coach_reports").select("id, full_report, period_start")
       .eq("user_id", userId).eq("period_type", "week").in("period_start", [monday, nextMonday]),
-    db.from("activities").select("sport_type, duration_seconds").eq("user_id", userId).eq("date", today).is("deleted_at", null),
+    db.from("activities").select("id, sport_type, duration_seconds").eq("user_id", userId).eq("date", today).is("deleted_at", null),
     // Gym, bike and swim sessions load the body too — see `activityTSS`.
     db.from("activities").select("date, sport_type, duration_seconds, avg_hr")
       .eq("user_id", userId).gte("date", addDays(today, -180)).is("deleted_at", null),
+    loadSessionActivityLinks(db, userId, today, today),
   ]);
 
   const rows = (wellnessRes.data ?? []) as WellnessData[];
@@ -97,15 +99,16 @@ export async function loadRecoveryInputs(db: Db, userId: string, now: Date = new
   const nextPlan = parsePlan(reports.find(r => r.period_start === nextMonday)?.full_report);
 
   const doneKm = runs.filter(r => r.date === today).reduce((s, r) => s + (Number(r.distance_km) || 0), 0);
-  const todayActs = ((actsRes.data ?? []) as Array<{ sport_type: string; duration_seconds: number | null }>)
+  const todayActs = ((actsRes.data ?? []) as Array<{ id: string; sport_type: string; duration_seconds: number | null }>)
     .map(a => ({ ...a, date: today }));
   const strengthDone = todayActs.some(a => isStrengthActivity(a.sport_type));
   // One definition of "done" for the whole app (see day-status).
   const todayStatus = dayStatus({
     date: today,
     planned: plan?.days.find(d => d.day === dayKeyOf(today)) ?? null,
-    runs: runs.map(r => ({ date: r.date, distance_km: Number(r.distance_km) || 0, duration_seconds: r.duration_seconds })),
+    runs,
     activities: todayActs,
+    links,
   });
   const checkin = (checkinRes.data ?? null) as HealthCheckin | null;
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { STRAVA_OAUTH_COOKIE } from "@/lib/strava-oauth";
 
 export async function GET(request: NextRequest) {
   const supabase = createClient();
@@ -19,5 +20,12 @@ export async function GET(request: NextRequest) {
   // not use is a consent screen nobody should have to weigh.
   stravaAuthUrl.searchParams.set("scope", "read,activity:read_all");
 
-  return NextResponse.redirect(stravaAuthUrl);
+  const state = crypto.randomUUID();
+  const from = request.nextUrl.searchParams.get("from");
+  stravaAuthUrl.searchParams.set("state", state);
+  const response = NextResponse.redirect(stravaAuthUrl);
+  response.cookies.set(STRAVA_OAUTH_COOKIE, JSON.stringify({ state, userId: user.id, from }), {
+    httpOnly: true, sameSite: "lax", secure: request.nextUrl.protocol === "https:", path: "/", maxAge: 600,
+  });
+  return response;
 }

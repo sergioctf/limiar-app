@@ -25,7 +25,7 @@ export const DEMO_PACES: Array<{ label: string; range: string; dot: string }> = 
   { label: "Rodagem",      range: "6:41 – 5:47", dot: "bg-green-500" },
   { label: "Maratona",     range: "5:20 – 5:01", dot: "bg-teal-500" },
   { label: "Limiar",       range: "4:54 – 4:43", dot: "bg-yellow-500" },
-  { label: "Intervalo",    range: "4:23 – 4:09", dot: "bg-orange-500" },
+  { label: "Intervalo",    range: "4:23 – 4:09", dot: "bg-amber-500" },
   { label: "Repetição",    range: "3:58 – 3:44", dot: "bg-red-500" },
 ];
 
@@ -33,7 +33,7 @@ export const DEMO_ZONES: Array<{ zone: string; name: string; range: string; bar:
   { zone: "Z1", name: "Recuperação",  range: "até 138",  bar: "bg-blue-500" },
   { zone: "Z2", name: "Base aeróbica", range: "139–152", bar: "bg-green-500" },
   { zone: "Z3", name: "Moderado",      range: "153–159", bar: "bg-yellow-500" },
-  { zone: "Z4", name: "Limiar",        range: "160–170", bar: "bg-orange-500" },
+  { zone: "Z4", name: "Limiar",        range: "160–170", bar: "bg-amber-500" },
   { zone: "Z5", name: "VO₂max",        range: "171+",    bar: "bg-red-500" },
 ];
 

@@ -79,6 +79,20 @@ describe("quando o recado da IA não serve, o motor escreve o seu", () => {
 });
 
 describe("o recado envelhece quando o plano muda", () => {
+  it("troca o recado de corrida salvo em uma semana só de musculação", () => {
+    const week = {
+      ai_message: "Reduza o ritmo se as pernas chegarem pesadas.",
+      days: [
+        { day: "Mon", type: "rest" },
+        { day: "Wed", type: "strength" },
+        { day: "Fri", type: "strength" },
+      ],
+    };
+    expect(withCheckedNote(week).ai_message).toBe(
+      "2 sessões planejadas para esta semana. Veja os detalhes na agenda.",
+    );
+  });
+
   const days = [
     { day: "Mon", distanceKm: null },
     { day: "Tue", distanceKm: 5.5 },

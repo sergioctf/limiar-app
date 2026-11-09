@@ -71,12 +71,12 @@ export function WeeklyVolumeChart({ data, height = 180 }: Props) {
           tickFormatter={(v) => String(Math.round(Number(v)))}
           width={28}
         />
-        <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(249,115,22,0.08)" }} />
+        <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(139,92,246,0.08)" }} />
         <Bar dataKey="totalKm" radius={[6, 6, 0, 0]} maxBarSize={40}>
           {data.map((entry, i) => (
             <Cell
               key={i}
-              fill={entry.totalKm === max ? "#f97316" : "#334155"}
+              fill={entry.totalKm === max ? "#8b5cf6" : "#334155"}
             />
           ))}
         </Bar>

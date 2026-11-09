@@ -20,13 +20,16 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { CalendarDays, Loader2, Sparkles, WifiOff, X } from "lucide-react";
 import type { WeeklyPlanData, WeeklyPlanDay, PlanChatMessage } from "@/types";
 import { isRunSession } from "@/lib/sports";
+import { useRouter } from "next/navigation";
+import { useDeviceAccount } from "@/components/layout/DeviceAccount";
 import { savePlanOffline, loadPlanOffline } from "@/lib/offline-store";
 import { isLegacyPlanShape } from "@/lib/workout-builder";
 import { localMondayStr, localNextMondayStr, localDateStr } from "@/lib/week";
 import { weekSummaryLine } from "@/lib/week-agenda";
 import { applyPlannedTest, type PlannedTest } from "@/lib/planned-test";
-import { dayProgress, dayDone, type DayProgress } from "@/lib/day-progress";
-import type { DayActivity, DayRun, DoneItem } from "@/lib/day-status";
+import { dayProgress, type DayProgress } from "@/lib/day-progress";
+import { dayStatus, type DayActivity, type DayRun } from "@/lib/day-status";
+import type { SessionActivityLink } from "@/lib/session-activity-link";
 import { WeekFitControl } from "@/components/coach/WeekFitControl";
 import { WeekHeader } from "@/components/coach/week/WeekHeader";
 import { WeekFocus } from "@/components/coach/week/WeekFocus";
@@ -65,18 +68,21 @@ interface Props {
   /** Corridas e atividades das últimas semanas — o que a agenda mostra como feito. */
   doneRuns?: DayRun[];
   doneActivities?: DayActivity[];
+  sessionLinks?: SessionActivityLink[];
   /** O teste de 3 km marcado: entra na semana por cima do plano guardado. */
   plannedTest?: PlannedTest | null;
   onTestChanged?: (test: PlannedTest | null) => void;
   /** Km ou minutos: a unidade em que este atleta lê o plano. */
   measureBy?: MeasureBy;
+  requestedWeek?: string;
+  requestedDay?: string;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function WeeklyPlanCard({
-  initialPlan, initialReportId, paces, doneRuns = [], doneActivities = [], plannedTest = null,
-  onTestChanged, measureBy = "km",
+  initialPlan, initialReportId, paces, doneRuns = [], doneActivities = [], sessionLinks, plannedTest = null,
+  onTestChanged, measureBy = "km", requestedWeek, requestedDay,
 }: Props) {
   const currentMonday = getCurrentMondayStr();
   const nextMonday    = getNextMondayStr();
@@ -85,7 +91,9 @@ export function WeeklyPlanCard({
   const seedPlan = initialPlan?.week_start === currentMonday ? initialPlan : null;
 
   // The coach shows two weeks; each is cached by its Monday once fetched.
-  const [activeWeek, setActiveWeek] = useState<string>(currentMonday);
+  const accountId = useDeviceAccount();
+  const router = useRouter();
+  const [activeWeek, setActiveWeek] = useState<string>(requestedWeek === nextMonday ? nextMonday : currentMonday);
   const [plans, setPlans] = useState<Record<string, WeeklyPlanData | null>>(
     seedPlan ? { [currentMonday]: seedPlan } : {}
   );
@@ -93,6 +101,28 @@ export function WeeklyPlanCard({
     seedPlan ? { [currentMonday]: initialReportId ?? null } : {}
   );
   const [loadingWeek, setLoadingWeek] = useState(false);
+  useEffect(() => {
+    let refreshedAt = 0;
+    function refreshVisible() {
+      if (document.visibilityState !== "visible" || !navigator.onLine || Date.now() - refreshedAt < 30_000) return;
+      refreshedAt = Date.now();
+      router.refresh();
+    }
+    // Navigation can restore an older RSC payload from the router cache.
+    refreshVisible();
+    document.addEventListener("visibilitychange", refreshVisible);
+    window.addEventListener("online", refreshVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", refreshVisible);
+      window.removeEventListener("online", refreshVisible);
+    };
+  }, [router]);
+
+  useEffect(() => {
+    if (!seedPlan) return;
+    setPlans(previous => ({ ...previous, [currentMonday]: seedPlan }));
+    setReportIds(previous => ({ ...previous, [currentMonday]: initialReportId ?? null }));
+  }, [currentMonday, initialReportId, seedPlan]);
   /** Week whose plan came from the offline copy rather than the network. */
   const [offlineWeek, setOfflineWeek] = useState<string | null>(null);
 
@@ -117,7 +147,18 @@ export function WeeklyPlanCard({
   const setPlan = (p: WeeklyPlanData | null) =>
     setPlans(prev => ({ ...prev, [activeWeek]: p }));
 
-  const [selectedDay,  setSelectedDay]  = useState<WeeklyPlanDay | null>(null);
+  const [daySelection, setDaySelection] = useState<{ week: string; day: string | null } | null>(null);
+  const firstTrainingDay = plan?.days.find(day => day.type !== "rest" || day.strength) ?? plan?.days[0];
+  const requested = requestedWeek === activeWeek ? requestedDay : undefined;
+  const defaultDay = plan?.days.find(day => day.day === (requested ?? (isNextWeek ? undefined : getTodayDayKey())))
+    ?? firstTrainingDay;
+  const selectedDay = daySelection?.week === activeWeek
+    ? (plan?.days.find(day => day.day === daySelection.day) ?? null)
+    : (defaultDay ?? null);
+
+  function setSelectedDay(day: WeeklyPlanDay | null) {
+    setDaySelection({ week: activeWeek, day: day?.day ?? null });
+  }
   const [generating,   setGenerating]   = useState(false);
   const [genError,     setGenError]     = useState<string | null>(null);
   const [showChat,     setShowChat]     = useState(false);
@@ -142,7 +183,7 @@ export function WeeklyPlanCard({
     setGenError(null);   // switching weeks clears a stale error from another one
 
     const useOfflineCopy = () => {
-      const stored = loadPlanOffline(activeWeek);
+      const stored = loadPlanOffline(accountId, activeWeek);
       setPlans(prev => ({ ...prev, [activeWeek]: stored?.plan ?? null }));
       if (stored) setOfflineWeek(activeWeek);
     };
@@ -154,19 +195,19 @@ export function WeeklyPlanCard({
         setPlans(prev => ({ ...prev, [activeWeek]: d?.plan ?? null }));
         setReportIds(prev => ({ ...prev, [activeWeek]: d?.reportId ?? null }));
         setOfflineWeek(null);
-        if (d?.plan) savePlanOffline(activeWeek, d.plan);
+        if (d?.plan) savePlanOffline(accountId, activeWeek, d.plan);
       })
       .catch(() => { if (!cancelled) useOfflineCopy(); })
       .finally(() => { if (!cancelled) setLoadingWeek(false); });
     return () => { cancelled = true; };
-  }, [activeWeek, plans]);
+  }, [accountId, activeWeek, plans]);
 
   // Keep the offline copy fresh whenever a plan is on screen (including the
   // server-rendered one, which never passes through the fetch above).
   useEffect(() => {
     const current = plans[activeWeek];
-    if (current && offlineWeek !== activeWeek) savePlanOffline(activeWeek, current);
-  }, [plans, activeWeek, offlineWeek]);
+    if (current && offlineWeek !== activeWeek) savePlanOffline(accountId, activeWeek, current);
+  }, [accountId, plans, activeWeek, offlineWeek]);
 
   // Plans made by the old text generator have no paces, heart-rate ranges or
   // km-by-km detail. Rebuild them once, silently, so every athlete ends up on
@@ -193,16 +234,6 @@ export function WeeklyPlanCard({
       .catch(() => {})
       .finally(() => setUpgrading(false));
   }, [plans, activeWeek, offlineWeek, upgrading, paces]);
-
-  // Auto-select TODAY's day when the current week loads; for next week, the
-  // first training day (there is no "today" to highlight there).
-  useEffect(() => {
-    if (!plan?.days) { setSelectedDay(null); return; }
-    const fallback = plan.days.find(d => d.type !== "rest") ?? plan.days[0] ?? null;
-    if (isNextWeek) { setSelectedDay(fallback); return; }
-    const todayKey = getTodayDayKey();
-    setSelectedDay(plan.days.find(d => d.day === todayKey) ?? fallback);
-  }, [plan, isNextWeek]);
 
   // Load chat history from DB when reportId is available
   useEffect(() => {
@@ -384,19 +415,16 @@ export function WeeklyPlanCard({
       if (!day?.day) continue;
       out[day.day] = dayProgress({
         day, date: dateOf(activeWeek, day.day), today: todayStr,
-        runs: doneRuns, activities: doneActivities,
+        runs: doneRuns, activities: doneActivities, links: sessionLinks,
       });
     }
     return out;
-  }, [plan, activeWeek, todayStr, doneRuns, doneActivities]);
+  }, [plan, activeWeek, todayStr, doneRuns, doneActivities, sessionLinks]);
 
-  const selectedDone: DoneItem[] = useMemo(() => {
-    if (!selectedDay) return [];
-    return dayDone({
-      day: selectedDay, date: dateOf(activeWeek, selectedDay.day),
-      runs: doneRuns, activities: doneActivities,
-    });
-  }, [selectedDay, activeWeek, doneRuns, doneActivities]);
+  const selectedStatus = useMemo(() => selectedDay ? dayStatus({
+    planned: selectedDay, date: dateOf(activeWeek, selectedDay.day),
+    runs: doneRuns, activities: doneActivities, links: sessionLinks,
+  }) : null, [selectedDay, activeWeek, doneRuns, doneActivities, sessionLinks]);
 
   /*
     Um controle de navegação, não o protagonista da tela: ocupa o que precisa e
@@ -638,7 +666,7 @@ export function WeeklyPlanCard({
               isToday={!!selectedDay && selectedDay.day === todayKey}
               canAdapt={canAdapt}
               progress={selectedDay ? progressByDay[selectedDay.day] ?? null : null}
-              done={selectedDone}
+              status={selectedStatus}
               plannedTest={plannedTest}
               onPlanChanged={onPlanChanged}
               onDayChanged={onDayChanged}

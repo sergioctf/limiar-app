@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -17,22 +15,25 @@
    */
   :root,
   :root.dark {
-    --color-brand: 249 115 22;        /* orange-500 */
-    /* Accent *text* shades. Separate from the background scale because orange
-       that reads well on near-black is unreadable on white. */
-    --color-brand-300: 253 186 116;
-    --color-brand-400: 251 146 60;
-    --color-surface-900: 10 10 10;    /* page bg — near black */
-    --color-surface-800: 20 20 20;    /* card bg */
-    --color-surface-700: 35 35 35;    /* border / elevated */
-    --color-surface-600: 58 58 58;    /* muted input bg */
-    --color-surface-500: 107 107 107; /* muted text */
-    --color-surface-400: 154 154 154; /* secondary text */
-    --color-surface-300: 212 212 212; /* primary text */
-    --color-surface-200: 232 232 232;
-    --color-surface-100: 245 245 245; /* headings */
-
-    --gradient-surface: linear-gradient(180deg, #141414 0%, #0a0a0a 100%);
+    --color-brand: 139 92 246;
+    --color-brand-300: 209 185 255;
+    --color-brand-400: 188 151 255;
+    --color-surface-900: 8 7 13;
+    --color-surface-800: 20 17 28;
+    --color-surface-700: 42 35 57;
+    --color-surface-600: 66 56 85;
+    --color-surface-500: 161 151 180;
+    --color-surface-400: 187 178 204;
+    --color-surface-300: 218 211 233;
+    --color-surface-200: 235 229 248;
+    --color-surface-100: 247 245 255;
+    --metal-highlight: #eef1fa;
+    --metal-silver: #c9d0e6;
+    --metal-shadow: #78829d;
+    --chrome-edge: rgb(201 208 230 / .28);
+    --chrome-light: rgb(139 92 246 / .21);
+    --gradient-surface: linear-gradient(180deg, #14111c 0%, #08070d 100%);
+    --ease-limiar: cubic-bezier(.2,.72,.22,1);
     --shadow-card: 0 1px 3px rgb(0 0 0 / 0.4);
 
     --animation-duration-fast: 150ms;
@@ -47,24 +48,21 @@
    * text ramp is tuned rather than mirrored.
    */
   :root.light {
-    --color-brand: 234 88 12;         /* orange-600 */
-    --color-brand-300: 194 65 12;     /* orange-700 — accent text on white */
-    --color-brand-400: 234 88 12;     /* orange-600 */
-    --color-surface-900: 244 244 245; /* page bg — soft grey */
-    --color-surface-800: 255 255 255; /* card bg — white, so cards lift off the page */
-    --color-surface-700: 228 228 231; /* border / elevated */
-    /* Purely a surface now. It used to double as muted text — 151 uses — which
-       forced a mid-grey compromise that served neither role: 1.74:1 as text on
-       dark, barely a border on light. Those 151 uses moved up to surface-500,
-       and this went back to being an input background. */
-    --color-surface-600: 212 212 216;
-    --color-surface-500: 130 130 138; /* muted text */
-    --color-surface-400: 90 90 98;    /* secondary text */
-    --color-surface-300: 55 55 62;    /* primary text */
-    --color-surface-200: 35 35 40;
-    --color-surface-100: 20 20 24;    /* headings — near black */
-
-    --gradient-surface: linear-gradient(180deg, #ffffff 0%, #f4f4f5 100%);
+    --color-brand: 109 40 217;
+    --color-brand-300: 80 35 146;
+    --color-brand-400: 99 43 175;
+    --color-surface-900: 245 244 250;
+    --color-surface-800: 255 255 255;
+    --color-surface-700: 229 224 239;
+    --color-surface-600: 211 203 226;
+    --color-surface-500: 104 93 123;
+    --color-surface-400: 81 71 100;
+    --color-surface-300: 54 45 71;
+    --color-surface-200: 38 29 55;
+    --color-surface-100: 25 19 39;
+    --chrome-edge: rgb(87 66 133 / .25);
+    --chrome-light: rgb(139 92 246 / .11);
+    --gradient-surface: linear-gradient(180deg, #ffffff 0%, #f5f4fa 100%);
     --shadow-card: 0 1px 3px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.04);
   }
 
@@ -215,7 +213,7 @@
    */
   .btn-primary {
     @apply inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-xl
-           bg-brand-500 hover:bg-brand-600 active:scale-95 active:bg-brand-700
+           bg-brand-600 hover:bg-brand-700 active:scale-[0.98] active:bg-brand-800
            text-white font-semibold text-sm
            transition-all duration-150 ease-smooth
            disabled:opacity-50 disabled:cursor-not-allowed;

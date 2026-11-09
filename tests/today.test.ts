@@ -82,6 +82,20 @@ describe("adaptação ao estado do atleta", () => {
     expect(t.headline).toContain("Rodagem leve");
   });
 
+  it("não recomenda calibração de corrida a quem só faz musculação", () => {
+    const t = buildToday({
+      ...base, hasTest: false, runsEnabled: false,
+      plan: plano([dia({ type: "strength", sport: "musculacao", label: "Musculação", pace: null, distance_km: null })]),
+    });
+    expect(t.prompt).toBeUndefined();
+    expect(t.detail).not.toContain("3 km");
+  });
+
+  it("mantém o realizado visível em um dia sem plano", () => {
+    const t = buildToday({ ...base, plan: null, activities: [{ date: base.today, sport_type: "Ride", duration_seconds: 1800 }] });
+    expect(t.status?.done).toHaveLength(1);
+  });
+
   it("quem já calibrou não é incomodado", () => {
     expect(buildToday(base as never).prompt).toBeUndefined();
   });

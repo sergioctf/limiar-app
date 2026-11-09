@@ -246,8 +246,8 @@ function buildHRZones(lthr: number): HRZone[] {
       description: "Ritmo de corrida de limiar. Treinos de tempo e progressivos.",
       min_bpm: z3Max + 1,
       max_bpm: z4Max,
-      color: "bg-orange-500",
-      textColor: "text-orange-400",
+      color: "bg-amber-500",
+      textColor: "text-amber-400",
     },
     {
       zone: 5,
@@ -347,7 +347,7 @@ function buildTrainingPaces(vdot: number): TrainingPace[] {
       pace_min_sec: atRace(5000),
       pace_max_sec: atRace(3000),
       description: "Ritmo de tiro para VO2max. Repetições de 3-5 min com recuperação.",
-      color: "text-orange-400",
+      color: "text-amber-400",
     },
     {
       name: "repetition",

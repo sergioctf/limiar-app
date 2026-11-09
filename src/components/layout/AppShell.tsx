@@ -7,6 +7,7 @@ import { MobileBottomNav } from "./MobileBottomNav";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import { AreaTabs, MobileTopBar } from "./AreaChrome";
+import { DeviceAccount } from "./DeviceAccount";
 import { CoachFab } from "@/components/ai/CoachFab";
 
 interface AppShellProps {
@@ -29,9 +30,10 @@ export async function AppShell({ children }: AppShellProps) {
     : NAV_ALL_VISIBLE;
 
   return (
+    <DeviceAccount userId={user?.id ?? ""}>
     <div className="flex min-h-screen">
       <Sidebar nav={nav} />
-      <main className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
+      <main className="limiar-shell flex-1 flex flex-col min-h-screen overflow-x-hidden">
         <MobileTopBar />
         <OfflineBanner />
         {/*
@@ -54,5 +56,6 @@ export async function AppShell({ children }: AppShellProps) {
       <CoachFab />
       <MobileBottomNav nav={nav} />
     </div>
+    </DeviceAccount>
   );
 }

@@ -130,8 +130,8 @@ export function jobHealth(
       return { job, estado: "travado", horasDesde: arred(horas), esperadoACada: everyHours, oQueQuebra, detalhe: "Começou e nunca terminou." };
     }
 
-    if (ultima.status === "error") {
-      return { job, estado: "falhou", horasDesde: arred(horas), esperadoACada: everyHours, oQueQuebra, detalhe: ultima.error ?? "Erro sem mensagem." };
+    if (ultima.status === "error" || ultima.status === "partial") {
+      return { job, estado: "falhou", horasDesde: arred(horas), esperadoACada: everyHours, oQueQuebra, detalhe: ultima.error ?? ultima.summary ?? "Erro sem mensagem." };
     }
 
     if (atrasado) {
@@ -150,7 +150,11 @@ export function problemas(saude: JobHealth[]): JobHealth[] {
 /** Uma frase para o topo da tela, ou para um push. */
 export function resumoDaSaude(saude: JobHealth[]): string {
   const ruins = problemas(saude);
-  if (ruins.length === 0) return "Todas as tarefas rodaram quando deviam.";
+  if (ruins.length === 0) {
+    const waiting = saude.filter(job => job.estado === "aguardando").length;
+    return waiting > 0 ? `Sem falhas registradas. ${waiting} tarefa(s) aguardando primeira execução.`
+      : "Todas as tarefas rodaram quando deviam.";
+  }
   const nomes = ruins.map(j => j.job).join(", ");
   return ruins.length === 1
     ? `1 tarefa precisa de atenção: ${nomes}.`

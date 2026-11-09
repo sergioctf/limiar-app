@@ -44,8 +44,8 @@ describe("resolver o tema", () => {
 
 describe("cor da barra do navegador", () => {
   it("acompanha o fundo da página em cada tema", () => {
-    expect(themeColor("dark")).toBe("#0a0a0a");
-    expect(themeColor("light")).toBe("#f4f4f5");
+    expect(themeColor("dark")).toBe("#08070d");
+    expect(themeColor("light")).toBe("#f5f4fa");
   });
 });
 

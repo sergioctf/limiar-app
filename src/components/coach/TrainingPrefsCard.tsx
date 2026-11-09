@@ -180,7 +180,7 @@ export function TrainingPrefsCard() {
               disabled={saving}
               className={`flex-1 min-h-[44px] py-1.5 rounded-lg text-[11px] font-semibold transition-colors disabled:opacity-60 ${
                 (prefs.qualityPerWeek ?? 1) === n
-                  ? "bg-orange-500 text-white" : "bg-surface-700/50 text-surface-400 hover:text-surface-200"
+                  ? "bg-brand-500 text-white" : "bg-surface-700/50 text-surface-400 hover:text-surface-200"
               }`}
             >
               {n === 0 ? "nenhum" : n}

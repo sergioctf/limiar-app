@@ -1,262 +1,220 @@
 "use client";
 
-/**
- * The post-run check-in, as one piece used in two places: the pop-up that
- * greets the athlete after a session, and the run's own page, where a check-in
- * left for later is answered.
- *
- * The questions branch only where the answer needs it:
- *
- *   1. How did it feel? (five levels)
- *   2. Anything to consider? — or, after "muito difícil", what made it so.
- *   3. Only after "o treino estava pesado demais": lighten the next sessions?
- *
- * "Difícil" opens nothing. A hard session that feels hard is the plan working.
- */
 import { useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { TestDayQuestion } from "@/components/coach/TestDayQuestion";
+import { DebriefHeader, DebriefMetrics, DebriefObservation, EffortSelector, debriefChoice } from "@/components/debrief/DebriefUI";
 import { compareSessions, executionDiffers, parseProposal, parsedLabel, VERDICT_LABEL } from "@/lib/session-adapt";
+import { legacyEffort, perceptionOf, PERCEPTIONS, type Perception } from "@/lib/debrief";
+import { haptic } from "@/lib/haptics";
+import { formatDistanceKm, secondsToReadable } from "@/lib/utils";
 import {
-  EFFORTS, EXECUTIONS, VERY_HARD, contextQuestion, evaluateRunFeedback, type Execution,
+  EXECUTIONS, VERY_HARD, contextQuestion, contextLabel, evaluateRunFeedback, type Execution,
   type FeedbackItem, type RunContext, type RunFeedback,
 } from "@/lib/run-feedback";
 
 export interface SavedFeedback {
   feedback: RunFeedback;
-  /** Sessions that were shortened because the athlete asked. */
   lightened: string[];
 }
 
-const choice = "rounded-xl border px-3 py-2 min-h-[44px] text-sm transition-colors ";
-const picked = (on: boolean) => choice + (on ? "border-brand-400 bg-brand-500/15" : "border-surface-600 hover:border-surface-500");
+type Step = "invite" | "effort" | "context" | "result";
 
-export function RunFeedbackForm({
-  item, onSaved, onLater, onNever, onClose, lightened = [],
-}: {
+export function RunFeedbackForm({ item, onSaved, onLater, onNever, onClose, lightened = [] }: {
   item: FeedbackItem;
   onSaved: (saved: SavedFeedback) => void;
-  /** Pop-up only: ask again on a later visit. */
   onLater?: () => void;
-  /** Pop-up only: do not ask about this run again. */
   onNever?: () => void;
-  /** Pop-up only: close after reading the assessment. */
   onClose?: () => void;
   lightened?: string[];
 }) {
-  const answered = item.feedback?.status === "answered";
-  const [effort, setEffort] = useState<number | null>(answered ? item.feedback?.effort ?? null : null);
-  const [context, setContext] = useState<RunContext | null>(answered ? item.feedback?.context ?? null : null);
-  const [reduce, setReduce] = useState<boolean | null>(answered ? item.feedback?.reduce_requested ?? null : null);
-  const [note, setNote] = useState(item.feedback?.note ?? "");
-  const [execution, setExecution] = useState<Execution | null>(answered ? item.feedback?.execution ?? null : null);
-  const [executedText, setExecutedText] = useState(item.feedback?.executed_text ?? "");
-
-  // Asked only when the run looks clearly different from the plan — never as a
-  // routine question. A session adapted beforehand is already known.
-  const planned = item.feedback?.planned ?? item.planned;
-  const askExecution = Boolean(planned) && (executionDiffers(planned, item.run) || item.feedback?.execution != null);
-  const parsedExecuted = execution && execution !== "as_planned" && executedText.trim() ? parseProposal(executedText) : null;
-  const executedLabel = parsedExecuted ? parsedLabel(parsedExecuted) : null;
-  const executedVerdict = planned && parsedExecuted?.kind && executedLabel && execution === "adapted"
-    ? compareSessions(planned, parsedExecuted.kind, executedLabel).verdict : null;
-  const [editing, setEditing] = useState(!answered);
+  const router = useRouter();
+  const feedback = item.feedback?.status === "answered" ? item.feedback : null;
+  const [step, setStep] = useState<Step>(feedback ? "result" : onLater ? "invite" : "effort");
+  const [effort, setEffort] = useState<number | null>(feedback?.effort ?? null);
+  const [perception, setPerception] = useState(feedback?.perception ?? perceptionOf(feedback?.effort ?? null));
+  const [rpe, setRpe] = useState<number | null>(feedback?.rpe ?? null);
+  const [context, setContext] = useState<RunContext | null>(feedback?.context ?? null);
+  const [reduce, setReduce] = useState<boolean | null>(feedback?.reduce_requested ?? null);
+  const [note, setNote] = useState(feedback?.note ?? "");
+  const [execution, setExecution] = useState<Execution | null>(feedback?.execution ?? null);
+  const [executedText, setExecutedText] = useState(feedback?.executed_text ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [voice, setVoice] = useState<"listening" | "thinking" | null>(null);
 
+  const planned = item.feedback ? item.feedback.planned : item.planned;
+  const askExecution = Boolean(planned) && (executionDiffers(planned, item.run) || feedback?.execution != null);
+  const parsed = execution && execution !== "as_planned" && executedText.trim() ? parseProposal(executedText) : null;
+  const parsedName = parsed ? parsedLabel(parsed) : null;
+  const comparison = planned && parsed?.kind && parsedName && execution === "adapted"
+    ? compareSessions(planned, parsed.kind, parsedName).verdict : null;
   const question = contextQuestion(effort);
   const tooHeavy = effort === VERY_HARD && context === "session_too_hard";
-  const alreadyLightened = item.feedback?.reduce_requested === true;
-  const ready = effort != null && context != null && (!tooHeavy || reduce != null) && (!askExecution || execution != null);
+  const alreadyLightened = feedback?.reduce_requested === true;
+  const ready = perception != null && effort != null && context != null && (!tooHeavy || reduce != null);
+  const changes = feedback?.adjusted_sessions ?? lightened;
+  const analysis = evaluateRunFeedback(item);
+  const target = planned?.distance_km;
+  const ratio = target && target > 0 ? item.run.distance_km / target : null;
+  const executionQuestion = ratio != null && ratio > 1.1 ? "A distância extra foi intencional?"
+    : ratio != null && ratio < .9 ? "O treino terminou antes do previsto. Você mudou a sessão?"
+    : "O treino ficou diferente da referência. Como você o executou?";
 
-  function chooseEffort(level: number) {
+  function pickEffort(value: Perception, score: number | null) {
+    setPerception(value);
+    setRpe(score);
+    const level = legacyEffort(value, score);
     setEffort(level);
-    // Switching between "muito difícil" and the rest swaps the second question;
-    // an answer to the old one must not survive into the new one.
     if (context && !contextQuestion(level).options.some(([key]) => key === context)) setContext(null);
     if (level !== VERY_HARD) setReduce(null);
-  }
-
-  function chooseContext(key: RunContext) {
-    setContext(key);
-    if (key !== "session_too_hard") setReduce(null);
+    haptic();
   }
 
   async function save() {
     if (busy || !ready) return;
-    setBusy(true); setError("");
+    setBusy(true);
+    setError("");
     try {
       const response = await fetch("/api/run-feedback", {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          runId: item.run.id, status: "answered", effort, context, note,
+          runId: item.run.id, status: "answered", effort, perception, rpe, context, note,
           ...(askExecution && execution ? { execution, executedText: execution === "as_planned" ? undefined : executedText } : {}),
           ...(tooHeavy ? { reduce } : {}),
         }),
       });
       const data = await response.json().catch(() => null);
-      if (!response.ok || !data?.feedback) {
-        throw new Error(data?.error || "Não foi possível salvar. Confira sua conexão. Suas respostas continuam aqui.");
-      }
-      onSaved({ feedback: data.feedback, lightened: Array.isArray(data.lightened) ? data.lightened : [] });
-      setEditing(false);
-    } catch (e) {
-      setError(e instanceof TypeError
-        ? "Sem conexão. Suas respostas continuam aqui; tente salvar novamente."
-        : e instanceof Error ? e.message : "Não foi possível salvar. Tente novamente.");
+      if (!response.ok || !data?.feedback) throw new Error(data?.error ?? "Não foi possível salvar.");
+      const changed = Array.isArray(data.lightened) ? data.lightened : [];
+      onSaved({ feedback: data.feedback, lightened: changed });
+      setStep("result");
+      haptic("success");
+      if (changed.length) router.refresh();
+    } catch (err) {
+      setError(err instanceof TypeError ? "Sem conexão. Suas respostas continuam aqui."
+        : err instanceof Error ? err.message : "Não foi possível salvar. Tente novamente.");
     } finally {
       setBusy(false);
     }
   }
 
-  const assessment = evaluateRunFeedback(item);
+  const resultPerception = feedback?.perception ?? perceptionOf(feedback?.effort ?? null);
+  const title = step === "result" ? "Feedback registrado"
+    : step === "invite" ? "Treino concluído" : step === "context" ? "O que aconteceu no treino?" : "Como foi seu treino?";
 
   return (
     <div className="space-y-4">
-      <div>
-        <p className="text-xs text-brand-400 font-semibold">SEU TREINADOR · PÓS-TREINO</p>
-        <h2 className="font-semibold mt-1">{editing ? "Como foi para você?" : assessment.title}</h2>
-        <Link className="text-sm text-surface-400 underline" href={`/runs/${item.run.id}`}>
-          {item.run.name} · {item.run.date.split("-").reverse().join("/")}
-        </Link>
-        <p className="text-sm text-surface-400 mt-1">
-          {item.run.distance_km.toFixed(1).replace(".", ",")} km{item.run.avg_hr ? ` · FC média ${item.run.avg_hr} bpm` : ""}
-        </p>
-      </div>
+      <DebriefHeader state={busy || voice === "thinking" ? "thinking" : voice === "listening" ? "listening" : step === "result" ? "success" : step === "invite" ? "idle" : "active"}
+        title={title} subtitle={`Corrida · ${item.run.name}`}>
+        <DebriefMetrics actual={[formatDistanceKm(item.run.distance_km), item.run.duration_seconds ? secondsToReadable(item.run.duration_seconds) : null].filter(Boolean).join(" · ")}
+          planned={target ? formatDistanceKm(target) : planned?.label} />
+      </DebriefHeader>
 
-      {/* No dia marcado, a pergunta vem antes de tudo — ver TestDayQuestion. */}
-      {editing && <TestDayQuestion runDate={item.run.date} />}
+      {step === "invite" && (
+        <div className="space-y-2">
+          <p className="text-sm text-surface-400">Como seu corpo respondeu hoje? Leva poucos toques.</p>
+          <button type="button" className="btn-primary w-full" onClick={() => setStep("effort")}>Avaliar treino</button>
+        </div>
+      )}
 
-      {editing ? (
-        <>
-          {askExecution && planned && (
-            <fieldset disabled={busy} className="space-y-2">
-              <legend className="text-sm font-medium mb-2">Estava previsto: {planned.label}. Como foi?</legend>
+      {step === "effort" && (
+        <div className="limiar-enter space-y-4">
+          <TestDayQuestion runDate={item.run.date} />
+          <EffortSelector perception={perception} rpe={rpe}
+            onPerception={value => pickEffort(value, rpe)}
+            onRpe={value => perception ? pickEffort(perception, value) : setRpe(value)} />
+          {askExecution && (
+            <fieldset className="space-y-2">
+              <legend className="mb-2 text-sm font-medium text-surface-200">{executionQuestion}</legend>
               <div className="flex flex-wrap gap-2">
-                {(Object.entries(EXECUTIONS) as Array<[Execution, string]>).map(([key, label]) => (
-                  <button key={key} type="button" aria-pressed={execution === key}
-                    onClick={() => setExecution(key)} className={picked(execution === key)}>
-                    {label}
-                  </button>
+                {(Object.entries(EXECUTIONS) as [Execution, string][]).map(([value, label]) => (
+                  <button type="button" key={value} aria-pressed={execution === value} className={debriefChoice(execution === value)}
+                    onClick={() => setExecution(value)}>{label}</button>
                 ))}
               </div>
-              {execution && execution !== "as_planned" && (
-                <label className="block text-sm">
-                  O que você fez? <span className="text-surface-500">(opcional)</span>
-                  <input className="input mt-1 w-full" maxLength={300} value={executedText} disabled={busy}
-                    placeholder="Ex.: 2 km de aquecimento, 8 × 400 m, 1 km de desaquecimento"
-                    onChange={e => setExecutedText(e.target.value)} />
-                  {executedLabel && (
-                    <span className="mt-1 block text-xs text-surface-400">
-                      Entendi: {executedLabel}{executedVerdict ? ` · ${VERDICT_LABEL[executedVerdict].toLowerCase()} do treino previsto` : ""}
-                    </span>
-                  )}
-                </label>
-              )}
             </fieldset>
           )}
+          <button type="button" disabled={perception == null || (askExecution && !execution)} onClick={() => setStep("context")} className="btn-primary w-full">Continuar</button>
+        </div>
+      )}
 
+      {step === "context" && (
+        <div className="limiar-enter space-y-4">
+          {askExecution && execution && execution !== "as_planned" && (
+            <label className="block text-sm font-medium text-surface-200">
+              O que você fez? <span className="text-surface-500">(opcional)</span>
+              <input className="input mt-2 w-full" maxLength={300} value={executedText} disabled={busy}
+                placeholder="Ex.: 2 km leve, 8 × 400 m" onChange={e => setExecutedText(e.target.value)} />
+              {parsedName && <span className="mt-1 block text-xs text-surface-400">Entendi: {parsedName}{comparison ? ` · ${VERDICT_LABEL[comparison].toLowerCase()} do previsto` : ""}</span>}
+            </label>
+          )}
           <fieldset disabled={busy} className="space-y-2">
-            <legend className="text-sm font-medium mb-2">Como esse treino pareceu para você?</legend>
+            <legend className="mb-2 text-sm font-medium text-surface-200">{question.title}</legend>
             <div className="flex flex-wrap gap-2">
-              {EFFORTS.map((label, i) => (
-                <button key={label} type="button" aria-pressed={effort === i + 1}
-                  onClick={() => chooseEffort(i + 1)} className={picked(effort === i + 1)}>
-                  {label}
-                </button>
+              {question.options.map(([key, label]) => (
+                <button key={key} type="button" aria-pressed={context === key} className={debriefChoice(context === key)}
+                  onClick={() => { setContext(key); if (key !== "session_too_hard") setReduce(null); }}>{label}</button>
               ))}
             </div>
           </fieldset>
-
-          {effort != null && (
-            <fieldset disabled={busy} className="space-y-2">
-              <legend className="text-sm font-medium mb-2">{question.title}</legend>
-              <div className="flex flex-wrap gap-2">
-                {question.options.map(([key, label]) => (
-                  <button key={key} type="button" aria-pressed={context === key}
-                    onClick={() => chooseContext(key)} className={picked(context === key)}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-          )}
-
           {tooHeavy && (
-            <fieldset disabled={busy || alreadyLightened} className="space-y-2">
-              <legend className="text-sm font-medium mb-2">Quer reduzir um pouco a carga dos próximos treinos?</legend>
-              {alreadyLightened ? (
-                <p className="text-sm text-surface-400">Os próximos treinos já foram aliviados a seu pedido.</p>
-              ) : (
-                <>
-                  <div className="flex flex-wrap gap-2">
-                    <button type="button" aria-pressed={reduce === true} onClick={() => setReduce(true)} className={picked(reduce === true)}>
-                      Sim, reduzir um pouco
-                    </button>
-                    <button type="button" aria-pressed={reduce === false} onClick={() => setReduce(false)} className={picked(reduce === false)}>
-                      Não, manter como está
-                    </button>
-                  </div>
-                  <p className="text-xs text-surface-500">
-                    Nada muda sem o seu sim. Se reduzir, as corridas leves e o longão restantes da semana ficam cerca de 15% mais curtos e a semana seguinte não aumenta.
-                  </p>
-                </>
-              )}
+            <fieldset disabled={busy || alreadyLightened} className="limiar-feature space-y-2 p-3">
+              <legend className="px-1 text-sm font-medium text-surface-200">Ajuste sugerido</legend>
+              <p className="text-sm text-surface-400">
+                {alreadyLightened ? "Você já confirmou o ajuste neste feedback."
+                  : "Quer encurtar em cerca de 15% as próximas corridas leves e o longão desta semana, e segurar o volume da próxima?"}
+              </p>
+              {!alreadyLightened && <div className="flex flex-wrap gap-2">
+                <button type="button" aria-pressed={reduce === true} onClick={() => setReduce(true)} className={debriefChoice(reduce === true)}>Confirmar ajuste</button>
+                <button type="button" aria-pressed={reduce === false} onClick={() => setReduce(false)} className={debriefChoice(reduce === false)}>Manter plano</button>
+              </div>}
             </fieldset>
           )}
-
-          {effort != null && (
-            <details open={Boolean(note)}>
-              <summary className="text-sm cursor-pointer text-surface-400">Adicionar observação (opcional)</summary>
-              <label className="block text-sm mt-2">
-                <span className="sr-only">Sua observação</span>
-                <textarea className="input mt-1 w-full" maxLength={300} rows={2} disabled={busy}
-                  value={note} onChange={e => setNote(e.target.value)} />
-              </label>
-            </details>
-          )}
-
-          <div className="flex flex-wrap items-center gap-3">
-            <button type="button" disabled={busy || !ready} onClick={save}
-              className="rounded-xl bg-brand-500 text-white px-4 min-h-[44px] disabled:opacity-50">
-              {busy ? "Salvando…" : "Ver feedback"}
-            </button>
-            {onLater && (
-              <button type="button" disabled={busy} onClick={onLater} className="text-sm text-surface-400 min-h-[44px]">
-                Responder depois
-              </button>
-            )}
-            {onNever && (
-              <button type="button" disabled={busy} onClick={onNever} className="text-xs text-surface-500 min-h-[44px] underline-offset-2 hover:underline">
-                Não quero responder
-              </button>
-            )}
-          </div>
-        </>
-      ) : (
-        <div aria-live="polite" className="space-y-3 text-sm">
-          {assessment.evidence.map(text => <p key={text}>{text}</p>)}
-          {item.feedback?.note && <p className="text-surface-400">Sua observação: {item.feedback.note}</p>}
-          <p className="rounded-xl bg-brand-500/10 p-3">{assessment.next}</p>
-          {lightened.length > 0 && (
-            <ul className="space-y-1 text-surface-300">
-              {lightened.map(line => <li key={line}>{line}</li>)}
-            </ul>
-          )}
-          <div className="flex flex-wrap gap-3">
-            {onClose && (
-              <button type="button" onClick={onClose} className="rounded-xl bg-brand-500 text-white px-4 min-h-[44px]">
-                Fechar
-              </button>
-            )}
-            <button type="button" className="text-brand-400 min-h-[44px]" onClick={() => setEditing(true)}>
-              Editar respostas
+          <DebriefObservation note={note} onNote={setNote} disabled={busy} onVoiceState={setVoice} />
+          <div className="flex items-center gap-2">
+            <button type="button" className="btn-ghost" onClick={() => setStep("effort")} disabled={busy}>Voltar</button>
+            <button type="button" disabled={busy || !ready || voice != null} onClick={() => void save()} className="btn-primary flex-1">
+              {busy ? "Registrando…" : "Salvar feedback"}
             </button>
           </div>
         </div>
       )}
 
-      {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+      {step === "result" && (
+        <div className="limiar-enter space-y-3 text-sm" aria-live="polite">
+          <div className="space-y-1">
+            <p className="font-semibold text-surface-100">Seu feedback</p>
+            {resultPerception && <p>{PERCEPTIONS[resultPerception]}{feedback?.rpe != null ? ` · PSE ${feedback.rpe}/10` : ""}</p>}
+            {feedback?.context && feedback.context !== "none" && <p className="text-surface-400">{contextLabel(feedback.context, feedback.effort)}</p>}
+            {feedback?.note && <p className="whitespace-pre-wrap text-surface-300">{feedback.note}</p>}
+          </div>
+          <div className="rounded-2xl border border-surface-700 bg-surface-800 p-4">
+            <p className="limiar-kicker">Leitura do Treinador</p>
+            <p className="mt-1 font-semibold text-surface-100">{analysis.title}</p>
+            <ul className="mt-2 list-disc space-y-1 pl-4 text-surface-400">
+              {analysis.evidence.map(text => <li key={text}>{text}</li>)}
+            </ul>
+          </div>
+          <div className="rounded-2xl border border-surface-700 p-4">
+            <p className="font-semibold text-surface-100">{feedback?.reduce_requested ? "Ajuste confirmado" : planned ? "Plano mantido" : "Sem comparação com o plano"}</p>
+            <p className="mt-1 text-surface-400">{analysis.next}</p>
+            {changes.length > 0 && <ul className="mt-2 list-disc pl-4">{changes.map(line => <li key={line}>{line}</li>)}</ul>}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {onClose && <button type="button" onClick={onClose} className="btn-primary">Concluir</button>}
+            <button type="button" onClick={() => setStep("effort")} className="btn-ghost">Editar respostas</button>
+          </div>
+        </div>
+      )}
+
+      {step !== "result" && onLater && (
+        <div className="flex flex-wrap items-center gap-1">
+          <button type="button" disabled={busy} onClick={onLater} className="btn-ghost">Responder depois</button>
+          {onNever && <button type="button" disabled={busy} onClick={onNever} className="btn-ghost">Dispensar</button>}
+        </div>
+      )}
+      {error && <p role="alert" className="text-sm text-surface-200">{error}</p>}
     </div>
   );
 }

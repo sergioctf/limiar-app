@@ -12,6 +12,7 @@
 import { NextResponse } from "next/server";
 import { profileNeedsIdentity } from "@/lib/profile-identity";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { normalizeSports } from "@/lib/sports";
 import { normalizePrefs, isDefaultRunWeek } from "@/lib/workout-builder";
 
 export interface OnboardingStep {
@@ -47,11 +48,11 @@ export async function GET() {
 
   // `training_prefs` may not exist yet on older projects — degrade to null.
   const fetchProfile = async (): Promise<{
-    name: string | null; username: string | null; training_prefs: unknown | null; strength_prefs?: unknown | null;
+    name: string | null; username: string | null; training_prefs: unknown | null; strength_prefs?: unknown | null; sports?: unknown;
   } | null> => {
     try {
       const { data } = await admin
-        .from("profiles").select("name, username, training_prefs, strength_prefs").eq("id", user.id).maybeSingle();
+        .from("profiles").select("name, username, training_prefs, strength_prefs, sports").eq("id", user.id).maybeSingle();
       return data ?? null;
     } catch {
       try {
@@ -62,7 +63,7 @@ export async function GET() {
     }
   };
 
-  const [profile, runs, tests, strava, push, planned] = await Promise.all([
+  const [profile, runs, tests, strava, push, planned, activities] = await Promise.all([
     fetchProfile(),
     safe<{ id: string }>(admin.from("runs").select("id").eq("user_id", user.id).is("deleted_at", null).limit(1)),
     safe<{ id: string }>(admin.from("performance_tests").select("id").eq("user_id", user.id).limit(1)),
@@ -71,6 +72,7 @@ export async function GET() {
     // Um teste marcado não é um teste feito, mas também não é uma pendência:
     // cobrar quem já escolheu o dia é o app não prestando atenção.
     safe<{ date: string }>(admin.from("planned_tests").select("date").eq("user_id", user.id).eq("status", "scheduled").limit(1)),
+    safe<{ id: string }>(admin.from("activities").select("id").eq("user_id", user.id).is("deleted_at", null).limit(1)),
   ]);
 
   // A name auto-derived from the e-mail prefix isn't a real name.
@@ -84,7 +86,9 @@ export async function GET() {
   const plannedDate = planned[0]?.date ?? null;
   const plannedLabel = plannedDate ? formatDayLabel(plannedDate) : "";
 
-  const steps: OnboardingStep[] = [
+  const sports = normalizeSports(profile?.sports);
+  const runsEnabled = sports.includes("corrida");
+  const allSteps: OnboardingStep[] = [
     {
       key:   "profile",
       label: "Complete seu perfil",
@@ -107,9 +111,9 @@ export async function GET() {
     {
       key:   "data",
       label: "Traga seus treinos",
-      hint:  "Conecte o Strava ou registre uma corrida manualmente.",
+      hint:  "Conecte o Strava ou registre uma atividade manualmente.",
       href:  "/settings",
-      done:  strava.length > 0 || runs.length > 0,
+      done:  runs.length > 0 || activities.length > 0,
       core:  true,
     },
     {
@@ -145,8 +149,11 @@ export async function GET() {
     },
   ];
 
+  const steps = allSteps.filter(step => (runsEnabled || (step.key !== "week" && step.key !== "test"))
+    && (sports.includes("musculacao") || step.key !== "strength"));
   const coreSteps = steps.filter(s => s.core);
   return NextResponse.json({
+    stravaConnected: strava.length > 0,
     steps,
     done:  steps.filter(s => s.done).length,
     total: steps.length,

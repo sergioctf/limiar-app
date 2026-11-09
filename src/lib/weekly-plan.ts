@@ -464,6 +464,8 @@ async function coachNoteFor(input: {
   /** A semana inteira, dia a dia. */
   week: Array<{ dayPt: string; label: string; km: number | null }>;
 }): Promise<string> {
+  if (input.facts.weeklyKm === 0) return fallbackWeekNote(input.facts);
+
   const note = await generateCoachNote({
     weeklyKm: input.facts.weeklyKm,
     phase: input.phase ?? "base",
@@ -877,7 +879,7 @@ export async function ensureWeeklyPlan(
   // The athlete asked for lighter sessions (or said the plan was too big):
   // this week does not climb above the one they found too heavy.
   const weeklyKm = reading?.noRamp && previous?.plannedKm
-    ? Math.min(ratchetedKm, previous.plannedKm)
+    ? Math.max(alreadyPlannedThisWeekKm ?? 0, Math.min(ratchetedKm, previous.plannedKm))
     : ratchetedKm;
 
   const recentWeeks = weeklyVolumesBefore(runs, weekStart).filter(v => v > 0);
@@ -925,6 +927,7 @@ export async function ensureWeeklyPlan(
       cycleWeek: cycle.week,
       sessions: runningDays.map(d => ({ label: d.label, km: d.distance_km ?? 0 })),
       previousPlannedKm: previous?.plannedKm ?? null,
+      otherSessions: days.filter(d => d.strength || d.type !== "rest").length,
     },
   }).catch(() => null);
 
@@ -966,11 +969,13 @@ export async function ensureWeeklyPlan(
 
   let reportId: string | null = existingRow?.[0]?.id ?? null;
   if (reportId) {
-    await db.from("coach_reports").update(payload).eq("id", reportId);
+    const { error } = await db.from("coach_reports").update(payload).eq("id", reportId).eq("user_id", userId);
+    if (error) return { plan: null, reportId, cached: false, error: "Não foi possível salvar o plano." };
   } else {
     const { data: created } = await db.from("coach_reports").insert(payload).select("id").single();
     reportId = created?.id ?? null;
   }
 
+  if (!reportId) return { plan: null, reportId: null, cached: false, error: "Não foi possível salvar o plano." };
   return { plan, reportId, cached: false };
 }

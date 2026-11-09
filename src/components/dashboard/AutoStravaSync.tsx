@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { useDeviceAccount } from "@/components/layout/DeviceAccount";
 import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { AUTO_SYNC_KEY, shouldAutoSync } from "@/lib/strava-enrich";
@@ -21,16 +23,20 @@ import { AUTO_SYNC_KEY, shouldAutoSync } from "@/lib/strava-enrich";
  * nothing to say most of the time.
  */
 export function AutoStravaSync({ onImported }: { onImported?: () => void }) {
+  const router = useRouter();
+  const account = useDeviceAccount();
+  const key = `${AUTO_SYNC_KEY}:${account}`;
   const [imported, setImported] = useState(0);
 
   useEffect(() => {
+    if (!account) return;
     let last: string | null = null;
-    try { last = localStorage.getItem(AUTO_SYNC_KEY); } catch { /* sem storage */ }
+    try { last = localStorage.getItem(key); } catch { /* sem storage */ }
     if (!shouldAutoSync(last)) return;
 
     // Written before the request, not after: a failed or slow sync must not
     // leave the door open for another attempt on the next render.
-    try { localStorage.setItem(AUTO_SYNC_KEY, new Date().toISOString()); } catch { /* sem storage */ }
+    try { localStorage.setItem(key, new Date().toISOString()); } catch { /* sem storage */ }
 
     let cancelled = false;
     fetch("/api/strava/sync", { method: "POST" })
@@ -38,7 +44,8 @@ export function AutoStravaSync({ onImported }: { onImported?: () => void }) {
       .then(d => {
         if (cancelled || !d) return;
         const novos = (d.imported ?? 0) + (d.activitiesImported ?? 0);
-        if (novos > 0) { setImported(novos); onImported?.(); }
+        if (novos > 0) setImported(novos);
+        if (novos > 0 || d.updated > 0) { router.refresh(); onImported?.(); }
       })
       .catch(() => {
         // No Strava connection, offline, or rate limited. All normal, and none
@@ -46,7 +53,7 @@ export function AutoStravaSync({ onImported }: { onImported?: () => void }) {
       });
 
     return () => { cancelled = true; };
-  }, [onImported]);
+  }, [account, key, onImported, router]);
 
   if (imported === 0) return null;
 
@@ -57,7 +64,7 @@ export function AutoStravaSync({ onImported }: { onImported?: () => void }) {
         {imported === 1
           ? "1 treino novo veio do Strava."
           : `${imported} treinos novos vieram do Strava.`}{" "}
-        <button onClick={() => window.location.reload()}
+        <button onClick={() => router.refresh()}
           className="text-brand-400 hover:text-brand-300 font-semibold">
           Atualizar
         </button>

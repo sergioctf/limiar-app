@@ -10,7 +10,9 @@
  * foi roxo, pintado à mão, que é a cor do longão — duas coisas diferentes com
  * a mesma cor na mesma tela (Sérgio, 26/09).
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useDeviceAccount } from "@/components/layout/DeviceAccount";
+import { parseStoredRunner, runnerProgress, runnerStorageKey } from "@/lib/session-runner";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Check, Loader2, MessageCircle, PlayCircle, Watch } from "lucide-react";
@@ -28,18 +30,21 @@ import type { DoneItem } from "@/lib/day-status";
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 
 export function StrengthCard({
-  day, week, sharesDayWithRun, done, onPlanChanged, onAsk,
+  day, week, sharesDayWithRun, done, awaitingLink = false, onPlanChanged, onAsk,
 }: {
   day: WeeklyPlanDay;
   week: string;
   /** Há uma corrida no mesmo dia: vale dizer a ordem e o intervalo. */
   sharesDayWithRun: boolean;
   done: DoneItem | null;
+  awaitingLink?: boolean;
   onPlanChanged: (plan: WeeklyPlanData) => void;
   onAsk: (session: WeeklyPlanDay) => void;
 }) {
   const router = useRouter();
   const [running, setRunning] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
+  const account = useDeviceAccount();
   const session = day.strength;
 
   /*
@@ -52,6 +57,14 @@ export function StrengthCard({
   */
   const date = isoDateOfWeekDay(week, day.day);
   const isToday = date === localDateStr(new Date());
+
+  useEffect(() => {
+    if (!date || !account || running) return;
+    try {
+      const draft = parseStoredRunner(localStorage.getItem(runnerStorageKey(account, date)), date);
+      setHasDraft(Boolean(draft && runnerProgress(draft).done > 0));
+    } catch { setHasDraft(false); }
+  }, [date, account, running]);
 
   if (!session) return null;
   const tone = sessionTone("strength");
@@ -76,6 +89,7 @@ export function StrengthCard({
         <div className="rounded-xl bg-surface-700/30 px-3 py-2">
           <p className="flex flex-wrap items-baseline gap-x-2 text-xs text-surface-400">
             <span className="font-semibold text-green-400">Registrado</span>
+            {done.recordName && done.recordName !== done.label && <span>{done.recordName}</span>}
             {done.minutes > 0 && <span className="tabular-nums text-surface-300">{done.minutes} min</span>}
           </p>
         </div>
@@ -94,13 +108,13 @@ export function StrengthCard({
         treino" — as duas coisas que se faz *antes* e *depois*. No meio, que é
         onde o atleta passa cinquenta minutos, não havia nada (Sérgio, item 3).
       */}
-      {isToday && (
+      {isToday && !done && !awaitingLink && (
         <button
           type="button"
           onClick={() => setRunning(true)}
           className="btn-primary min-h-[48px] w-full justify-center"
         >
-          <PlayCircle className="h-4 w-4" /> Começar treino
+          <PlayCircle className="h-4 w-4" /> {hasDraft ? "Retomar treino" : "Começar treino"}
         </button>
       )}
 
@@ -113,10 +127,13 @@ export function StrengthCard({
         sabe que hoje tem academia, quanto tempo dura e o que fazer. Então é
         oferta, não automatismo (Sérgio, 15/10).
       */}
-      <PushStrengthButton day={day} week={week} />
+      {!done && !awaitingLink && <PushStrengthButton day={day} week={week} />}
+      {done?.id && (
+        <Link href={`/activities/${done.id}`} className="btn-primary w-full">Ver atividade</Link>
+      )}
 
       <Disclosure
-        title="Ver os exercícios"
+        title={done ? "Exercícios e séries" : "Ver os exercícios"}
         summary={`${session.exercises.length} exercícios · ${isToday ? "conferir antes" : "e registrar as séries"}`}
       >
         <StrengthSessionView session={session} date={date ?? undefined} day={day.day} weekStart={week} />

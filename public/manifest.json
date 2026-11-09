@@ -5,13 +5,17 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0a0a0a",
-  "theme_color": "#f97316",
+  "background_color": "#08070d",
+  "theme_color": "#08070d",
   "orientation": "portrait",
-  "categories": ["sports", "fitness", "health"],
+  "categories": [
+    "sports",
+    "fitness",
+    "health"
+  ],
   "icons": [
     {
-      "src": "/limiar_icone_app.png",
+      "src": "/brand/limiar-app-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
@@ -23,7 +27,7 @@
       "purpose": "any"
     },
     {
-      "src": "/limiar_icone_app.png",
+      "src": "/brand/limiar-app-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
@@ -33,20 +37,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "/limiar_icone_app.png",
-      "sizes": "540x720",
-      "type": "image/png",
-      "form_factor": "narrow"
-    },
-    {
-      "src": "/limiar_icone_app.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide"
     }
   ],
   "shortcuts": [

@@ -33,11 +33,7 @@ export async function updateSession(request: NextRequest) {
   // `/api/auth` must stay reachable without a session — invite validation runs
   // before the account exists.
   const publicPaths = ["/auth", "/auth/callback", "/api/auth", "/api/strava/webhook", "/api/admin", "/api/cron", "/api/icons", "/api/ingest", "/sw.js", "/manifest.json", "/offline"];
-  const isPublic = publicPaths.some((p) => pathname.startsWith(p))
-    // Preview routes for screens that are hard to reach by hand — the first-run
-    // flow only ever appears once, for an account that does not exist yet.
-    // Guarded on the environment so they can never be reachable in production.
-    || (process.env.NODE_ENV !== "production" && pathname.startsWith("/dev"));
+  const isPublic = publicPaths.some((p) => pathname.startsWith(p));
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

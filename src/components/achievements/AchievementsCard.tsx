@@ -60,7 +60,7 @@ export function AchievementsCard({ achievements }: AchievementsCardProps) {
       <div className="space-y-1.5">
         <div className="h-1.5 rounded-full bg-surface-700 overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-brand-500 to-orange-400 transition-all duration-500"
+            className="h-full bg-gradient-to-r from-brand-500 to-brand-400 transition-all duration-500"
             style={{ width: `${(unlockedCount / achievements.length) * 100}%` }}
           />
         </div>

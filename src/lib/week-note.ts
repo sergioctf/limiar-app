@@ -26,6 +26,8 @@ export interface WeekNoteFacts {
   sessions: Array<{ label: string; km: number }>;
   /** O que a semana anterior pediu — referência legítima para comparar. */
   previousPlannedKm: number | null;
+  /** Sessões de outras modalidades quando a semana não tem corrida. */
+  otherSessions?: number;
 }
 
 const km = (n: number) => `${Number(n.toFixed(1)).toString().replace(".", ",")} km`;
@@ -56,6 +58,12 @@ export function noteRespectsPlan(note: string, allowed: number[]): boolean {
  */
 export function fallbackWeekNote(f: WeekNoteFacts): string {
   const runs = f.sessions.filter(s => s.km > 0);
+  if (f.otherSessions !== undefined && f.weeklyKm === 0 && runs.length === 0) {
+    if (f.otherSessions === 0) return "Nenhum treino planejado para esta semana.";
+    return f.otherSessions === 1
+      ? "Uma sessão planejada para esta semana. Veja os detalhes na agenda."
+      : `${f.otherSessions} sessões planejadas para esta semana. Veja os detalhes na agenda.`;
+  }
   const longest = runs.reduce<{ label: string; km: number } | null>((a, s) => (!a || s.km > a.km ? s : a), null);
 
   if (f.isRecovery) {
@@ -137,12 +145,10 @@ export function noteMatchesDays(note: string, days: NoteDay[]): boolean {
  */
 export function withCheckedNote<T extends {
   ai_message?: string;
-  days: Array<{ day: string; distance_km?: number; label?: string; type?: string }>;
+  days: Array<{ day: string; distance_km?: number; label?: string; type?: string; strength?: unknown }>;
   cycle?: { week: number; isRecovery: boolean } | null;
 }>(plan: T): T {
   const note = plan.ai_message;
-  if (!note) return plan;
-
   const days: NoteDay[] = plan.days.map(d => ({ day: d.day, distanceKm: d.distance_km ?? null }));
   const sessions = plan.days
     .filter(d => (d.distance_km ?? 0) > 0)
@@ -155,8 +161,11 @@ export function withCheckedNote<T extends {
     cycleWeek: plan.cycle?.week ?? null,
     sessions,
     previousPlannedKm: null,
+    otherSessions: plan.days.filter(d => d.strength || (d.type && d.type !== "rest")).length,
   };
 
+  if (weeklyKm === 0) return { ...plan, ai_message: fallbackWeekNote(facts) };
+  if (!note) return plan;
   const ok = noteRespectsPlan(note, allowedWeekNumbers(facts)) && noteMatchesDays(note, days);
   return ok ? plan : { ...plan, ai_message: fallbackWeekNote(facts) };
 }

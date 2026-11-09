@@ -1,10 +1,8 @@
 /**
  * Offline copy of the training plan.
  *
- * The service worker caches pages and API responses, but a cached page can be
- * from a previous week and there's no way to tell from the HTML. Keeping the
- * plan in localStorage keyed by its week makes the fallback explicit: we either
- * have THIS week's plan or we don't, and the UI can say which.
+ * The mounted coach falls back to the authenticated account’s copy when a
+ * request fails. The service worker caches public assets only.
  *
  * This is what makes the day's workout readable in a gym basement or on a
  * street with no signal — the one moment the athlete actually needs it.
@@ -20,25 +18,25 @@ interface StoredPlan {
   plan:    WeeklyPlanData;
 }
 
-function key(weekStart: string): string {
-  return `${KEY_PREFIX}${weekStart}`;
+function key(userId: string, weekStart: string): string {
+  return `${KEY_PREFIX}${userId}:${weekStart}`;
 }
 
 /** Persist a week's plan for offline reading. Never throws. */
-export function savePlanOffline(weekStart: string, plan: WeeklyPlanData): void {
-  if (typeof window === "undefined" || !weekStart || !plan) return;
+export function savePlanOffline(userId: string, weekStart: string, plan: WeeklyPlanData): void {
+  if (typeof window === "undefined" || !userId || !weekStart || !plan) return;
   try {
     const payload: StoredPlan = { savedAt: new Date().toISOString(), plan };
-    localStorage.setItem(key(weekStart), JSON.stringify(payload));
+    localStorage.setItem(key(userId, weekStart), JSON.stringify(payload));
     pruneOldPlans();
   } catch { /* quota or private mode — offline copy is best-effort */ }
 }
 
 /** Read a week's stored plan, or null. */
-export function loadPlanOffline(weekStart: string): { plan: WeeklyPlanData; savedAt: string } | null {
-  if (typeof window === "undefined" || !weekStart) return null;
+export function loadPlanOffline(userId: string, weekStart: string): { plan: WeeklyPlanData; savedAt: string } | null {
+  if (typeof window === "undefined" || !userId || !weekStart) return null;
   try {
-    const raw = localStorage.getItem(key(weekStart));
+    const raw = localStorage.getItem(key(userId, weekStart));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredPlan;
     if (!parsed?.plan || !Array.isArray(parsed.plan.days)) return null;
@@ -58,7 +56,7 @@ function pruneOldPlans(): void {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
       if (!k?.startsWith(KEY_PREFIX)) continue;
-      const week = k.slice(KEY_PREFIX.length);
+      const week = k.slice(k.lastIndexOf(":") + 1);
       if (week < cutoffStr) localStorage.removeItem(k);
     }
   } catch { /* ignore */ }

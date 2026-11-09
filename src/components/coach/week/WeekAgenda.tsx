@@ -40,7 +40,7 @@ export function WeekAgenda({
   onSelect: (day: WeeklyPlanDay) => void;
 }) {
   return (
-    <ul className="space-y-0.5">
+    <ul className="space-y-1.5">
       {days.map(day => {
         const isToday = day.day === todayKey;
         const isSelected = selectedDay?.day === day.day;
@@ -57,11 +57,11 @@ export function WeekAgenda({
               className={[
                 // O dia cresce com o que tem dentro: duas sessões ocupam duas
                 // linhas inteiras, não uma linha e um rabicho.
-                "flex w-full min-h-[56px] items-stretch gap-3 rounded-xl border px-3 py-2.5 text-left",
+                "flex w-full min-h-[56px] items-stretch gap-2.5 rounded-2xl border px-2.5 py-2.5 text-left",
                 "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60",
                 isSelected
-                  ? "border-brand-500/40 bg-surface-700/70"
-                  : "border-transparent hover:bg-surface-700/40",
+                  ? "limiar-feature !rounded-2xl"
+                  : "border-surface-700 bg-surface-800/70 hover:bg-surface-700/60",
               ].join(" ")}
             >
               {/* Uma barra por sessão: a cor diz o tipo de cada treino do dia. */}
@@ -96,7 +96,7 @@ export function WeekAgenda({
                 ) : (
                   sessions.map((s, i) => (
                     <span key={i} className={`flex items-baseline justify-between gap-2 ${i > 0 ? "mt-1" : ""}`}>
-                      <span className={`min-w-0 flex-1 truncate text-[15px] font-semibold leading-snug ${
+                      <span className={`min-w-0 flex-1 text-[15px] font-semibold leading-snug ${
                         faded ? "text-surface-400" : "text-surface-100"
                       }`}>
                         {s.label}

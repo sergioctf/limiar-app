@@ -5,10 +5,11 @@
  */
 import { localDateStr } from "@/lib/week";
 import { movingSeconds } from "@/lib/run-time";
-import { isStrengthActivity } from "@/lib/sports";
+import { adaptationApplies, dayStatus } from "@/lib/day-status";
+import type { SessionActivityLink } from "@/lib/session-activity-link";
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
 
-export type DayStatus = "done" | "partial" | "adapted" | "missed" | "rest_ok" | "extra" | "upcoming";
+export type DayStatus = "done" | "partial" | "adapted" | "missed" | "rest_ok" | "extra" | "upcoming" | "unresolved";
 
 export interface DayAdherence {
   day: WeeklyPlanDay["day"];
@@ -17,6 +18,7 @@ export interface DayAdherence {
   planned: WeeklyPlanDay;
   actualKm: number;
   actualMin: number;
+  longestRunKm?: number;
   status: DayStatus;
 }
 
@@ -46,13 +48,14 @@ const DAY_ORDER: WeeklyPlanDay["day"][] = ["Mon", "Tue", "Wed", "Thu", "Fri", "S
  * because of traffic.
  */
 interface RunLite {
+  id?: string;
   date: string;
   distance_km: number;
   duration_seconds: number;
   moving_time_seconds?: number | null;
   elapsed_time_seconds?: number | null;
 }
-interface ActivityLite { date: string; sport_type: string }
+interface ActivityLite { id?: string; date: string; sport_type: string; duration_seconds?: number | null; distance_m?: number | null }
 
 function addDays(dateStr: string, n: number): string {
   const d = new Date(`${dateStr}T12:00:00`);
@@ -72,6 +75,7 @@ export function computeWeekAdherence(
   plan: WeeklyPlanData,
   runs: RunLite[],
   activities: ActivityLite[],
+  links: SessionActivityLink[] = [],
 ): WeekAdherence | null {
   if (!Array.isArray(plan.days) || plan.days.length === 0) return null;
 
@@ -87,29 +91,37 @@ export function computeWeekAdherence(
     const dayRuns = runs.filter(r => r.date === date);
     const actualKm  = dayRuns.reduce((s, r) => s + r.distance_km, 0);
     const actualMin = dayRuns.reduce((s, r) => s + movingSeconds(r) / 60, 0);
-    // Same rule as the Hoje card and the day's recovery (see day-status).
-    const hasGym = activities.some(a => a.date === date && isStrengthActivity(a.sport_type));
+    const day = dayStatus({ date, planned, runs: dayRuns, links,
+      activities: activities.filter(a => a.date === date).map(a => ({ ...a, duration_seconds: a.duration_seconds ?? null })) });
+    const main = day.sessions[0];
+    const matched = day.done.find(d => d.planned && d.sport === main?.sport);
+    const run = matched?.kind === "run" && matched.id ? dayRuns.find(r => r.id === matched.id) : null;
+    const activity = matched?.kind === "activity" && matched.id ? activities.find(a => a.date === date && a.id === matched.id) : null;
+    const matchedKm = run?.distance_km ?? (activity?.distance_m != null ? activity.distance_m / 1000 : matched?.km ?? 0);
+    const matchedMin = run ? movingSeconds(run) / 60 : (activity?.duration_seconds ?? (matched?.minutes ?? 0) * 60) / 60;
 
     let status: DayStatus;
     const isFuture = date > today;
 
-    if (planned.type === "rest") {
-      status = actualKm > 0 ? "extra" : isFuture ? "upcoming" : "rest_ok";
-    } else if (planned.type === "strength") {
-      status = hasGym || actualKm > 0 ? "done" : isFuture ? "upcoming" : "missed";
+    if (day.sessions.some(s => s.unresolved)) {
+      status = "unresolved";
+    } else if (!main) {
+      status = day.anyDone ? "extra" : isFuture ? "upcoming" : "rest_ok";
+    } else if (main.sport === "musculacao") {
+      status = main.done ? "done" : isFuture ? "upcoming" : "missed";
     } else {
-      // Running workout — compare against the planned target
+      // Compare the planned session to its record, keeping total volume separate.
       const targetKm  = planned.distance_km ?? null;
       const targetMin = planned.duration_min ?? null;
 
       let ratio: number | null = null;
-      if (targetKm && targetKm > 0)       ratio = actualKm / targetKm;
-      else if (targetMin && targetMin > 0) ratio = actualMin / targetMin;
-      else if (actualKm > 0)               ratio = 1; // no numeric target: any run counts
+      if (targetKm && targetKm > 0 && matchedKm > 0) ratio = matchedKm / targetKm;
+      else if (targetMin && targetMin > 0 && matchedMin > 0) ratio = matchedMin / targetMin;
+      else if (matched) ratio = 1;
 
       if (ratio !== null && ratio >= 0.8)      status = "done";
       else if (ratio !== null && ratio > 0.25) status = "partial";
-      else if (actualKm > 0)                   status = "partial";
+      else if (matched)                       status = "partial";
       else                                     status = isFuture ? "upcoming" : "missed";
 
       /*
@@ -118,7 +130,7 @@ export function computeWeekAdherence(
        * as what it was. Adaptations agreed *before* the run are the day's
        * prescription already, so they are compared normally.
        */
-      if (planned.adaptation?.when === "after" && actualKm > 0) status = "adapted";
+      if (planned.adaptation?.when === "after" && adaptationApplies(planned, day)) status = "adapted";
     }
 
     /*
@@ -139,6 +151,7 @@ export function computeWeekAdherence(
       planned,
       actualKm: Math.round(actualKm * 10) / 10,
       actualMin: Math.round(actualMin),
+      longestRunKm: Math.max(0, ...dayRuns.map(r => r.distance_km)),
       status,
     });
   }
@@ -178,6 +191,7 @@ export function computeAdherenceHistory(
   runs: RunLite[],
   activities: ActivityLite[],
   weeksBack = 4,
+  links: SessionActivityLink[] = [],
 ): WeekAdherence[] {
   const result: WeekAdherence[] = [];
   const today = todayStr();
@@ -189,7 +203,7 @@ export function computeAdherenceHistory(
   for (const report of sorted.slice(0, weeksBack + 1)) {
     try {
       const plan = JSON.parse(report.full_report!) as WeeklyPlanData;
-      const week = computeWeekAdherence(report.period_start!, plan, runs, activities);
+      const week = computeWeekAdherence(report.period_start!, plan, runs, activities, links);
       if (week) result.push(week);
     } catch {
       // malformed plan JSON — skip

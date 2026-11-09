@@ -113,10 +113,8 @@ export const SCENE_TITLE: Record<SceneKey, string> = {
 export const ONBOARDING_STEPS: OnboardingStepDef[] = [
   {
     id: "welcome", kind: "welcome", skippable: true,
-    title: "Bem-vindo ao Limiar",
-    body:
-      "Cinco perguntas, um minuto, e sua primeira semana de treino já nasce com a sua cara. " +
-      "Dá para pular qualquer uma — o que faltar fica na lista do painel.",
+    title: "Seu próximo treino começa aqui",
+    body: "Conte como você treina e em quais dias. O Limiar usa essas escolhas para preparar sua primeira semana.",
   },
 
   {
@@ -127,18 +125,15 @@ export const ONBOARDING_STEPS: OnboardingStepDef[] = [
 
   {
     id: "q-strava", kind: "question", field: "strava", skippable: true,
-    title: "De onde vêm suas corridas",
-    body:
-      "Com o Strava conectado elas entram sozinhas, e o plano já começa sabendo quanto " +
-      "você corre hoje. Sem ele, dá para registrar cada corrida na mão.",
+    title: "Traga seus treinos do Strava",
+    body: "O histórico ajuda o Treinador a entender seu ponto de partida. Você também pode começar e registrar suas atividades no Limiar.",
   },
 
   {
     id: "q-run-days", kind: "question", field: "runDays", skippable: true,
-    title: "Que dias você corre?",
+    title: "Como é sua semana de treino?",
     body:
-      "É a pergunta que mais muda o seu plano: ela decide onde caem o longão e o treino " +
-      "forte. Sem resposta, o app chuta terça, quinta e sábado.",
+      "Escolha sua modalidade e os dias que cabem na sua rotina.",
   },
 
   {
@@ -159,11 +154,9 @@ export const ONBOARDING_STEPS: OnboardingStepDef[] = [
   },
 
   {
-    id: "done", kind: "done", scene: "dashboard", skippable: false,
-    title: "Pronto",
-    body:
-      "Sua semana está montada. O que você pulou continua na lista do painel, e dá para " +
-      "ver o app inteiro quando quiser.",
+    id: "done", kind: "done", skippable: false,
+    title: "Vamos montar sua primeira semana",
+    body: "O Treinador usa suas escolhas e o histórico disponível. Assim que o plano estiver salvo, você vai direto ao primeiro treino.",
   },
 ];
 

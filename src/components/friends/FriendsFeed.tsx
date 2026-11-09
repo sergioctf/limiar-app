@@ -106,16 +106,17 @@ export function FriendsFeed() {
               <button
                 onClick={() => toggleKudo(item)}
                 disabled={item.isMe}
-                title={item.isMe ? "Sua corrida" : item.didIKudo ? "Remover reação" : "Mandar fogo"}
+                aria-pressed={item.didIKudo}
+                aria-label={item.isMe ? "Sua corrida" : item.didIKudo ? "Remover reação" : "Reagir à atividade"}
                 className={`flex items-center gap-1 px-2.5 min-h-[44px] py-1.5 rounded-lg text-xs font-bold transition-all active:scale-90 shrink-0 ${
                   item.didIKudo
-                    ? "bg-orange-500/20 text-orange-400 border border-orange-500/30"
+                    ? "bg-brand-500/20 text-brand-400 border border-brand-500/30"
                     : item.isMe
                       ? "bg-surface-700/50 text-surface-500"
-                      : "bg-surface-700 text-surface-400 hover:text-orange-400 hover:bg-orange-500/10"
+                      : "bg-surface-700 text-surface-400 hover:text-brand-400 hover:bg-brand-500/10"
                 }`}
               >
-                <Flame className={`w-4 h-4 ${item.didIKudo ? "fill-orange-400/40" : ""}`} />
+                <Flame className={`w-4 h-4 ${item.didIKudo ? "fill-brand-400/40" : ""}`} />
                 {item.kudosCount > 0 && <span className="tabular-nums">{item.kudosCount}</span>}
               </button>
             </li>

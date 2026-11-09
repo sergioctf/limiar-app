@@ -22,18 +22,18 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Brand — Limiar dark + amber-orange
+        // Deep Violet and Liquid Chrome
         brand: {
-          50:  "#fff7ed",
-          100: "#ffedd5",
-          200: "#fed7aa",
+          50:  "#f7f3ff",
+          100: "#eee5ff",
+          200: "#ddcaff",
           300: "rgb(var(--color-brand-300) / <alpha-value>)",
           400: "rgb(var(--color-brand-400) / <alpha-value>)",
-          500: "#f97316",   // primary orange
-          600: "#ea580c",
-          700: "#c2410c",
-          800: "#9a3412",
-          900: "#7c2d12",
+          500: "#8b5cf6",
+          600: "#6d28d9",
+          700: "#5b21b6",
+          800: "#3d1971",
+          900: "#24113f",
         },
         // Surface — semantic, not literal. 900 is always the page background and
         // 100 always the primary text; globals.css decides what those mean per
@@ -51,11 +51,11 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        sans: ["-apple-system", "BlinkMacSystemFont", "Inter", "Segoe UI", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono", "Fira Code", "monospace"],
       },
       backgroundImage: {
-        "gradient-brand": "linear-gradient(135deg, #f97316 0%, #ea580c 100%)",
+        "gradient-brand": "linear-gradient(135deg, #7c3ee6 0%, #5620ac 100%)",
         "gradient-dark": "var(--gradient-surface)",
       },
       animation: {

@@ -38,7 +38,7 @@ export function CalorieDetailModal({
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="font-bold text-surface-100 text-sm flex items-center gap-1.5">
-              <Flame className="w-4 h-4 text-orange-400" /> Calorias · {label}
+              <Flame className="w-4 h-4 text-brand-400" /> Calorias · {label}
             </h2>
             <p className="text-2xl font-bold text-surface-100 mt-1 font-mono">
               {day.total}
@@ -72,7 +72,7 @@ export function CalorieDetailModal({
 
                   {/* The bar is the answer to "what cost the most?" at a glance. */}
                   <div className="h-1 bg-surface-800 rounded-full mt-2 overflow-hidden">
-                    <div className="h-full bg-orange-500/70 rounded-full"
+                    <div className="h-full bg-brand-500/70 rounded-full"
                          style={{ width: `${pct}%` }} />
                   </div>
 

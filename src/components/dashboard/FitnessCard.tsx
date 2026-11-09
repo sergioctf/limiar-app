@@ -49,7 +49,7 @@ function CustomTooltip({ active, payload, label }: {
       )}
       {atlEntry && (
         <div className="flex justify-between gap-4 mb-1">
-          <span className="text-orange-400">Fadiga</span>
+          <span className="text-amber-400">Fadiga</span>
           <span className="font-bold text-surface-100 tabular-nums">{atlEntry.value.toFixed(0)}</span>
         </div>
       )}
@@ -78,7 +78,7 @@ export function FitnessCard({ data }: Props) {
 
   // TSB chart data (bar-like, showing form)
   const tsbColor = (v: number) =>
-    v > 5 ? "#22c55e" : v > -10 ? "#84cc16" : v > -25 ? "#eab308" : "#f97316";
+    v > 5 ? "#22c55e" : v > -10 ? "#84cc16" : v > -25 ? "#eab308" : "#f59e0b";
 
   return (
     <div className="card p-5 space-y-4">
@@ -116,9 +116,9 @@ export function FitnessCard({ data }: Props) {
           <p className="text-2xl font-black text-blue-300 tabular-nums">{latest.ctl.toFixed(0)}</p>
           <p className="text-[10px] text-surface-500 mt-0.5">CTL</p>
         </div>
-        <div className="bg-orange-500/8 border border-orange-500/20 rounded-xl p-3 text-center">
-          <p className="text-[10px] text-orange-400 uppercase tracking-wider font-semibold mb-1">Fadiga</p>
-          <p className="text-2xl font-black text-orange-300 tabular-nums">{latest.atl.toFixed(0)}</p>
+        <div className="bg-amber-500/8 border border-amber-500/20 rounded-xl p-3 text-center">
+          <p className="text-[10px] text-amber-400 uppercase tracking-wider font-semibold mb-1">Fadiga</p>
+          <p className="text-2xl font-black text-amber-300 tabular-nums">{latest.atl.toFixed(0)}</p>
           <p className="text-[10px] text-surface-500 mt-0.5">ATL</p>
         </div>
         <div className={`border rounded-xl p-3 text-center ${formBg} border-current/20`}>
@@ -163,8 +163,8 @@ export function FitnessCard({ data }: Props) {
             />
             <Line
               type="monotone" dataKey="atl" name="atl"
-              stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 2"
-              dot={false} activeDot={{ r: 3, fill: "#f97316" }}
+              stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 2"
+              dot={false} activeDot={{ r: 3, fill: "#f59e0b" }}
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -181,8 +181,8 @@ export function FitnessCard({ data }: Props) {
                 <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="tsbNeg" x1="0" y1="1" x2="0" y2="0">
-                <stop offset="5%"  stopColor="#f97316" stopOpacity={0.25} />
-                <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                <stop offset="5%"  stopColor="#f59e0b" stopOpacity={0.25} />
+                <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(71,85,105,0.3)" vertical={false} />
@@ -196,7 +196,7 @@ export function FitnessCard({ data }: Props) {
             <Tooltip content={<CustomTooltip />} />
             <Area
               type="monotone" dataKey="tsb" name="tsb"
-              stroke={latest.tsb >= 0 ? "#22c55e" : "#f97316"}
+              stroke={latest.tsb >= 0 ? "#22c55e" : "#f59e0b"}
               strokeWidth={1.5}
               fill={latest.tsb >= 0 ? "url(#tsbPos)" : "url(#tsbNeg)"}
               dot={false}
@@ -212,7 +212,7 @@ export function FitnessCard({ data }: Props) {
           <span className="w-3 h-0.5 bg-blue-500 inline-block rounded" /> CTL = Fitness
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-3 h-0.5 bg-orange-400 inline-block rounded" style={{ background: "repeating-linear-gradient(90deg,#f97316 0,#f97316 4px,transparent 4px,transparent 6px)" }} /> ATL = Fadiga
+          <span className="w-3 h-0.5 bg-amber-400 inline-block rounded" style={{ background: "repeating-linear-gradient(90deg,#f59e0b 0,#f59e0b 4px,transparent 4px,transparent 6px)" }} /> ATL = Fadiga
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-0.5 bg-green-500 inline-block rounded" /> TSB = Forma

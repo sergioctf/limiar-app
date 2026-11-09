@@ -1,72 +1,87 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PlayCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useDeviceAccount } from "@/components/layout/DeviceAccount";
 import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
 import { OnboardingQuestion } from "@/components/onboarding/OnboardingQuestions";
-import { ONBOARDING_STEPS, TOUR_STEPS, TOUR_STORAGE_KEY } from "@/lib/onboarding-flow";
+import { ONBOARDING_STEPS, TOUR_STEPS } from "@/lib/onboarding-flow";
 
-/**
- * Decide se mostra o primeiro acesso — e qual dos dois fluxos.
- *
- * "Já mostrei isto?" mora num lugar só: este portão e o botão das
- * Configurações leem e escrevem a mesma chave (`TOUR_STORAGE_KEY`). Três
- * cópias dessa regra é como um tutorial acaba nunca aparecendo, ou aparecendo
- * para sempre — e era o caso: havia três implementações de tutorial no app até
- * 01/10.
- *
- * **Dois fluxos, não um.** Conta nova abre o primeiro acesso: quatro perguntas,
- * na ordem em que o plano depende delas. `?tour=1` abre a vitrine — nove cenas,
- * nenhuma pergunta —, que é o que o botão das Configurações usa e o que a
- * última tela do primeiro acesso oferece a quem quiser ver o app inteiro.
- */
-export function OnboardingGate({ isNewUser }: { isNewUser: boolean }) {
+export function OnboardingGate({ needsSetup }: { needsSetup: boolean }) {
+  const userId = useDeviceAccount();
+  const router = useRouter();
+  const key = `limiar_setup:${userId}`;
   const [open, setOpen] = useState<null | "setup" | "tour">(null);
+  const [initialStep, setInitialStep] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const forced = window.location.search.includes("tour=1");
-    let seen = false;
-    try { seen = !!localStorage.getItem(TOUR_STORAGE_KEY); } catch { /* sem storage */ }
-    if (forced) setOpen("tour");
-    else if (isNewUser && !seen) setOpen("setup");
-  }, [isNewUser]);
+    const query = new URLSearchParams(window.location.search);
+    if (query.get("tour") === "1") {
+      setOpen("tour");
+      return;
+    }
+    if (!needsSetup || !userId) return;
+    try {
+      const saved = Number(localStorage.getItem(key));
+      if (Number.isInteger(saved) && saved >= 0 && saved < ONBOARDING_STEPS.length) setInitialStep(saved);
+    } catch { /* Storage may be unavailable. */ }
+    if (query.has("strava_connected") || query.has("strava_error")) {
+      setInitialStep(ONBOARDING_STEPS.findIndex(step => step.field === "strava"));
+    }
+    setOpen("setup");
+  }, [key, needsSetup, userId]);
 
-  function finish() {
-    try { localStorage.setItem(TOUR_STORAGE_KEY, "1"); } catch { /* sem storage */ }
+  function closeTour() {
     setOpen(null);
-    // Drop ?tour=1 so a refresh does not reopen what was just dismissed.
-    if (typeof window !== "undefined" && window.location.search.includes("tour=1")) {
-      window.history.replaceState({}, "", window.location.pathname);
+    router.replace("/");
+  }
+
+  async function finish(skip: boolean) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/onboarding/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skip }),
+      });
+      const result = await res.json().catch(() => null);
+      if (!res.ok || result?.ok !== true) throw new Error(result?.error ?? "Não foi possível concluir. Tente novamente.");
+      try { localStorage.removeItem(key); } catch { /* Storage may be unavailable. */ }
+      setOpen(null);
+      const next = result.firstSession;
+      window.location.replace(skip ? "/" : next ? `/coach?week=${encodeURIComponent(next.week)}&day=${encodeURIComponent(next.day)}` : "/coach");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha na conexão.");
+    } finally {
+      setBusy(false);
     }
   }
 
   if (!open) return null;
-
-  if (open === "tour") {
-    return <OnboardingFlow steps={TOUR_STEPS} onFinish={finish} />;
-  }
+  if (open === "tour") return <OnboardingFlow key="tour" steps={TOUR_STEPS} onFinish={closeTour} />;
 
   return (
     <OnboardingFlow
-      steps={ONBOARDING_STEPS}
-      onFinish={finish}
-      renderQuestion={(step, next) =>
-        step.field ? <OnboardingQuestion field={step.field} onSaved={next} /> : null}
-      footer={
-        /*
-          A vitrine fica aqui, no fim, como oferta — não como pedágio. Quem
-          acabou de configurar já pode usar o app; quem quiser ver o resto
-          escolhe ver.
-        */
-        <button
-          type="button"
-          onClick={() => setOpen("tour")}
-          className="flex w-full min-h-[48px] items-center justify-center gap-2 rounded-xl border border-surface-700 text-sm font-medium text-surface-300 transition-colors hover:border-brand-500/50 hover:text-brand-200"
-        >
-          <PlayCircle className="h-4 w-4" /> Ver o que o app faz
-        </button>
-      }
+      key="setup"
+      initialStep={initialStep}
+      onStepChange={step => {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has("strava_connected") || url.searchParams.has("strava_error")) {
+          url.searchParams.delete("strava_connected");
+          url.searchParams.delete("strava_error");
+          window.history.replaceState(null, "", url);
+        }
+        try { localStorage.setItem(key, String(step)); } catch { /* Storage may be unavailable. */ }
+      }}
+      onFinish={() => void finish(false)}
+      onDismiss={() => void finish(true)}
+      busy={busy}
+      error={error}
+      renderQuestion={(step, next) => step.field ? <OnboardingQuestion field={step.field} onSaved={next} /> : null}
     />
   );
 }

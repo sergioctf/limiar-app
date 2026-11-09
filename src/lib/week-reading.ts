@@ -12,12 +12,10 @@
  *   · **met** — nothing to decide. The ratchet already holds the floor.
  *   · **short with a reason we know** — the check-ins said work, rain or
  *     schedule, so the missing kilometres are not evidence about the body: the
- *     volume is held and the athlete is told. Fatigue or pain is also a reason
- *     we know, and there the plan is allowed to come down — that is the body
- *     asking, not life interfering.
- *   · **short and nobody knows why** — held once, and asked. If the next short
- *     week is still unexplained, the plan comes down rather than pretending
- *     forever that the week was met.
+ *     volume is held and the athlete is told. Fatigue or pain prompts a
+ *     question before easing off.
+ *   · **short and nobody knows why** — hold without increasing and ask.
+ *     Silence does not count as agreement to change the plan.
  *
  * Nothing here writes a plan. It produces the number the engine should treat as
  * executed, plus the sentence the athlete reads.
@@ -132,7 +130,7 @@ export function readWeek(input: {
   if (reason === "life") {
     return {
       plannedKm, actualKm, completion, status: "short", reason,
-      creditedKm: plannedKm, holding: true,
+      creditedKm: plannedKm, holding: true, noRamp: true,
       // Two weeks in a row held is no longer an interruption; it is a plan that
       // does not fit the athlete's routine, and only they can say that.
       ask: input.heldLastWeek ? "does_it_fit" : null,
@@ -171,17 +169,12 @@ export function readWeek(input: {
     };
   }
 
-  // Unknown: held once so a silent week never shrinks the plan by itself, then
-  // allowed to fall, because holding forever would prescribe a week the athlete
-  // has not run in a month.
-  const holding = !input.heldLastWeek;
   return {
     plannedKm, actualKm, completion, status: "short", reason: "unknown",
-    creditedKm: holding ? plannedKm : actualKm, holding, ask: "what_happened",
-    headline: holding ? "Faltou saber o que houve" : "Plano ajustado na falta de resposta",
-    detail: holding
-      ? `${done}, e não sabemos por quê. Mantivemos o volume desta vez: um treino que não aconteceu não prova perda de condicionamento. Se você contar o que houve, o treinador acerta a semana seguinte.`
-      : `${done}. Como a segunda semana curta seguiu sem explicação, a semana parte do que foi feito. Se a causa foi a rotina, diga e o volume volta.`,
+    creditedKm: plannedKm, holding: true, noRamp: true,
+    ask: input.heldLastWeek ? "does_it_fit" : "what_happened",
+    headline: "Faltou saber o que houve",
+    detail: `${done}. Mantivemos o volume sem aumentar. Se você contar o que houve, o treinador pode ajustar a próxima semana com você.`,
   };
 }
 

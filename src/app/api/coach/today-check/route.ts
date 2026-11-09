@@ -59,7 +59,7 @@ async function decide(db: Db, userId: string) {
   const todayKey = dayKeyOf(today);
   const check = todayCheck({
     today,
-    session: inputs.recovery.session,
+    session: inputs.recovery.sessionUnresolved ? null : inputs.recovery.session,
     sessionDone: inputs.recovery.sessionDone,
     rows: inputs.rows,
     load: inputs.load,

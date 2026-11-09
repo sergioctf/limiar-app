@@ -141,7 +141,7 @@ export function EnergyCard({ data }: { data: NutritionSummary }) {
         {/* What the spend is made of. */}
         <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-surface-700">
           <div className="h-full bg-surface-500 transition-all duration-700" style={{ width: `${basalPct}%` }} />
-          <div className="h-full bg-orange-400 transition-all duration-700" style={{ width: `${100 - basalPct}%` }} />
+          <div className="h-full bg-violet-400 transition-all duration-700" style={{ width: `${100 - basalPct}%` }} />
         </div>
         <div className="mt-2 flex justify-between gap-2 text-[11px]">
           <span className="flex items-center gap-1 text-surface-400">
@@ -149,7 +149,7 @@ export function EnergyCard({ data }: { data: NutritionSummary }) {
             {data.bmrSource === "watch" && <Watch className="w-3 h-3 text-emerald-400" aria-label="medido pelo relógio" />}
           </span>
           <span className="flex items-center gap-1 text-surface-400">
-            <span className="h-2 w-2 rounded-full bg-orange-400" />
+            <span className="h-2 w-2 rounded-full bg-violet-400" />
             {data.activeSource === "watch" ? "Ativo" : "Movimento + treino"} {active.toLocaleString("pt-BR")}
             {data.activeSource === "watch" && <Watch className="w-3 h-3 text-emerald-400" aria-label="medido pelo relógio" />}
           </span>
@@ -158,7 +158,7 @@ export function EnergyCard({ data }: { data: NutritionSummary }) {
         {/* Macros as shares of the target, so the split is visible, not just listed. */}
         <div className="mt-4 grid grid-cols-3 gap-2">
           {([
-            ["Carbo", data.macros.carbs_g, macroKcal.carbs, "bg-brand-400"],
+            ["Carbo", data.macros.carbs_g, macroKcal.carbs, "bg-violet-400"],
             ["Proteína", data.macros.protein_g, macroKcal.protein, "bg-sky-400"],
             ["Gordura", data.macros.fat_g, macroKcal.fat, "bg-amber-300"],
           ] as const).map(([label, g, kcal, color]) => (

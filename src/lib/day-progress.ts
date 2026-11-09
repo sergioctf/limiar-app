@@ -15,7 +15,8 @@
  * terminou é **previsto**, não **perdido**. Essa diferença é a razão de esta
  * função existir em vez de a tela olhar `allDone`.
  */
-import { dayStatus, type DayActivity, type DayRun } from "@/lib/day-status";
+import type { SessionActivityLink } from "@/lib/session-activity-link";
+import { adaptationApplies, dayStatus, type DayActivity, type DayRun } from "@/lib/day-status";
 import type { WeeklyPlanDay } from "@/types";
 
 export type DayProgressState =
@@ -25,6 +26,7 @@ export type DayProgressState =
   | "done"
   /** Duas sessões, uma registrada. */
   | "partial"
+  | "unresolved"
   /** O dia passou e o que estava marcado não foi registrado. */
   | "missed"
   /** Não havia nada marcado, mas alguma coisa foi registrada. */
@@ -59,6 +61,7 @@ export function dayProgress(input: {
   runs: DayRun[];
   activities: DayActivity[];
   weightKg?: number | null;
+  links?: SessionActivityLink[];
 }): DayProgress {
   const status = dayStatus({
     date: input.date,
@@ -66,12 +69,13 @@ export function dayProgress(input: {
     runs: input.runs,
     activities: input.activities,
     weightKg: input.weightKg,
+    links: input.links,
   });
 
   const total = status.sessions.length;
   const done = status.sessions.filter(s => s.done).length;
   const extras = status.done.filter(d => !d.planned).length;
-  const adapted = !!input.day?.adaptation;
+  const adapted = adaptationApplies(input.day, status);
   const isPast = input.date < input.today;
 
   const base = { done, total, extras, adapted };
@@ -86,6 +90,8 @@ export function dayProgress(input: {
     }
     return { ...base, state: "rest", label: null };
   }
+
+  if (status.sessions.some(s => s.unresolved)) return { ...base, state: "unresolved", label: "Vínculo a confirmar" };
 
   if (done === total) return { ...base, state: "done", label: "Registrado" };
 

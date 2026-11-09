@@ -100,7 +100,7 @@ function VitalDetail({ vital }: { vital: Vital }) {
   }));
   const reference = vital.key === "sleep" ? SLEEP_TARGET_H : vital.baseline;
   const referenceLabel = vital.key === "sleep" ? "meta" : "sua média";
-  const color = vital.tone === "alert" ? "#f87171" : vital.tone === "warn" ? "#fbbf24" : vital.tone === "good" ? "#34d399" : "#f97316";
+  const color = vital.tone === "alert" ? "#f87171" : vital.tone === "warn" ? "#fbbf24" : vital.tone === "good" ? "#34d399" : "#8b5cf6";
   const measured = data.filter(d => d.value != null).length;
 
   return (

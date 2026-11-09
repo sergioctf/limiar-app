@@ -198,7 +198,7 @@ export function tsbLabel(tsb: number): { label: string; color: string; bg: strin
   if (tsb >   5) return { label: "Descansado ✓",     color: "text-green-400",  bg: "bg-green-500/10"  };
   if (tsb >  -5) return { label: "Equilíbrio ✓",     color: "text-green-400",  bg: "bg-green-500/10"  };
   if (tsb > -20) return { label: "Em treinamento",   color: "text-yellow-400", bg: "bg-yellow-500/10" };
-  if (tsb > -35) return { label: "Fatigado",         color: "text-orange-400", bg: "bg-orange-500/10" };
+  if (tsb > -35) return { label: "Fatigado",         color: "text-amber-400", bg: "bg-amber-500/10" };
   return               { label: "Overreaching ⚠",   color: "text-red-400",    bg: "bg-red-500/10"    };
 }
 

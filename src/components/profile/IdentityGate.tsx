@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Loader2, Check, UserCircle2 } from "lucide-react";
 
 interface Problems { firstName?: string; lastName?: string; username?: string }
@@ -18,6 +19,12 @@ interface Problems { firstName?: string; lastName?: string; username?: string }
  * never appears again.
  */
 export function IdentityGate() {
+  const pathname = usePathname();
+  if (!pathname.startsWith("/friends")) return null;
+  return <SocialIdentityGate />;
+}
+
+function SocialIdentityGate() {
   const [open, setOpen]       = useState(false);
   const [first, setFirst]     = useState("");
   const [last, setLast]       = useState("");

@@ -38,7 +38,7 @@ import type { Goal, Race } from "@/types";
 
 export type BriefKey =
   | "hoje" | "recuperacao" | "sono" | "semana" | "semana_passada" | "evolucao"
-  | "carga" | "ritmos" | "adesao" | "provas" | "metas" | "tenis" | "alertas";
+  | "carga" | "ritmos" | "adesao" | "provas" | "metas" | "tenis" | "alertas" | "debrief";
 
 export interface BriefSection {
   key: BriefKey;
@@ -76,6 +76,7 @@ export interface BriefInput {
   goals: Goal[];
   shoes: Shoe[];
   shoeRuns: RunLike[];
+  debrief?: Array<{ date: string; modality: string; perception: string; rpe: number | null }>;
 }
 
 // ─── Escrita ─────────────────────────────────────────────────────────────────
@@ -482,6 +483,15 @@ export function buildBrief(input: BriefInput): AthleteBrief {
     tenisSection(input),
   ].filter((s): s is BriefSection => s != null);
 
+  if (input.debrief?.length) {
+    sections.push({
+      key: "debrief",
+      title: "Memória de treino",
+      headline: "Seu esforço percebido nas últimas atividades com feedback.",
+      lines: input.debrief.map(row => `${shortDate(row.date)} · ${row.modality} · ${row.perception}${row.rpe != null ? ` · PSE ${row.rpe}/10` : ""}`),
+      source: "percepção que você registrou no Debrief",
+    });
+  }
   const alertas = alertasSection(input, sections);
   if (alertas) sections.push(alertas);
 
@@ -532,6 +542,7 @@ const ALL_SUGGESTIONS: Suggestion[] = [
   { id: "adesao",         label: "Quanto do plano cumpri", question: "Quanto do plano eu venho cumprindo?",       keys: ["adesao"] },
   { id: "provas",         label: "Minhas provas",          question: "Como estão minhas provas?",                 keys: ["provas", "metas"] },
   { id: "tenis",          label: "Meus tênis",             question: "Como estão meus tênis?",                    keys: ["tenis"] },
+  { id: "debrief",        label: "Minha memória de treino", question: "Como percebi o esforço nos treinos recentes?",   keys: ["debrief"] },
   { id: "alertas",        label: "Algum alerta?",          question: "Tem algum alerta para mim?",                keys: ["alertas"] },
 ];
 

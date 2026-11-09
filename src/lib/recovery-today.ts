@@ -36,6 +36,7 @@ export interface RecoveryToday {
   needsCheckin: boolean;
   session: WeeklyPlanDay | null;
   sessionDone: boolean;
+  sessionUnresolved?: boolean;
   advice: { headline: string; detail: string };
   /** One line for the dashboard and a lock screen. */
   short: string;
@@ -79,9 +80,17 @@ export function buildRecoveryToday(input: {
     && (input.status ? mainSessionDone(input.status)
       : session.type === "strength" ? input.strengthDone : input.doneKm > 0);
 
-  const advice = sessionAdvice(readiness, session, {
-    doneKm: input.doneKm, strengthDone: input.strengthDone, tomorrow,
-  });
+  const main = input.status?.sessions[0];
+  const sessionUnresolved = Boolean(main?.unresolved);
+  const linked = input.status?.done.find(item => item.planned && item.sport === main?.sport);
+  const advice = sessionUnresolved
+    ? { headline: "Vínculo a confirmar", detail: "Confirme na agenda qual atividade corresponde ao treino de hoje." }
+    : sessionAdvice(readiness, session, {
+        sessionDone,
+        doneKm: input.status ? linked?.km ?? 0 : input.doneKm,
+        strengthDone: input.strengthDone,
+        tomorrow,
+      });
 
   const hard = session != null && HARD_SESSION.has(session.type);
   const v = scored ? readiness.verdict : null;
@@ -92,7 +101,8 @@ export function buildRecoveryToday(input: {
    * jargon, and a phrase nobody can act on is a phrase that might as well not
    * be on the screen. Each one now names the session it is talking about.
    */
-  const short = sessionDone ? "Treino de hoje feito"
+  const short = sessionUnresolved ? advice.headline
+    : sessionDone ? "Sessão principal registrada"
     : v === "alta" ? (hard ? "Pronto para o treino forte" : "Corpo recuperado")
     : v === "moderada" ? (hard ? "Dá para fazer o treino forte, sem exagerar" : "Dá para treinar, sem forçar")
     : v === "baixa" ? (hard ? "Recuperação baixa: hoje pede um treino mais leve" : "Recuperação baixa: vá bem leve hoje")
@@ -108,9 +118,10 @@ export function buildRecoveryToday(input: {
     needsCheckin: basis !== "watch" && calibratingNights == null && input.checkin == null,
     session,
     sessionDone,
+    ...(sessionUnresolved ? { sessionUnresolved } : {}),
     advice,
     short,
-    offer: swapOffer({ plan: input.plan, todayKey: key, verdict: v, done: sessionDone }),
+    offer: sessionUnresolved ? null : swapOffer({ plan: input.plan, todayKey: key, verdict: v, done: sessionDone }),
   };
 }
 

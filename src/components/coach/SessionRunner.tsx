@@ -26,6 +26,7 @@
  * com as mesmas séries — a progressão de carga não sabe por qual tela o atleta
  * entrou, e não deveria mesmo saber.
  */
+import { useDeviceAccount } from "@/components/layout/DeviceAccount";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   X, Check, Minus, Plus, ChevronLeft, ChevronRight, Loader2, Timer, Flag,
@@ -50,6 +51,8 @@ export function SessionRunner({ session, date, onClose, onLogged }: {
   onLogged?: () => void;
 }) {
   const exercises = session.exercises;
+  const accountId = useDeviceAccount();
+  const draftKey = accountId ? runnerStorageKey(accountId, date) : null;
   const [state, setState] = useState<RunnerState>(() => seedRunnerState(session));
   const [index, setIndex] = useState(0);
   const [restEndsAt, setRestEndsAt] = useState<number | null>(null);
@@ -57,6 +60,8 @@ export function SessionRunner({ session, date, onClose, onLogged }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hydrated = useRef(false);
+  const startedAt = useRef(Date.now());
+  const lastSetAt = useRef<number | null>(null);
   /** O estado já comprometido, para quem precisa dele fora de um render. */
   const latest = useRef(state);
   useEffect(() => { latest.current = state; }, [state]);
@@ -84,7 +89,15 @@ export function SessionRunner({ session, date, onClose, onLogged }: {
 
     function apply(seeded: RunnerState) {
       let stored: RunnerState | null = null;
-      try { stored = parseStoredRunner(localStorage.getItem(runnerStorageKey(date)), date); } catch { /* sem rascunho */ }
+      try {
+        const raw = draftKey ? localStorage.getItem(draftKey) : null;
+        stored = parseStoredRunner(raw, date);
+        if (stored && raw) {
+          const times = JSON.parse(raw);
+          if (Number.isFinite(times.startedAt)) startedAt.current = times.startedAt;
+          if (Number.isFinite(times.lastSetAt)) lastSetAt.current = times.lastSetAt;
+        }
+      } catch { /* sem rascunho */ }
       // `reconcileLate`: quem marcou uma série antes da rede responder não a perde.
       const merged = reconcileLate(latest.current, mergeStoredRunner(seeded, stored));
       setState(merged);
@@ -95,13 +108,13 @@ export function SessionRunner({ session, date, onClose, onLogged }: {
     }
 
     return () => { cancelled = true; };
-  }, [date]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [date, draftKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* O rascunho é gravado a cada mudança — e nunca por cima do que ainda não leu. */
   useEffect(() => {
     if (!hydrated.current) return;
-    try { localStorage.setItem(runnerStorageKey(date), JSON.stringify({ date, state })); } catch { /* modo privado */ }
-  }, [state, date]);
+    try { if (draftKey) localStorage.setItem(draftKey, JSON.stringify({ date, state, startedAt: startedAt.current, lastSetAt: lastSetAt.current })); } catch { /* modo privado */ }
+  }, [state, date, draftKey]);
 
   /* Um tique por segundo, só enquanto há descanso correndo. */
   useEffect(() => {
@@ -136,6 +149,7 @@ export function SessionRunner({ session, date, onClose, onLogged }: {
   }, [current?.exerciseId]);
 
   function completeSet(i: number) {
+    lastSetAt.current = Date.now();
     haptic("tap");
     const list = [...(state[current.exerciseId] ?? [])];
     list[i] = { ...list[i], done: true };
@@ -177,7 +191,11 @@ export function SessionRunner({ session, date, onClose, onLogged }: {
       const res = await fetch("/api/strength/log", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, sets: payload, exercises: exercises.map(e => e.exerciseId) }),
+        body: JSON.stringify({
+          date, sets: payload, exercises: exercises.map(e => e.exerciseId), recordActivity: true, keep: false,
+          startedAt: new Date(startedAt.current).toISOString(),
+          finishedAt: new Date(lastSetAt.current ?? Date.now()).toISOString(),
+        }),
       });
       const d = await res.json().catch(() => null);
       if (!res.ok) {
@@ -186,7 +204,7 @@ export function SessionRunner({ session, date, onClose, onLogged }: {
       }
       haptic("success");
       // O rascunho existe para sobreviver ao treino, não ao registro dele.
-      try { localStorage.removeItem(runnerStorageKey(date)); } catch { /* nada a limpar */ }
+      try { if (draftKey) localStorage.removeItem(draftKey); } catch { /* nada a limpar */ }
       onLogged?.();
       onClose();
     } catch {
@@ -274,8 +292,14 @@ export function SessionRunner({ session, date, onClose, onLogged }: {
             ))}
           </div>
 
+          {!terminar && progress.done > 0 && (
+            <button type="button" onClick={finish} disabled={saving} className="btn-ghost w-full">
+              <Flag className="h-4 w-4" /> Encerrar e salvar as séries feitas
+            </button>
+          )}
+
           {error && (
-            <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</p>
+            <p role="alert" className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</p>
           )}
         </div>
       </div>

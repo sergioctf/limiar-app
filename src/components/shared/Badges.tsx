@@ -14,7 +14,7 @@ export function PaceBadge({ paceSeconds }: { paceSeconds: number }) {
 export function HeartRateBadge({ bpm }: { bpm: number }) {
   const color =
     bpm >= 180 ? "bg-red-500/15 text-red-300" :
-    bpm >= 170 ? "bg-orange-500/15 text-orange-300" :
+    bpm >= 170 ? "bg-amber-500/15 text-amber-400" :
     bpm >= 155 ? "bg-yellow-500/15 text-yellow-300" :
                  "bg-green-500/15 text-green-300";
   return (
@@ -27,7 +27,7 @@ export function HeartRateBadge({ bpm }: { bpm: number }) {
 // ─── SourceBadge ─────────────────────────────────────────
 export function SourceBadge({ source }: { source: string }) {
   const styles: Record<string, string> = {
-    strava:       "bg-orange-500/20 text-orange-300",
+    strava:       "bg-brand-500/20 text-brand-300",
     manual:       "bg-blue-500/15 text-blue-300",
     imported_ai:  "bg-purple-500/15 text-purple-300",
     "strava+ai":  "bg-teal-500/15 text-teal-300",
@@ -44,7 +44,7 @@ export function RunTypeBadge({ type }: { type: string }) {
   const styles: Record<string, string> = {
     easy:       "bg-green-500/15 text-green-300",
     long_run:   "bg-blue-500/15 text-blue-300",
-    tempo:      "bg-orange-500/15 text-orange-300",
+    tempo:      "bg-brand-500/15 text-brand-300",
     intervals:  "bg-red-500/15 text-red-300",
     race:       "bg-yellow-500/15 text-yellow-300",
     recovery:   "bg-teal-500/15 text-teal-300",

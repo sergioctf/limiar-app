@@ -805,6 +805,7 @@ export interface SessionAdaptation {
    */
   doneLabel?: string | null;
   doneKm?: number | null;
+  runId?: string;
   /** The prescription as it was, kept for history. */
   original: WeeklyPlanDay;
 }
@@ -830,6 +831,7 @@ export function recordExecuted(
     label?: string | null;
     text?: string | null;
     km: number;
+    runId?: string;
     compared?: { preserves: string; changes: string; verdict?: Verdict } | null;
   },
   now: Date = new Date(),
@@ -852,6 +854,7 @@ export function recordExecuted(
       ? `Outro treino${label ? `: ${label}` : ""}`
       : `Adaptado${label ? `: ${label}` : ""}`,
     doneKm: Math.round(Number(input.km || 0) * 10) / 10,
+    ...(input.runId ? { runId: input.runId } : {}),
   }, now);
 }
 

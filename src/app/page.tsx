@@ -18,6 +18,8 @@ import { DashboardWithRefresh } from "@/components/dashboard/DashboardWithRefres
 import { HomeContent, type HomeAttention } from "@/components/home/HomeContent";
 import { athleteDateStr, athleteDaysAgoStr, athleteMondayStr } from "@/lib/week";
 import { buildToday } from "@/lib/today";
+import { loadSessionActivityLinks } from "@/lib/session-activity-link-db";
+import { normalizeSports } from "@/lib/sports";
 import { weekMovement } from "@/lib/week-movement";
 import { loadRecoveryInputs } from "@/lib/recovery-load";
 import { addDays } from "@/lib/health-view";
@@ -58,8 +60,8 @@ export default async function HomePage() {
   const nextMonday = addDays(monday, 7);
   const admin = createAdminClient();
 
-  const [profile, plans, runs, activities, wellness, tests, body, feedback, sync, anyActivity, goals, icu, whoop] = await Promise.all([
-    supabase.from("profiles").select("name, username, wellness_token").eq("id", user.id).maybeSingle(),
+  const [profile, plans, runs, activities, wellness, tests, body, feedback, sync, anyActivity, goals, icu, whoop, onboarding, links] = await Promise.all([
+    supabase.from("profiles").select("name, username, wellness_token, sports").eq("id", user.id).maybeSingle(),
     safe<{ period_start: string; full_report: string | null }>(admin.from("coach_reports").select("period_start, full_report")
       .eq("user_id", user.id).eq("period_type", "week").in("period_start", [monday, nextMonday])),
     /*
@@ -95,6 +97,8 @@ export default async function HomePage() {
     // nem de cansaço (Sérgio, 29/09) — ver `health-access.ts`.
     admin.from("intervals_connections").select("user_id").eq("user_id", user.id).maybeSingle(),
     admin.from("whoop_connections").select("user_id").eq("user_id", user.id).maybeSingle(),
+    admin.from("profiles").select("onboarding_completed_at").eq("id", user.id).maybeSingle(),
+    loadSessionActivityLinks(supabase, user.id, monday, today),
   ]);
 
   const plan = parsePlan(plans.find(r => r.period_start === monday)?.full_report);
@@ -105,13 +109,15 @@ export default async function HomePage() {
   // A carga olha seis meses; o resto da página, a vida inteira.
   const recentRuns = runs.filter(r => r.date >= athleteDaysAgoStr(180, now));
   const latestTest = tests[0] ?? null;
+  const runsEnabled = normalizeSports(profile.data?.sports).includes("corrida");
 
   const todayView = buildToday({
-    plan, runs: weekRuns, activities: weekActivities, today, weekStart: monday, hasTest: !!latestTest,
+    plan, runs: weekRuns, activities: weekActivities, today, weekStart: monday,
+    hasTest: !!latestTest, runsEnabled, links,
   });
   const week = weekMovement({
     weekStart: monday, today, plan, runs: weekRuns, activities: weekActivities,
-    wellness: wellness.filter(w => w.date >= monday), weightKg,
+    wellness: wellness.filter(w => w.date >= monday), weightKg, links,
   });
   const recovery = await loadRecoveryInputs(supabase, user.id, now).then(r => r.recovery, () => null);
 
@@ -180,11 +186,12 @@ export default async function HomePage() {
           week={week}
           tomorrow={tomorrow}
           attention={attention}
-          refreshKey={weekRuns.map(r => r.id).join(",")}
+          refreshKey={[...weekRuns, ...weekActivities].map(item => item.id).join(",")}
           firstName={userName?.trim().split(" ")[0] ?? null}
           userName={(profile.data?.name as string | null) ?? null}
           username={(profile.data?.username as string | null) ?? null}
           isNewUser={runs.length === 0 && anyActivity.length === 0}
+          needsOnboarding={onboarding.error ? runs.length === 0 && anyActivity.length === 0 : !onboarding.data?.onboarding_completed_at}
           overtraining={overtraining}
           calorieDay={calorieBreakdown(weekRuns, weekActivities, weightKg)}
           lastSyncAt={sync[0]?.created_at ?? null}
@@ -194,6 +201,7 @@ export default async function HomePage() {
               goals={goals}
               latestTest={latestTest}
               testStatus={testStatus(latestTest)}
+              runsEnabled={runsEnabled}
               activities={activities}
             />
           }

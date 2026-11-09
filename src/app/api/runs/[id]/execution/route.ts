@@ -10,11 +10,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { analyzeExecution } from "@/lib/workout-execution";
-import { loadWeeklyPlan, mondayOf } from "@/lib/weekly-plan";
+import { inferRunSession, loadSessionActivityLinks } from "@/lib/session-activity-link-db";
+import { linkedReference, sessionLinkFor } from "@/lib/session-activity-link";
 import type { KmSplit } from "@/lib/run-streams";
-import type { WeeklyPlanDay } from "@/types";
-
-const DAY_KEYS: WeeklyPlanDay["day"][] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient();
@@ -25,7 +23,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 
   const { data: run } = await admin
     .from("runs").select("id, user_id, date, distance_km, type")
-    .eq("id", params.id).maybeSingle();
+    .eq("id", params.id).eq("user_id", user.id).is("deleted_at", null).maybeSingle();
 
   if (!run || run.user_id !== user.id) {
     return NextResponse.json({ error: "Corrida não encontrada" }, { status: 404 });
@@ -45,19 +43,14 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     return NextResponse.json({ available: false, reason: "no_splits" });
   }
 
-  // The prescription for the day this run happened on.
-  const runDate = new Date(`${run.date}T12:00:00`);
-  const weekStart = mondayOf(runDate);
-  const { plan } = await loadWeeklyPlan(admin, user.id, weekStart)
-    .catch(() => ({ plan: null }));
-
-  const dayKey = DAY_KEYS[runDate.getDay()];
-  const planned = plan?.days?.find(d => d.day === dayKey) ?? null;
+  const links = await loadSessionActivityLinks(supabase, user.id, run.date, run.date);
+  const explicit = linkedReference(sessionLinkFor(links, run.date, "corrida"), { kind: "run", id: run.id });
+  const planned = explicit === undefined ? await inferRunSession(admin, user.id, run).catch(() => null) : explicit;
 
   if (!planned || planned.type === "rest") {
     return NextResponse.json({
       available: false,
-      reason: planned ? "rest_day" : "no_plan",
+      reason: "no_reference",
       // An unplanned run is still worth seeing — just without a comparison.
       analysis: analyzeExecution(null, splits),
     });

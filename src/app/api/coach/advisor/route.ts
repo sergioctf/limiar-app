@@ -25,6 +25,9 @@ import { normalizeStrengthPrefs } from "@/lib/strength-prefs";
 import { loadWeeklyPlan, mondayOf, weeklyVolumesBefore, ensureWeeklyPlan } from "@/lib/weekly-plan";
 import { exerciseById } from "@/lib/exercises";
 import { computeAdherenceHistory } from "@/lib/plan-adherence";
+import { loadSessionActivityLinks } from "@/lib/session-activity-link-db";
+import { linkedReference, sessionLinkFor } from "@/lib/session-activity-link";
+import { dayStatus } from "@/lib/day-status";
 import { analyzeExecution, executionPattern, type ExecutionAnalysis } from "@/lib/workout-execution";
 import type { KmSplit as RunStreamSplit } from "@/lib/run-streams";
 import { brtDateStr } from "@/lib/plan-notify";
@@ -90,12 +93,12 @@ export async function GET() {
     try { const { data } = await p; return data ?? fallback; } catch { return fallback; }
   }
 
-  const [profile, runs, strengthRows, races, plan, reports, activities] = await Promise.all([
+  const [profile, runs, strengthRows, races, plan, reports, activities, links] = await Promise.all([
     safe<{ training_prefs: unknown; strength_prefs: unknown } | null>(
       admin.from("profiles").select("training_prefs, strength_prefs").eq("id", user.id).single(), null),
     safe<Run[]>(
       admin.from("runs")
-        .select("date, distance_km, duration_seconds, moving_time_seconds, elapsed_time_seconds, avg_pace_seconds_per_km, avg_hr, type")
+        .select("id, date, distance_km, duration_seconds, moving_time_seconds, elapsed_time_seconds, avg_pace_seconds_per_km, avg_hr, type")
         .eq("user_id", user.id).gte("date", sinceStr).is("deleted_at", null) as never, []),
     safe<Array<{ date: string; exercise_id: string; weight_kg: number | null; reps: number | null; rir: number | null }>>(
       admin.from("strength_logs").select("date, exercise_id, weight_kg, reps, rir")
@@ -109,9 +112,10 @@ export async function GET() {
       admin.from("coach_reports").select("period_type, period_start, full_report")
         .eq("user_id", user.id).eq("period_type", "week")
         .order("period_start", { ascending: false }).limit(6) as never, []),
-    safe<Array<{ date: string; sport_type: string }>>(
-      admin.from("activities").select("date, sport_type")
+    safe<Array<{ id: string; date: string; sport_type: string; duration_seconds: number | null; distance_m: number | null }>>(
+      admin.from("activities").select("id, date, sport_type, duration_seconds, distance_m")
         .eq("user_id", user.id).gte("date", sinceStr).is("deleted_at", null) as never, []),
+    loadSessionActivityLinks(admin, user.id, sinceStr),
   ]);
 
   const prefs         = normalizePrefs(profile?.training_prefs);
@@ -185,7 +189,7 @@ export async function GET() {
   };
 
   // Only weeks that actually had something scheduled in the past count.
-  const scored = computeAdherenceHistory(reports, runs as never, activities, 4)
+  const scored = computeAdherenceHistory(reports, runs as never, activities, 4, links)
     .map(w => w.score)
     .filter((s): s is number => s != null);
   const adherence = scored.length >= 2
@@ -210,7 +214,7 @@ export async function GET() {
       if (rows.length === 0) return null;
 
       const { data: runRows } = await admin
-        .from("runs").select("id, date").in("id", rows.map(r => r.run_id));
+        .from("runs").select("id, date").eq("user_id", user.id).is("deleted_at", null).in("id", rows.map(r => r.run_id));
       const dateById = new Map(
         ((runRows ?? []) as Array<{ id: string; date: string }>).map(r => [r.id, r.date]),
       );
@@ -232,9 +236,12 @@ export async function GET() {
         }
         const dayKey = DAY_KEYS[d.getDay()];
         const planned = planCache.get(monday)!.find(x => x.day === dayKey) ?? null;
-        if (!planned || planned.type === "rest") continue;
-
-        analyses.push(analyzeExecution(planned, splits));
+        const explicit = linkedReference(sessionLinkFor(links, date, "corrida"), { kind: "run", id: row.run_id });
+        const status = dayStatus({ date, planned, runs, activities: [], links });
+        const assigned = status.done.some(item => item.planned && item.id === row.run_id);
+        const reference = explicit === undefined ? (assigned ? planned : null) : explicit;
+        if (!reference) continue;
+        analyses.push(analyzeExecution(reference, splits));
       }
 
       return executionPattern(analyses);
@@ -245,7 +252,7 @@ export async function GET() {
 
   // Which weekday keeps needing to bend, over the last eight weeks.
   const dayTrouble = troubledDays(
-    computeAdherenceHistory(reports, runs as never, activities, 8),
+    computeAdherenceHistory(reports, runs as never, activities, 8, links),
     new Date().toISOString().slice(0, 10),
   );
 

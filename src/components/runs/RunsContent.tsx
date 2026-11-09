@@ -127,17 +127,17 @@ export function RunsContent({ runs, activities = [], initialSport = null }: Prop
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="page-header">Atividades</h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-surface-100">Histórico</h1>
           <p className="text-surface-500 text-sm">
             {count} {count === 1 ? "atividade" : "atividades"}{showRuns ? ` · ${totalKm.toFixed(1).replace(".", ",")} km de corrida` : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/runs/map" className="btn-secondary">
+          <Link href="/runs/map" aria-label="Mapa de atividades" className="btn-secondary">
             <MapIcon className="w-4 h-4" />
             <span className="hidden sm:inline">Mapa</span>
           </Link>
-          <Link href="/runs/new" className="btn-primary">
+          <Link href="/runs/new" aria-label="Registrar atividade" className="btn-primary">
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Nova</span>
           </Link>
@@ -146,16 +146,15 @@ export function RunsContent({ runs, activities = [], initialSport = null }: Prop
 
       {/* Every sport in one history: pick one, or see them all together. */}
       {sportsPresent.length > 0 && (
-        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none" role="tablist" aria-label="Esporte">
+        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide" role="group" aria-label="Modalidade">
           {["tudo", "corrida", ...sportsPresent].map(k => (
             <button
               key={k}
               type="button"
-              role="tab"
-              aria-selected={sport === k}
+              aria-pressed={sport === k}
               onClick={() => setSport(k)}
               className={`shrink-0 inline-flex items-center gap-1.5 min-h-[40px] px-3 rounded-full text-sm font-medium border transition-colors ${
-                sport === k ? "bg-surface-600 border-surface-500 text-surface-100" : "border-surface-700 text-surface-400 hover:text-surface-200"
+                sport === k ? "limiar-segment-active border-brand-500/40 text-brand-400" : "border-surface-700 text-surface-400 hover:text-surface-200"
               }`}
             >
               {k !== "tudo" && <SportGlyph sport={k} className="w-3.5 h-3.5" />}
@@ -172,6 +171,7 @@ export function RunsContent({ runs, activities = [], initialSport = null }: Prop
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-500" />
             <input
               type="search"
+              aria-label="Buscar atividades"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={sport === "corrida" ? "Buscar corrida..." : "Buscar atividade..."}

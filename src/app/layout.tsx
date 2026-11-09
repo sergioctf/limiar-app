@@ -1,11 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./aerospace.css";
 import { ServiceWorkerRegistration } from "@/components/PushNotificationButton";
 import { themeBootScript } from "@/lib/theme";
+import { isDevPreview } from "@/lib/dev-preview";
 
 export const metadata: Metadata = {
   title: "Limiar — Performance · Saúde · Evolução",
-  description: "Dashboard pessoal de performance na corrida. Histórico, evolução, projeções e estratégias.",
+  description: "Treino, recuperação e evolução com o seu treinador pessoal de performance.",
   manifest: "/manifest.json",
   icons: {
     icon:  "/limiar_icone_app.png",
@@ -21,11 +23,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width:         "device-width",
   initialScale:  1,
-  maximumScale:  1,
-  userScalable:  false,
   // Both values are rewritten before first paint by the boot script; these
   // are only what a client with JavaScript disabled sees.
-  themeColor:    "#0a0a0a",
+  themeColor:    "#08070d",
   colorScheme:   "dark light",
   viewportFit:   "cover", // Safe area for notch
 };
@@ -43,7 +43,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeBootScript() }} />
       </head>
       <body className="min-h-screen bg-surface-900">
-        <ServiceWorkerRegistration />
+        {!isDevPreview() && <ServiceWorkerRegistration />}
         {children}
       </body>
     </html>

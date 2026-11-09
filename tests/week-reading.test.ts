@@ -50,18 +50,20 @@ describe("how last week enters the next plan", () => {
     expect(q.options.map(o => o.value)).toEqual(["life", "body"]);
   });
 
-  it("holds an unexplained week once, and asks what happened", () => {
+  it("holds an unexplained week without increasing, and asks what happened", () => {
     const r = readWeek({ plannedKm: 19, actualKm: 9 });
     expect(r.reason).toBe("unknown");
     expect(r.creditedKm).toBe(19);
+    expect(r.noRamp).toBe(true);
     expect(r.ask).toBe("what_happened");
   });
 
-  it("stops holding a second unexplained week in a row", () => {
+  it("asks again without silently reducing a second unexplained week", () => {
     const r = readWeek({ plannedKm: 19, actualKm: 9, heldLastWeek: true });
-    expect(r.creditedKm).toBe(9);
-    expect(r.holding).toBe(false);
-    expect(r.ask).toBe("what_happened");
+    expect(r.creditedKm).toBe(19);
+    expect(r.holding).toBe(true);
+    expect(r.noRamp).toBe(true);
+    expect(r.ask).toBe("does_it_fit");
   });
 
   it("asks whether the plan still fits after two weeks held for life", () => {

@@ -31,7 +31,7 @@ export function PageHeader({ title, subtitle, icon, actions }: PageHeaderProps) 
   return (
     <header className="flex items-center justify-between gap-3">
       <div className="min-w-0">
-        <h1 className="page-header flex items-center gap-2">
+        <h1 className="flex items-center gap-2 text-2xl sm:text-3xl font-semibold tracking-tight text-surface-100">
           {icon}
           {title}
         </h1>
@@ -67,7 +67,7 @@ export function HeaderAction({
     "relative inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-xl",
     "transition-all duration-150 active:scale-90",
     primary
-      ? "bg-brand-500 hover:bg-brand-600 text-white"
+      ? "bg-brand-600 hover:bg-brand-700 text-white"
       : "bg-surface-800 hover:bg-surface-700 text-surface-300 border border-surface-700",
   ].join(" ");
 

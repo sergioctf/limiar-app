@@ -102,8 +102,8 @@ export function AppleHealthSyncCard() {
     <div className="card p-5">
       <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between gap-3 text-left">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-orange-500/15 flex items-center justify-center shrink-0">
-            <Flame className="w-5 h-5 text-orange-400" />
+          <div className="w-9 h-9 rounded-xl bg-brand-500/15 flex items-center justify-center shrink-0">
+            <Flame className="w-5 h-5 text-brand-400" />
           </div>
           <div className="min-w-0">
             <h2 className="section-title">Calorias do dia</h2>

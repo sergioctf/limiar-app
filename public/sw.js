@@ -60,30 +60,16 @@ self.addEventListener("notificationclick", (event) => {
 
 // ── Offline cache ─────────────────────────────────────────────────────────────
 
-const CACHE_NAME  = "limiar-cache-v3";
+const CACHE_NAME  = "limiar-public-v6";
 const OFFLINE_URL = "/offline";
 
 // Precached on install so the offline fallback always works
 const PRECACHE_URLS = [OFFLINE_URL, "/manifest.json", "/limiar_icone_app.png"];
 
-// Routes worth having available without signal. The dashboard and the coach
-// carry the day's workout — the two screens actually opened mid-training.
-const PRIORITY_ROUTES = ["/", "/coach"];
-
-// Data endpoints worth serving stale when offline (GET only)
-const CACHEABLE_API_PATHS = [
-  "/api/coach/weekly-plan",
-  "/api/coach/training-prefs",
-  "/api/coach/sports",
-  "/api/coach/full-analysis",
-  "/api/performance-tests",
-  "/api/friends",
-];
-
 // Static assets: hashed Next.js chunks, fonts and images are immutable
 function isStaticAsset(url) {
   return (
-    url.pathname.startsWith("/_next/static/") ||
+    (url.pathname.startsWith("/_next/static/") && /[.-][0-9a-f]{8,}\.[a-z]+$/i.test(url.pathname)) ||
     url.pathname.startsWith("/api/icons/") ||
     /\.(png|jpg|jpeg|webp|svg|ico|woff2?)$/.test(url.pathname)
   );
@@ -98,24 +84,12 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // 1. Page navigations: network-first → cached page → offline fallback
+  // Authenticated pages are never cached across accounts.
   if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        })
-        .catch(async () => {
-          const cache = await caches.open(CACHE_NAME);
-          return (await cache.match(request))
-              || (await cache.match(OFFLINE_URL))
-              || new Response("Offline", { status: 503 });
-        })
-    );
+    event.respondWith(fetch(request).catch(async () => {
+      const cache = await caches.open(CACHE_NAME);
+      return (await cache.match(OFFLINE_URL)) || new Response("Offline", { status: 503 });
+    }));
     return;
   }
 
@@ -136,28 +110,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 3. Selected data APIs: network-first with cache fallback
-  if (CACHEABLE_API_PATHS.some((path) => url.pathname.includes(path))) {
-    event.respondWith(
-      caches.open(CACHE_NAME).then((cache) =>
-        fetch(request)
-          .then((response) => {
-            if (response.status === 200) cache.put(request, response.clone());
-            return response;
-          })
-          .catch(async () =>
-            (await cache.match(request))
-              || new Response(JSON.stringify({ offline: true }), {
-                   status: 503,
-                   headers: { "Content-Type": "application/json" },
-                 })
-          )
-      )
-    );
-    return;
-  }
 
-  // 4. Everything else: untouched (browser default)
 });
 
 // ── Install / activate ────────────────────────────────────────────────────────
@@ -175,17 +128,8 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(
-        keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
+        keys.filter((k) => (/^limiar-cache-v[1-3]$/.test(k) || /^limiar-public-v[45]$/.test(k))).map((k) => caches.delete(k))
       ))
       .then(() => clients.claim())
-      // Warm the screens the athlete opens mid-training, so the first time
-      // they lose signal isn't the first time these are needed from cache.
-      .then(() => caches.open(CACHE_NAME).then((cache) =>
-        Promise.all(PRIORITY_ROUTES.map((route) =>
-          fetch(route, { credentials: "same-origin" })
-            .then((res) => (res.ok ? cache.put(route, res) : null))
-            .catch(() => null)
-        ))
-      ))
   );
 });

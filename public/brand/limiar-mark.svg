@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="13 8 82 86" fill="none">
+  <defs>
+    <linearGradient id="face" x1=".16" y1=".86" x2=".83" y2=".08" gradientUnits="objectBoundingBox">
+      <stop stop-color="#9a62ed"/><stop offset=".26" stop-color="#25203c"/><stop offset=".53" stop-color="#eef1fa"/><stop offset=".71" stop-color="#c9d0e6"/><stop offset="1" stop-color="#555d7a"/>
+    </linearGradient>
+    <linearGradient id="edge" x2="1" y2=".7" gradientUnits="objectBoundingBox">
+      <stop stop-color="#5c478b"/><stop offset=".48" stop-color="#eef1fa"/><stop offset="1" stop-color="#78829d"/>
+    </linearGradient>
+  </defs>
+  <path d="M24 78 53 25Q57 18 68 15L82 11 53 56Q44 69 24 78Z" fill="url(#face)" stroke="#f1eaff" stroke-width=".65"/>
+  <path d="M26 79 59 72Q64 71 70 71H92L84 78Q79 83 70 83H18Z" fill="url(#edge)" stroke="#dac5ff" stroke-width=".65"/>
+  <path d="M22 87H66L61 91H16Z" fill="#b6a4da"/>
+</svg>

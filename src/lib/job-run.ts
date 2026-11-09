@@ -39,7 +39,7 @@
  * recibo.
  */
 
-export type JobStatus = "ok" | "error" | "skipped";
+export type JobStatus = "ok" | "error" | "partial" | "skipped";
 
 /** O cliente administrativo, sem arrastar o tipo inteiro do Supabase. */
 type Admin = {
@@ -163,7 +163,7 @@ export function withJobReceipt<
 
       const corpo = await res.clone().json().catch(() => null) as Record<string, unknown> | null;
       await run.ok({
-        status: res.status >= 400 ? "error" : resumoPulado(corpo) ? "skipped" : "ok",
+        status: receiptStatus(res.status, corpo),
         items: contarItens(corpo),
         summary: resumoDe(corpo, res.status),
         detail: corpo,
@@ -176,8 +176,12 @@ export function withJobReceipt<
   };
 }
 
-const resumoPulado = (c: Record<string, unknown> | null) =>
-  typeof c?.skipped === "string" || typeof c?.message === "string";
+export function receiptStatus(status: number, body: Record<string, unknown> | null): JobStatus {
+  if (status >= 400 || body?.ok === false) return "error";
+  if (typeof body?.failures === "number" && body.failures > 0) return "partial";
+  if (typeof body?.skipped === "string") return "skipped";
+  return "ok";
+}
 
 /** Quantos atletas a execução tocou, pelo nome que cada cron deu ao número. */
 function contarItens(corpo: Record<string, unknown> | null): number | undefined {
@@ -194,6 +198,7 @@ function contarItens(corpo: Record<string, unknown> | null): number | undefined 
 /** Uma linha legível, que é o que se lê primeiro na tela de saúde. */
 function resumoDe(corpo: Record<string, unknown> | null, status: number): string {
   if (status >= 400) return `HTTP ${status}`;
+  if (typeof corpo?.failures === "number" && corpo.failures > 0) return `${corpo.failures} falha(s) na execução.`;
   if (typeof corpo?.skipped === "string") return `pulado: ${corpo.skipped}`;
   if (typeof corpo?.message === "string") return String(corpo.message);
   const n = contarItens(corpo);

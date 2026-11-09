@@ -16,6 +16,10 @@ Dashboard web pessoal para acompanhar evolução na corrida. Combina dados objet
 
 ---
 
+## Prévia local para design e desenvolvimento
+
+Rode `npm ci` e `npm run dev:preview`, depois abra [127.0.0.1:4310/dev](http://127.0.0.1:4310/dev). A prévia usa as telas reais com dados fictícios, sem login manual ou arquivo de credenciais. Veja o [guia de prévia](./docs/previa-local.md) para cenários, caminhos e como compartilhar o trabalho.
+
 ## Setup rápido
 
 ### 1. Clonar e instalar

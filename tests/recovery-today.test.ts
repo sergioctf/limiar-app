@@ -79,7 +79,7 @@ describe("recuperação de hoje", () => {
   it("tiro já feito: nada a trocar, e a frase diz que foi feito", () => {
     const r = buildRecoveryToday({ ...base, rows: [], doneKm: 5.2 });
     expect(r.sessionDone).toBe(true);
-    expect(r.short).toBe("Treino de hoje feito");
+    expect(r.short).toBe("Sessão principal registrada");
     expect(r.offer).toBeNull();
   });
 

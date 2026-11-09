@@ -138,11 +138,11 @@ export function RunDetailContent({ run }: Props) {
         </div>
       </div>
 
-      {/* Header card */}
-      <div className="card p-5">
+      {/* Resumo e dados medidos. */}
+      <div className="limiar-feature p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex-1 min-w-0">
-            <h1 className="page-header truncate">{run.name}</h1>
+            <h1 className="break-words text-2xl font-semibold tracking-tight text-surface-100">{run.name}</h1>
             <p className="text-surface-500 text-sm mt-0.5">{formatDate(run.date)}</p>
           </div>
           <div className="flex flex-col items-end gap-1.5">
@@ -217,7 +217,7 @@ export function RunDetailContent({ run }: Props) {
           )}
           {run.calories && (
             <span className="flex items-center gap-1.5">
-              <Flame className="w-3.5 h-3.5 text-orange-400" />
+              <Flame className="w-3.5 h-3.5 text-brand-400" />
               <span className="text-surface-200 font-medium">{run.calories} kcal</span>
             </span>
           )}
@@ -368,7 +368,7 @@ export function RunDetailContent({ run }: Props) {
               <div className="w-7 h-7 rounded-lg bg-purple-500/20 flex items-center justify-center">
                 <Sparkles className="w-3.5 h-3.5 text-purple-400" />
               </div>
-              <h2 className="section-title">Análise do Treinador IA</h2>
+              <h2 className="section-title">Leitura da corrida</h2>
             </div>
             {/* Re-analyze button (useful after adding notes) */}
             <button
@@ -385,9 +385,11 @@ export function RunDetailContent({ run }: Props) {
               {analyzing ? "Analisando…" : "Re-analisar"}
             </button>
           </div>
-          <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
-            {feedback}
-          </p>
+          <details className="text-sm text-surface-300">
+            <summary className="min-h-[44px] cursor-pointer py-2.5 font-medium">Ver análise salva</summary>
+            <p className="mb-2 text-xs text-surface-400">Use o feedback do treino e o plano vigente para decidir o que fazer a seguir.</p>
+            <p className="leading-relaxed whitespace-pre-wrap">{feedback}</p>
+          </details>
           {analyzeError && (
             <p className="text-xs text-red-400 mt-3">{analyzeError}</p>
           )}

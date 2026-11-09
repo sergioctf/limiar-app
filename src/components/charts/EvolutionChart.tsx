@@ -175,7 +175,7 @@ export function EvolutionChart({ runs, height = 220 }: { runs: Run[]; height?: n
                 {avgPace && (
                   <ReferenceLine
                     y={avgPace}
-                    stroke="#f97316"
+                    stroke="#8b5cf6"
                     strokeDasharray="4 4"
                     strokeOpacity={0.5}
                   />
@@ -183,10 +183,10 @@ export function EvolutionChart({ runs, height = 220 }: { runs: Run[]; height?: n
                 <Line
                   type="monotone"
                   dataKey="pace"
-                  stroke="#f97316"
+                  stroke="#8b5cf6"
                   strokeWidth={2}
-                  dot={{ r: 3, fill: "#f97316", strokeWidth: 0 }}
-                  activeDot={{ r: 5, fill: "#f97316" }}
+                  dot={{ r: 3, fill: "#8b5cf6", strokeWidth: 0 }}
+                  activeDot={{ r: 5, fill: "#8b5cf6" }}
                 />
               </LineChart>
             </ResponsiveContainer>

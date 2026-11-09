@@ -15,6 +15,7 @@ import { SPORTS, activityCalories, toSportKey, type SportKey } from "@/lib/sport
 import { sessionTarget, type MeasureBy } from "@/lib/measure";
 import { looksLikeForgottenWatch, movingSeconds } from "@/lib/run-time";
 import type { WeeklyPlanDay } from "@/types";
+import { sameActivity, sessionLinkFor, type SessionActivityLink } from "@/lib/session-activity-link";
 
 export interface DayRun {
   id?: string;
@@ -51,6 +52,9 @@ export interface PlannedSession {
   /** "7 km", "40 min" — a glanceable line, never a paragraph. */
   detail: string | null;
   done: boolean;
+  /** Requires the athlete to pick a record. */
+  unresolved?: boolean;
+  explicitlyLinked?: boolean;
 }
 
 export interface DoneItem {
@@ -58,6 +62,7 @@ export interface DoneItem {
   id?: string;
   sport: SportKey | null;
   label: string;
+  recordName?: string | null;
   minutes: number;
   km: number | null;
   kcal: number | null;
@@ -111,6 +116,7 @@ export function dayStatus(input: {
   weightKg?: number | null;
   /** A unidade em que o atleta lê o plano; só muda o texto, nunca a conta. */
   measureBy?: MeasureBy;
+  links?: SessionActivityLink[];
 }): DayStatus {
   const done: DoneItem[] = [
     ...input.runs
@@ -127,7 +133,7 @@ export function dayStatus(input: {
         const sport = toSportKey(a.sport_type);
         return {
           kind: "activity" as const, id: a.id, sport,
-          label: sport ? SPORTS[sport].label : (a.name || a.sport_type),
+          label: sport ? SPORTS[sport].label : (a.name || a.sport_type), recordName: a.name,
           minutes: Math.round((a.duration_seconds ?? 0) / 60),
           km: a.distance_m && a.distance_m > 0 ? Math.round(a.distance_m / 10) / 100 : null,
           kcal: Math.round(activityCalories(a, input.weightKg)) || null,
@@ -137,9 +143,19 @@ export function dayStatus(input: {
   ];
 
   const sessions: PlannedSession[] = plannedSessionsOf(input.planned, input.measureBy).map(s => {
-    const match = done.find(d => !d.planned && d.sport === s.sport);
+    const candidates = done.filter(d => !d.planned && d.sport === s.sport
+      && d.kind === (s.sport === "corrida" ? "run" : "activity"));
+    const choice = sessionLinkFor(input.links ?? [], input.date, s.sport);
+    const link = choice?.session_type === s.type ? choice : null;
+    const match = link
+      ? candidates.find(d => d.id && sameActivity(link, { kind: d.kind, id: d.id }))
+      : candidates.length === 1 ? candidates[0] : undefined;
     if (match) match.planned = true;
-    return { ...s, done: !!match };
+    return {
+      ...s, done: Boolean(match),
+      ...(!match && candidates.length > 0 ? { unresolved: true } : {}),
+      ...(link && match ? { explicitlyLinked: true } : {}),
+    };
   });
 
   return {
@@ -149,6 +165,16 @@ export function dayStatus(input: {
     allDone: sessions.length > 0 && sessions.every(s => s.done),
     anyDone: done.length > 0,
   };
+}
+
+/** A legacy after-the-fact note cannot be attributed to a newly chosen record. */
+export function adaptationApplies(day: WeeklyPlanDay | null | undefined, status: DayStatus): boolean {
+  const adaptation = day?.adaptation;
+  if (!adaptation) return false;
+  if (adaptation.when === "before") return true;
+  const run = status.done.find(item => item.planned && item.kind === "run");
+  if (!run) return false;
+  return adaptation.runId ? run.id === adaptation.runId : !status.sessions.find(s => s.sport === "corrida")?.explicitlyLinked;
 }
 
 /** The session that decides the day — the run when there is one — is done. */

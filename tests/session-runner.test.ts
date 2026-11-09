@@ -144,7 +144,7 @@ describe("voltar de onde parou", () => {
   const guardado = JSON.stringify({ date: "2026-10-03", state });
 
   it("a chave é do dia", () => {
-    expect(runnerStorageKey("2026-10-03")).toBe("limiar-exec-2026-10-03");
+    expect(runnerStorageKey("atleta-a", "2026-10-03")).not.toBe(runnerStorageKey("atleta-b", "2026-10-03"));
   });
 
   it("devolve o estado do mesmo dia", () => {

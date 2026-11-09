@@ -2,6 +2,7 @@
 
 import { Suspense, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
+import { BrandLockup } from "@/components/brand/BrandLockup";
 import { createClient } from "@/lib/supabase/client";
 import { Mail, Lock, Loader2, Key, Eye, EyeOff, ArrowLeft, CheckCircle2 } from "lucide-react";
 
@@ -10,7 +11,7 @@ type Mode = "login" | "signup" | "forgot";
 /** Messages for the error codes the auth callback can redirect back with. */
 const CALLBACK_ERRORS: Record<string, string> = {
   auth_callback_failed:
-    "O link expirou ou já foi usado. Peça um novo email de confirmação abaixo.",
+    "O link expirou ou já foi usado. Tente entrar ou peça a redefinição da senha.",
   recovery_failed:
     "O link de redefinição expirou. Solicite um novo.",
 };
@@ -81,7 +82,7 @@ function AuthForm() {
       const inviteRes = await fetch("/api/auth/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: accessCode }),
+        body: JSON.stringify({ code: accessCode, email, password }),
       });
       const invite = await inviteRes.json().catch(() => null);
       if (!inviteRes.ok || !invite?.ok) {
@@ -89,19 +90,10 @@ function AuthForm() {
         return;
       }
 
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-      });
-      if (error) throw error;
-
-      // Consume the invite only after the account exists.
-      fetch("/api/auth/invite", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteId: invite.inviteId, email }),
-      }).catch(() => {});
+      if (invite.signedIn) {
+        window.location.href = "/";
+        return;
+      }
 
       setSuccess("Conta criada! Confirme pelo link que enviamos no seu email — verifique também o spam.");
     } catch (err: unknown) {
@@ -125,19 +117,9 @@ function AuthForm() {
     : "Enviar link de redefinição";
 
   return (
-    <div className="min-h-screen bg-surface-900 flex flex-col items-center justify-center p-4">
-      {/* Brand */}
-      <div className="flex flex-col items-center mb-10">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/limiar_logo.png"
-          alt="Limiar — Performance · Saúde · Evolução"
-          className="w-72 max-w-[85vw] select-none"
-          draggable={false}
-        />
-      </div>
-
-      <div className="w-full max-w-sm card p-6">
+    <div className="limiar-shell min-h-[100dvh] flex flex-col items-center justify-center px-4 py-10">
+      <BrandLockup className="mb-6" />
+      <div className="w-full max-w-sm limiar-feature p-5 sm:p-6">
         {mode === "forgot" ? (
           <button
             onClick={() => switchMode("login")}
@@ -146,13 +128,13 @@ function AuthForm() {
             <ArrowLeft className="w-4 h-4" /> Voltar
           </button>
         ) : (
-          <div className="flex gap-1 mb-6 bg-surface-700 rounded-xl p-1">
+          <div className="limiar-segments flex gap-1 mb-6 p-1">
             {(["login", "signup"] as const).map(m => (
               <button
                 key={m}
                 onClick={() => switchMode(m)}
                 className={`flex-1 min-h-[44px] rounded-lg text-sm font-semibold transition-all duration-150 ${
-                  mode === m ? "bg-brand-500 text-white shadow" : "text-surface-400 hover:text-surface-200"
+                  mode === m ? "limiar-segment-active text-surface-100" : "text-surface-400 hover:text-surface-200"
                 }`}
               >
                 {m === "login" ? "Entrar" : "Criar conta"}

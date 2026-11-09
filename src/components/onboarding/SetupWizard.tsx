@@ -266,8 +266,8 @@ export function SetupWizard({ initialName, initialUsername, onClose }: Props) {
               subtitle="Isso pode ficar para depois — o app já funciona." />
 
             <a href="/settings" className="card-hover p-3 flex items-start gap-3">
-              <span className="w-8 h-8 rounded-lg bg-orange-500/15 flex items-center justify-center shrink-0">
-                <Link2 className="w-4 h-4 text-orange-400" />
+              <span className="w-8 h-8 rounded-lg bg-brand-500/15 flex items-center justify-center shrink-0">
+                <Link2 className="w-4 h-4 text-brand-400" />
               </span>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-surface-100">Conectar o Strava</p>

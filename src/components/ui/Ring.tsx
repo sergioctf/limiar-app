@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { TONE, type Tone } from "./tone";
 
 /**
@@ -25,6 +25,7 @@ interface RingProps {
   thickness?: number;
   tone?: Tone;
   label?: string;
+  chrome?: boolean;
   /**
    * The same measure a week ago, drawn dimmed behind the live arc.
    *
@@ -45,8 +46,9 @@ const STROKE: Record<Tone, string> = {
 };
 
 export function Ring({
-  ratio, children, size = 120, thickness = 10, tone = "brand", label, ghost = null,
+  ratio, children, size = 120, thickness = 10, tone = "brand", label, ghost = null, chrome = false,
 }: RingProps) {
+  const metal = useId();
   const over = ratio > 1;
   const target = Math.max(0, Math.min(1, ratio));
   const t = over ? "good" : tone;
@@ -71,6 +73,15 @@ export function Ring({
   return (
     <div className="relative inline-flex items-center justify-center shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90" aria-hidden>
+        {chrome && (
+          <defs>
+            <linearGradient id={metal} x1="0" y1=".2" x2="1" y2=".75">
+              <stop stopColor="#6d28d9" /><stop offset=".33" stopColor="#b18aff" />
+              <stop offset=".54" stopColor="#eef1fa" /><stop offset=".75" stopColor="#78829d" />
+              <stop offset="1" stopColor="#8b5cf6" />
+            </linearGradient>
+          </defs>
+        )}
         <circle
           cx={size / 2} cy={size / 2} r={r}
           fill="none" strokeWidth={thickness}
@@ -91,7 +102,8 @@ export function Ring({
         <circle
           cx={size / 2} cy={size / 2} r={r}
           fill="none" strokeWidth={thickness} strokeLinecap="round"
-          className={`${STROKE[t]} transition-[stroke-dashoffset] duration-1000 ease-smooth`}
+          stroke={chrome ? `url(#${metal})` : undefined}
+          className={`${chrome ? "" : STROKE[t]} transition-[stroke-dashoffset] duration-700 ease-smooth`}
           style={{
             strokeDasharray: circumference,
             strokeDashoffset: circumference * (1 - drawn),

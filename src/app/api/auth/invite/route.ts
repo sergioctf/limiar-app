@@ -1,45 +1,48 @@
-/**
- * POST /api/auth/invite { code }
- * Checks a signup invite without ever sending the valid codes to the browser.
- *
- * Rate limited per IP: guessing codes should be expensive.
- */
 import { NextRequest, NextResponse } from "next/server";
-import { validateInvite, redeemInvite, INVITE_MESSAGES } from "@/lib/invites";
 import { checkRateLimit, getClientIP } from "@/lib/admin-rate-limit";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+
+const inviteErrors: Record<string, string> = {
+  invalid: "Código de convite inválido.",
+  expired: "Este convite expirou.",
+  exhausted: "Este convite já atingiu o limite de usos.",
+};
 
 export async function POST(request: NextRequest) {
-  const clientIP = getClientIP(request);
-  const { allowed, resetAt } = checkRateLimit(`invite:${clientIP}`, 10, 15 * 60 * 1000);
-
+  const { allowed } = checkRateLimit(`invite:${getClientIP(request)}`, 10, 15 * 60 * 1000);
   if (!allowed) {
-    return NextResponse.json(
-      { ok: false, error: "Muitas tentativas. Tente de novo mais tarde.", resetAt: new Date(resetAt).toISOString() },
-      { status: 429 },
-    );
+    return NextResponse.json({ error: "Muitas tentativas. Tente novamente mais tarde." }, { status: 429 });
+  }
+  const body = await request.json().catch(() => null);
+  const code = typeof body?.code === "string" ? body.code.trim() : "";
+  const email = typeof body?.email === "string" ? body.email.trim() : "";
+  const password = typeof body?.password === "string" ? body.password : "";
+  if (!code || code.length > 200 || !email || email.length > 254 || password.length < 6 || password.length > 1024) {
+    return NextResponse.json({ error: "Confira o convite, o e-mail e a senha." }, { status: 400 });
   }
 
-  const body = await request.json().catch(() => null);
-  const code = typeof body?.code === "string" ? body.code : "";
-
-  const result = await validateInvite(code);
-  if (!result.ok) {
-    return NextResponse.json({ ok: false, error: INVITE_MESSAGES[result.reason] }, { status: 400 });
+  const admin = createAdminClient();
+  const check = () => admin.rpc("signup_invite_status", { invite_code: code });
+  const { data: status, error: checkError } = await check();
+  if (checkError) {
+    return NextResponse.json({ error: "Cadastro indisponível agora. Tente novamente mais tarde." }, { status: 503 });
+  }
+  if (status !== "ok") {
+    return NextResponse.json({ error: inviteErrors[status] ?? inviteErrors.invalid }, { status: 400 });
   }
 
-  // The invite id is opaque and only useful paired with a completed signup.
-  return NextResponse.json({ ok: true, inviteId: result.inviteId });
-}
-
-/**
- * PUT /api/auth/invite { inviteId, email }
- * Marks an invite as used once the account was actually created.
- */
-export async function PUT(request: NextRequest) {
-  const body = await request.json().catch(() => null);
-  const inviteId = typeof body?.inviteId === "string" ? body.inviteId : null;
-  const email    = typeof body?.email === "string" ? body.email.slice(0, 200) : null;
-
-  await redeemInvite(inviteId, email);
-  return NextResponse.json({ ok: true });
+  const { data, error } = await createClient().auth.signUp({
+    email, password,
+    options: {
+      data: { signup_invite: code },
+      emailRedirectTo: new URL("/auth/callback", request.nextUrl.origin).toString(),
+    },
+  });
+  if (error) {
+    const { data: current } = await check();
+    return NextResponse.json({
+      error: inviteErrors[current] ?? "Não foi possível criar a conta. Confira o e-mail e a senha ou tente entrar.",
+    }, { status: 400 });
+  }
+  return NextResponse.json({ ok: true, signedIn: Boolean(data.session) });
 }

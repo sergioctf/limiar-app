@@ -1,47 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { athleteDateStr, athleteDaysAgoStr } from "@/lib/week";
-import { asksForCheckIn, matchFeedbackPlan, validFeedbackInput } from "@/lib/run-feedback";
-import { applyPlannedTest } from "@/lib/planned-test";
-import { loadPlannedTest } from "@/lib/weekly-plan";
+import { asksForCheckIn, validFeedbackInput } from "@/lib/run-feedback";
+import { linkedReference, sessionLinkFor } from "@/lib/session-activity-link";
+import { inferRunSession, loadSessionActivityLinks } from "@/lib/session-activity-link-db";
 import { lightenUpcomingRuns } from "@/lib/plan-edit";
 import { compareSessions, parseProposal, parsedLabel, recordExecuted, undoAdaptation } from "@/lib/session-adapt";
 import type { Execution } from "@/lib/run-feedback";
 import { dayKeyOf } from "@/lib/session-swap";
 import { mondayOf } from "@/lib/weekly-plan";
-import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
+import type { WeeklyPlanData } from "@/types";
 
 export const dynamic = "force-dynamic";
 const json = (value: unknown, status = 200) => NextResponse.json(value, { status, headers: { "Cache-Control": "private, no-store" } });
 const UUID = /^[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/i;
-const FIELDS = "run_id,status,effort,context,note,planned,reduce_requested,execution,executed_text,updated_at";
-
-async function planFor(db: ReturnType<typeof createClient>, userId: string, date: string) {
-  const monday = new Date(`${date}T12:00:00Z`);
-  monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() + 6) % 7);
-  const [reports, sameDay] = await Promise.all([
-    db.from("coach_reports").select("full_report").eq("user_id", userId)
-      .eq("period_type", "week").eq("period_start", monday.toISOString().slice(0, 10)),
-    db.from("runs").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("date", date).is("deleted_at", null),
-  ]);
-  if (reports.error || sameDay.error || reports.data?.length !== 1) return null;
-  try {
-    const plan = JSON.parse(reports.data[0].full_report);
-    // A plan generated after the run date cannot prove what was prescribed beforehand.
-    if (!plan.generated_at || athleteDateStr(new Date(plan.generated_at)) > date) return null;
-    if (!Array.isArray(plan.days)) return null;
-    /*
-      O teste de 3 km entra aqui como entra em todo lugar que lê o plano.
-
-      Sem isto, a corrida do teste não casava com sessão nenhuma: virava
-      "atividade fora do plano" e o app pedia o check-in normal de treino para
-      uma corrida que era, na verdade, uma medição (Sérgio, 01/10).
-    */
-    const test = await loadPlannedTest(db, userId);
-    const withTest = applyPlannedTest({ week_start: monday.toISOString().slice(0, 10), days: plan.days as WeeklyPlanDay[] }, test);
-    return matchFeedbackPlan(date, withTest.days, sameDay.count ?? 0);
-  } catch { return null; }
-}
+const FIELDS = "run_id,status,effort,context,note,planned,reduce_requested,execution,executed_text,updated_at,rpe,perception,adjusted_sessions";
 
 interface Lightening {
   /** False only when the plan could not be written: the request must not be recorded. */
@@ -98,7 +71,7 @@ async function lightenThisWeek(userId: string): Promise<Lightening> {
  * previsto" later puts it back.
  */
 async function recordExecution(
-  userId: string, run: { date: string; distance_km: number | null }, execution: Execution, text: string | null,
+  userId: string, run: { id: string; date: string; distance_km: number | null }, execution: Execution, text: string | null,
 ) {
   const admin = createAdminClient();
   const monday = new Date(`${run.date}T12:00:00Z`);
@@ -126,7 +99,7 @@ async function recordExecution(
     const compared = execution === "adapted" && parsed?.kind && label ? compareSessions(base, parsed.kind, label) : null;
     // The prescription stays on the day; what was done is recorded beside it.
     const applied = recordExecuted(plan, key, {
-      execution, label, text: text ?? null, km: Number(run.distance_km ?? 0), compared,
+      execution, label, text: text ?? null, km: Number(run.distance_km ?? 0), compared, runId: run.id,
     });
     if ("plan" in applied) next = applied.plan;
   }
@@ -139,7 +112,7 @@ export async function GET(request: NextRequest) {
   if (!user) return json({ error: "Entre novamente para ver seu check-in." }, 401);
   const id = request.nextUrl.searchParams.get("runId");
   if (id && !UUID.test(id)) return json({ error: "Corrida inválida." }, 400);
-  let query = db.from("runs").select("id,name,date,distance_km,avg_pace_seconds_per_km,avg_hr")
+  let query = db.from("runs").select("id,name,date,distance_km,duration_seconds,avg_pace_seconds_per_km,avg_hr")
     .eq("user_id", user.id).is("deleted_at", null).order("date", { ascending: false }).order("id");
   query = id ? query.eq("id", id) : query.gte("date", athleteDaysAgoStr(7)).lte("date", athleteDateStr()).limit(20);
   const { data: runs, error } = await query;
@@ -148,9 +121,13 @@ export async function GET(request: NextRequest) {
   const saved = await db.from("run_feedback").select(FIELDS)
     .eq("user_id", user.id).in("run_id", runs.map(r => r.id));
   if (saved.error) return json({ error: "O check-in está indisponível no momento. Tente novamente mais tarde." }, 503);
+  const dates = runs.map(run => run.date).sort();
+  const links = await loadSessionActivityLinks(db, user.id, dates[0], dates[dates.length - 1]);
   const all = await Promise.all(runs.map(async run => {
-    const feedback = saved.data?.find(f => f.run_id === run.id) ?? null;
-    return { run, feedback, planned: feedback ? feedback.planned : await planFor(db, user.id, run.date) };
+    const savedFeedback = saved.data?.find(f => f.run_id === run.id) ?? null;
+    const explicit = linkedReference(sessionLinkFor(links, run.date, "corrida"), { kind: "run", id: run.id });
+    const planned = explicit !== undefined ? explicit : savedFeedback ? savedFeedback.planned : await inferRunSession(db, user.id, run).catch(() => null);
+    return { run, feedback: savedFeedback ? { ...savedFeedback, planned } : null, planned };
   }));
   // O teste de 3 km tem o fluxo dele; a regra está em `asksForCheckIn`.
   return json({ items: all.filter(asksForCheckIn) });
@@ -166,10 +143,13 @@ export async function PUT(request: NextRequest) {
     .eq("user_id", user.id).is("deleted_at", null).maybeSingle();
   if (runError) return json({ error: "Não foi possível consultar a corrida." }, 500);
   if (!run) return json({ error: "Corrida não encontrada." }, 404);
-  const previous = await db.from("run_feedback").select("planned,reduce_requested").eq("run_id", run.id).eq("user_id", user.id).maybeSingle();
+  const previous = await db.from("run_feedback").select("planned,reduce_requested,rpe,perception,adjusted_sessions,status").eq("run_id", run.id).eq("user_id", user.id).maybeSingle();
   if (previous.error) return json({ error: "O check-in está indisponível. Suas respostas não foram salvas." }, 503);
-  const planned = previous.data ? previous.data.planned : await planFor(db, user.id, run.date);
+  const links = await loadSessionActivityLinks(db, user.id, run.date, run.date);
+  const explicit = linkedReference(sessionLinkFor(links, run.date, "corrida"), { kind: "run", id: run.id });
+  const planned = explicit !== undefined ? explicit : previous.data ? previous.data.planned : await inferRunSession(db, user.id, run).catch(() => null);
   const answered = body.status === "answered";
+  if (!answered && previous.data?.status === "answered") return json({ error: "O feedback desta atividade já foi registrado." }, 409);
   const reduce = answered && body.context === "session_too_hard" ? body.reduce === true : null;
 
   /*
@@ -192,6 +172,10 @@ export async function PUT(request: NextRequest) {
     effort: answered ? body.effort : null,
     context: answered ? body.context : null,
     note: answered ? body.note?.trim() || null : null,
+    rpe: answered ? body.rpe === undefined ? previous.data?.rpe ?? null : body.rpe : null,
+    perception: answered ? body.perception === undefined ? previous.data?.perception ?? null : body.perception : null,
+    adjusted_sessions: reduce === true && previous.data?.reduce_requested !== true
+      ? lightening.changes : previous.data?.adjusted_sessions ?? null,
     // Once asked for, a reduction stays recorded: editing the answer later
     // neither undoes the lighter sessions nor applies them a second time.
     reduce_requested: previous.data?.reduce_requested === true ? true : reduce,
@@ -206,8 +190,9 @@ export async function PUT(request: NextRequest) {
 
   // Best-effort: the answer is already saved, and the evaluation reads it from
   // there. Recording it on the plan is what keeps the week's adherence honest.
-  if (answered && body.execution) {
-    await recordExecution(user.id, run, body.execution, body.executedText ?? null).catch(() => {});
+  if (answered && body.execution && planned) {
+    const matched = explicit !== undefined || !previous.data || Boolean(await inferRunSession(db, user.id, run).catch(() => null));
+    if (matched) await recordExecution(user.id, run, body.execution, body.executedText ?? null).catch(() => {});
   }
 
   return json({ feedback: data, lightened: lightening.changes });

@@ -12,6 +12,7 @@
  * half an answer, and pretending otherwise is worse than saying so.
  */
 import type { WeeklyPlanData, WeeklyPlanDay } from "@/types";
+import type { SessionActivityLink } from "@/lib/session-activity-link";
 import { sessionWhy, type WhyContext } from "@/lib/session-why";
 import { dayStatus, type DayActivity, type DayRun, type DayStatus } from "@/lib/day-status";
 
@@ -56,6 +57,8 @@ interface Input {
   today: string;
   weekStart: string;
   hasTest: boolean;
+  runsEnabled?: boolean;
+  links?: SessionActivityLink[];
   /** Position in the block, so the reason can name it. */
   why?: WhyContext;
 }
@@ -78,7 +81,7 @@ export function buildToday(input: Input): Today {
     ? (input.plan?.days ?? []).find(d => d.day === key) ?? null
     : null;
   // Session by session, the same way every screen reads the day.
-  const status = dayStatus({ date: input.today, planned: session, runs: input.runs, activities: input.activities ?? [] });
+  const status = dayStatus({ date: input.today, planned: session, runs: input.runs, activities: input.activities ?? [], links: input.links });
 
   /*
    * The calibration nudge, when it is worth making.
@@ -87,7 +90,7 @@ export function buildToday(input: Input): Today {
    * the 3 km test as a session, and telling somebody to calibrate on the day
    * they were given the calibration workout is the app talking past itself.
    */
-  const needsTest = !input.hasTest && session?.type !== "test";
+  const needsTest = input.runsEnabled !== false && !input.hasTest && session?.type !== "test";
   const testPrompt: TodayPrompt = {
     kind: "test",
     text: "Faça o teste de 3 km para o plano ganhar ritmos e zonas de FC",
@@ -101,6 +104,7 @@ export function buildToday(input: Input): Today {
       headline: "Sem plano para hoje",
       detail: "Gere o plano da semana e o treinador monta os sete dias.",
       doneKm,
+      status,
       prompt: { kind: "generate", text: "Gerar plano da semana", href: "/coach" },
     };
   }
@@ -113,6 +117,7 @@ export function buildToday(input: Input): Today {
       headline: "Descanso",
       detail: "É quando a adaptação acontece — o ganho das sessões duras vem hoje.",
       doneKm,
+      status,
       prompt: needsTest ? testPrompt : undefined,
     };
   }
@@ -128,7 +133,7 @@ export function buildToday(input: Input): Today {
   const detail =
     session.pace
       ?? (session.duration_min ? `${session.duration_min} min` : null)
-      ?? (input.hasTest ? "" : "Sem ritmo alvo — o teste de 3 km destrava isso.");
+      ?? (needsTest ? "Sem ritmo alvo — o teste de 3 km destrava isso." : "");
 
   /*
    * Done when every session of the day has something that counts for it — any

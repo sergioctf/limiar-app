@@ -1,8 +1,17 @@
-import { type NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { isDevPreview } from "@/lib/dev-preview";
 import { updateSession } from "@/lib/supabase/middleware";
 
 export async function middleware(request: NextRequest) {
-  return await updateSession(request);
+  const { pathname } = request.nextUrl;
+  if (pathname === "/dev" || pathname.startsWith("/dev/")) {
+    return isDevPreview() ? NextResponse.next() : new NextResponse(null, { status: 404 });
+  }
+
+  if (isDevPreview() && /^\/(?:auth\/callback|api\/(?:admin|cron|ingest|integrations|push|strava|whoop)(?:\/|$)|api\/ia\/transcrever$)/.test(pathname)) {
+    return NextResponse.json({ error: "Integração externa indisponível na prévia local." }, { status: 403 });
+  }
+  return updateSession(request);
 }
 
 export const config = {

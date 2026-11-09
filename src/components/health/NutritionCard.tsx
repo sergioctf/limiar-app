@@ -181,7 +181,7 @@ export function NutritionCard({ data }: { data: NutritionSummary }) {
           {/* Fueling calculator */}
           <div className="pt-2 border-t border-surface-700/50">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-surface-200 flex items-center gap-1.5"><Flame className="w-4 h-4 text-orange-400" /> Fueling do longão/prova</p>
+              <p className="text-sm font-medium text-surface-200 flex items-center gap-1.5"><Flame className="w-4 h-4 text-brand-400" /> Fueling do longão/prova</p>
               <span className="text-xs text-surface-400 tabular-nums">{Math.floor(fuelMin / 60)}h{(fuelMin % 60).toString().padStart(2, "0")}</span>
             </div>
             <input type="range" min={30} max={300} step={15} value={fuelMin} onChange={e => setFuelMin(Number(e.target.value))} className="w-full accent-brand-500 h-1.5" />
@@ -209,7 +209,7 @@ function Stat({ label, value, unit, accent, big }: { label: string; value: strin
   return (
     <div className="bg-surface-700/30 rounded-lg p-2.5 text-center">
       <p className="text-[10px] text-surface-500 uppercase tracking-wide">{label}</p>
-      <p className={`font-black tabular-nums ${big ? "text-xl text-brand-400" : accent ? "text-base text-orange-300" : "text-base text-surface-100"}`}>{value}</p>
+      <p className={`font-black tabular-nums ${big ? "text-xl text-brand-400" : accent ? "text-base text-brand-300" : "text-base text-surface-100"}`}>{value}</p>
       <p className="text-[10px] text-surface-500">{unit}</p>
     </div>
   );

@@ -21,6 +21,7 @@
  *   5. O plano de longo prazo
  */
 import { useEffect, useMemo, useState } from "react";
+import { athleteMondayStr } from "@/lib/week";
 import { useRouter } from "next/navigation";
 import { CalendarDays, FlaskConical, Layers } from "lucide-react";
 import Link from "next/link";
@@ -40,6 +41,7 @@ import { DefaultWeekNotice } from "@/components/coach/DefaultWeekNotice";
 import { ProactiveAdjustBanner } from "@/components/coach/ProactiveAdjustBanner";
 import { MacroPlanCard } from "@/components/coach/MacroPlanCard";
 import type { WeekAdherence } from "@/lib/plan-adherence";
+import type { SessionActivityLink } from "@/lib/session-activity-link";
 import type { DayActivity, DayRun } from "@/lib/day-status";
 import type { MeasureBy } from "@/lib/measure";
 import type { CoachReport, MacroPlan, PerformanceTest, WeeklyPlanData } from "@/types";
@@ -53,13 +55,17 @@ interface Props {
   /** O que foi registrado nas últimas semanas — a semana mostra o feito ao lado do previsto. */
   doneRuns?: DayRun[];
   doneActivities?: DayActivity[];
+  sessionLinks?: SessionActivityLink[];
   /** Km ou minutos: a unidade em que este atleta lê o plano. */
   measureBy?: MeasureBy;
+  runsEnabled?: boolean;
+  requestedWeek?: string;
+  requestedDay?: string;
 }
 
 export function CoachContent({
   reports, tests, adherenceHistory = [], macroPlan = null, weeklyActualKm = {},
-  doneRuns = [], doneActivities = [], measureBy = "km",
+  doneRuns = [], doneActivities = [], sessionLinks, measureBy = "km", runsEnabled = true, requestedWeek, requestedDay,
 }: Props) {
   const router = useRouter();
 
@@ -98,7 +104,8 @@ export function CoachContent({
     };
   }, [metrics]);
 
-  const latestWeekReport = reports.find(r => r.period_type === "week") ?? null;
+  const weekStart = athleteMondayStr(new Date());
+  const latestWeekReport = reports.find(r => r.period_type === "week" && r.period_start === weekStart) ?? null;
   const initialWeeklyPlan = useMemo((): WeeklyPlanData | null => {
     if (!latestWeekReport?.full_report) return null;
     try {
@@ -131,7 +138,7 @@ export function CoachContent({
         mais urgente não era necessariamente a de cima.
       */}
       <div className="[&>*:not(:first-child)]:hidden empty:hidden">
-        {!latestTest && (
+        {runsEnabled && !latestTest && (
           <Link href="/coach/calibracao" className="block">
             <Card tone="alert">
               <div className="flex items-center gap-3">
@@ -146,28 +153,31 @@ export function CoachContent({
             </Card>
           </Link>
         )}
-        <StaleTestWarning latestTest={latestTest} />
+        {runsEnabled && <StaleTestWarning latestTest={latestTest} />}
         <PlanFreshnessBanner />
         {adherenceHistory[0] && <ProactiveAdjustBanner currentWeek={adherenceHistory[0]} />}
         <WeekQuestionCard />
-        <DefaultWeekNotice onConfigure={() => {
+        {runsEnabled && <DefaultWeekNotice onConfigure={() => {
           document.getElementById("training-prefs")?.scrollIntoView({ behavior: "smooth", block: "center" });
-        }} />
+        }} />}
       </div>
 
       <WeeklyPlanCard
         initialPlan={initialWeeklyPlan}
+        requestedWeek={requestedWeek}
+        requestedDay={requestedDay}
         plannedTest={plannedTest}
         onTestChanged={setPlannedTest}
         initialReportId={latestWeekReport?.id ?? null}
         paces={pacesForPlan}
         doneRuns={doneRuns}
         doneActivities={doneActivities}
+        sessionLinks={sessionLinks}
         measureBy={measureBy}
       />
 
       {/* Lê tudo que está acima e propõe; nunca edita sozinho. */}
-      <AdvisorCard />
+      {runsEnabled && <AdvisorCard />}
 
       <Section title="Meus dias de treino" subtitle="O plano se molda ao que você marcar aqui">
         <div id="training-prefs" className="scroll-mt-24 space-y-2">

@@ -36,24 +36,27 @@ async function handler(request: NextRequest) {
 
   // Only athletes who have actually trained get a plan (avoids burning tokens
   // on dormant accounts).
-  const { data: activeUsers } = await admin
-    .from("runs")
-    .select("user_id")
-    .gte("date", new Date(now.getTime() - 60 * 86400000).toISOString().slice(0, 10))
-    .is("deleted_at", null);
-
-  const userIds: string[] = Array.from(
-    new Set(((activeUsers ?? []) as Array<{ user_id: string }>).map(r => r.user_id)),
-  );
+  const since = new Date(now.getTime() - 60 * 86400000).toISOString().slice(0, 10);
+  const active = await Promise.all(["runs", "activities"].map(table => admin.from(table)
+    .select("user_id").gte("date", since).is("deleted_at", null)));
+  if (active.some(query => query.error)) {
+    return NextResponse.json({ error: "Falha ao consultar atletas ativos." }, { status: 503 });
+  }
+  const userIds: string[] = Array.from(new Set(active.flatMap(query => (query.data ?? []).map(
+    (row: { user_id: string }) => row.user_id,
+  ))));
   const results: Record<string, string> = {};
+  let failures = 0;
 
   for (const userId of userIds) {
     const perWeek: string[] = [];
     for (const week of weeks) {
       try {
         const res = await ensureWeeklyPlan(admin, userId, week);
-        perWeek.push(`${week}:${res.plan ? (res.cached ? "cached" : "generated") : "failed"}`);
+        if (!res.plan || !res.reportId) failures++;
+        perWeek.push(`${week}:${res.plan && res.reportId ? (res.cached ? "cached" : "generated") : "failed"}`);
       } catch (err) {
+        failures++;
         perWeek.push(`${week}:error(${err instanceof Error ? err.message : "unknown"})`);
       }
     }
@@ -70,33 +73,36 @@ async function handler(request: NextRequest) {
       E em melhor esforço: o plano é o produto, o envio é consequência.
     */
     try {
-      perWeek.push(await sendWeekToWatch(admin, userId, weeks[0]));
+      const delivery = await sendWeekToWatch(admin, userId, weeks[0]);
+      failures += delivery.failures;
+      perWeek.push(delivery.summary);
     } catch (err) {
+      failures++;
       perWeek.push(`watch:error(${err instanceof Error ? err.message : "unknown"})`);
     }
 
     results[userId] = perWeek.join(" ");
   }
 
-  return NextResponse.json({ ok: true, ran_at: now.toISOString(), weeks, users: userIds.length, results });
+  return NextResponse.json({ ok: true, ran_at: now.toISOString(), weeks, users: userIds.length, failures, results });
 }
 
-/** Devolve uma linha de log; nunca lança. */
+/** Resume a entrega e informa quantos treinos falharam. */
 async function sendWeekToWatch(
   admin: ReturnType<typeof createAdminClient>, userId: string, week: string,
-): Promise<string> {
+): Promise<{ summary: string; failures: number }> {
   const conn = await loadIcuConnection(admin, userId);
-  if (!conn) return "watch:no-connection";
+  if (!conn) return { summary: "watch:no-connection", failures: 0 };
 
   const { data: perfil } = await admin.from("profiles").select("training_prefs").eq("id", userId).maybeSingle();
   const prefs = normalizePrefs((perfil as { training_prefs?: unknown } | null)?.training_prefs);
-  if (prefs.sendToWatch === false) return "watch:off";
+  if (prefs.sendToWatch === false) return { summary: "watch:off", failures: 0 };
 
   const { plan } = await loadWeeklyPlan(admin, userId, week);
-  if (!plan) return "watch:no-plan";
+  if (!plan) return { summary: "watch:no-plan", failures: 0 };
 
   const r = await pushIcuWeek(conn, plan, week, prefs.measureBy ?? "km");
-  return `watch:${r.enviados}sent/${r.pulados}skipped/${r.falhas}failed`;
+  return { summary: `watch:${r.enviados}sent/${r.pulados}skipped/${r.falhas}failed`, failures: r.falhas };
 }
 
 /*

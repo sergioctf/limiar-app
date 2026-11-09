@@ -53,11 +53,11 @@ export function RunsWorldMap({ runs }: Props) {
         allStarts.push(start);
 
         // Faint full route
-        L.polyline(pts, { color: "#f97316", weight: 2, opacity: 0.35 }).addTo(map);
+        L.polyline(pts, { color: "#8b5cf6", weight: 2, opacity: 0.35 }).addTo(map);
 
         // Clickable start pin
         const marker = L.circleMarker(start, {
-          radius: 5, color: "#0a0a0a", weight: 1.5, fillColor: "#fb923c", fillOpacity: 1,
+          radius: 5, color: "#0a0a0a", weight: 1.5, fillColor: "#b18aff", fillOpacity: 1,
         }).addTo(map);
         marker.bindTooltip(
           `<strong>${run.name}</strong><br/>${new Date(`${run.date}T12:00:00`).toLocaleDateString("pt-BR")} · ${run.distanceKm.toFixed(1)} km`,

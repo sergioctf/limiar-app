@@ -46,7 +46,7 @@ export interface StoredRunner {
 }
 
 export const RUNNER_STORAGE_PREFIX = "limiar-exec-";
-export const runnerStorageKey = (date: string) => `${RUNNER_STORAGE_PREFIX}${date}`;
+export const runnerStorageKey = (userId: string, date: string) => `${RUNNER_STORAGE_PREFIX}${userId}:${date}`;
 
 /**
  * O ponto de partida de cada série.

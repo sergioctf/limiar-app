@@ -42,7 +42,7 @@ export function troubledDays(weeks: WeekAdherence[], today: string): DayTrouble[
     for (const d of week.days) {
       if (d.date >= today) continue;                       // only days already lived
       const role = roleOf(d.planned);
-      if (!role) continue;
+      if (!role || d.status === "unresolved") continue;
       const key = `${d.day}:${role}`;
       const entry = byDay.get(key) ?? { day: d.day, role, troubled: 0, total: 0, kinds: [] };
       entry.total++;

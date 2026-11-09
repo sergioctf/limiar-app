@@ -21,10 +21,10 @@ export function MobileTopBar() {
   const pathname = usePathname();
   const onSettings = areaOf(pathname)?.key === "config";
   return (
-    <div className="lg:hidden flex items-center justify-between h-12 px-4 border-b border-surface-800">
+    <div className="lg:hidden flex items-center justify-between h-14 px-5">
       <Link href="/" className="flex items-center gap-2" aria-label="Hoje">
         <LimiarMark size={24} />
-        <span className="text-surface-100 font-bold text-sm tracking-tight">LIMIAR</span>
+        <span className="limiar-wordmark">LIMIAR</span>
       </Link>
       <Link
         href="/settings"
@@ -54,7 +54,7 @@ export function AreaTabs({ nav = NAV_ALL_VISIBLE }: { nav?: NavData }) {
   if (tabs.length < 2) return null;
   return (
     <nav aria-label={area.label} className={cn(area.width ?? "max-w-4xl", "mx-auto mb-4")}>
-      <div className="flex gap-1 bg-surface-800 border border-surface-700 rounded-xl p-1">
+      <div className="limiar-segments flex gap-0.5 p-1">
         {tabs.map(t => {
           const active = t.href === pathname;
           return (
@@ -63,8 +63,8 @@ export function AreaTabs({ nav = NAV_ALL_VISIBLE }: { nav?: NavData }) {
               href={t.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex-1 min-h-[40px] flex items-center justify-center rounded-lg text-sm font-semibold transition-colors",
-                active ? "bg-surface-700 text-surface-100" : "text-surface-400 hover:text-surface-200",
+                "flex-1 min-h-[44px] flex items-center justify-center rounded-full px-1 text-xs sm:text-sm font-semibold transition-colors",
+                active ? "limiar-segment-active text-surface-100" : "text-surface-400 hover:text-surface-200",
               )}
             >
               {t.label}

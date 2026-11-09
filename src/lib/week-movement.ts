@@ -16,6 +16,7 @@
  *     line says which.
  */
 import { SPORTS, type SportKey } from "@/lib/sports";
+import type { SessionActivityLink } from "@/lib/session-activity-link";
 import { dayStatus, type DayActivity, type DayRun, type DoneItem, type PlannedSession } from "@/lib/day-status";
 import type { WeeklyPlanData } from "@/types";
 
@@ -85,18 +86,19 @@ export function weekMovement(input: {
   /** The watch's active energy per day, when it arrives (Garmin via Apple Health or intervals). */
   wellness?: Array<{ date: string; active_kcal?: number | null }>;
   weightKg?: number | null;
+  links?: SessionActivityLink[];
 }): WeekMovement {
   const days: MovementDay[] = KEYS.map((key, i) => {
     const date = addDays(input.weekStart, i);
     const planned = input.plan?.days.find(d => d.day === key) ?? null;
-    const status = dayStatus({ date, planned, runs: input.runs, activities: input.activities, weightKg: input.weightKg });
+    const status = dayStatus({ date, planned, runs: input.runs, activities: input.activities, weightKg: input.weightKg, links: input.links });
     return {
       date, key, short: SHORT[i],
       isToday: date === input.today,
       isFuture: date > input.today,
       done: status.done,
-      upcoming: date >= input.today ? status.sessions.filter(s => !s.done) : [],
-      missed: date < input.today ? status.sessions.filter(s => !s.done) : [],
+      upcoming: date >= input.today ? status.sessions.filter(s => !s.done && !s.unresolved) : [],
+      missed: date < input.today ? status.sessions.filter(s => !s.done && !s.unresolved) : [],
       planned: status.sessions.length > 0,
       plannedSessions: status.sessions.length,
     };

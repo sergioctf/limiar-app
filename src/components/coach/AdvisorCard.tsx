@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { haptic } from "@/lib/haptics";
 import {
   Sparkles, Lock, FlaskConical, Check, X, ChevronDown, Loader2,
@@ -56,6 +57,7 @@ const SEVERITY_UI: Record<Severity, { ring: string; dot: string; label: string }
  * of with an oracle. "Manter como está" is a first-class answer.
  */
 export function AdvisorCard({ onGoToTests }: { onGoToTests?: () => void }) {
+  const router = useRouter();
   const [data, setData]       = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy]       = useState<string | null>(null);
@@ -111,7 +113,8 @@ export function AdvisorCard({ onGoToTests }: { onGoToTests?: () => void }) {
       // Applying a change rewrites this week's plan — reload so the screen
       // isn't showing the plan the athlete just replaced.
       if (action === "accept" && json?.applied) {
-        setTimeout(() => window.location.reload(), 600);
+        router.refresh();
+        void load();
       }
     } catch (e) {
       setError(e instanceof Error && e.message ? e.message : "Não foi possível registrar sua escolha.");

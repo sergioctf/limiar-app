@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const admin = createAdminClient();
+  let imported = 0, updated = 0, ignored = 0, activitiesImported = 0, writeFailures = 0;
 
   try {
     // Get Strava connection
@@ -39,12 +40,13 @@ export async function POST(request: NextRequest) {
     if (Date.now() / 1000 > conn.expires_at - 300) {
       const refreshed = await refreshStravaToken(conn.refresh_token);
       accessToken = refreshed.access_token;
-      await admin.from("strava_connections").update({
+      const { error } = await admin.from("strava_connections").update({
         access_token:  refreshed.access_token,
         refresh_token: refreshed.refresh_token,
         expires_at:    refreshed.expires_at,
         updated_at:    new Date().toISOString(),
       }).eq("user_id", user.id);
+      if (error) throw new Error("Não foi possível atualizar a conexão com o Strava. Tente novamente.");
     }
 
     // Get existing strava_activity_ids to avoid duplicates (already synced)
@@ -81,7 +83,6 @@ export async function POST(request: NextRequest) {
     const newlyImportedRunIds: string[] = [];
 
     // Fetch activities from Strava
-    let imported = 0, updated = 0, ignored = 0, activitiesImported = 0;
     let page = 1;
 
     while (true) {
@@ -140,6 +141,8 @@ export async function POST(request: NextRequest) {
               existingIds.add(act.id);
               const idx = (manualRuns ?? []).indexOf(duplicate);
               if (idx !== -1) manualRuns!.splice(idx, 1);
+            } else {
+              writeFailures++;
             }
           } else {
             const { error, data: inserted } = await admin.from("runs").insert({ ...run, synced_at: new Date().toISOString() }).select("id").single();
@@ -158,6 +161,8 @@ export async function POST(request: NextRequest) {
                 durationMin: run.duration_seconds != null ? run.duration_seconds / 60 : null,
                 date:        run.date ?? "",
               }), (id, payload) => sendPushToUser(admin, id, payload));
+            } else {
+              writeFailures++;
             }
           }
         } else {
@@ -192,6 +197,8 @@ export async function POST(request: NextRequest) {
               durationMin: act.moving_time != null ? act.moving_time / 60 : null,
               date,
             }), (id, payload) => sendPushToUser(admin, id, payload));
+          } else {
+            writeFailures++;
           }
         }
       }
@@ -227,6 +234,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const saved = imported + updated + activitiesImported;
+    if (writeFailures > 0) {
+      throw new Error(saved > 0
+        ? "Importação parcial. As atividades salvas foram mantidas. Tente sincronizar de novo para buscar o restante."
+        : "Não foi possível salvar as atividades do Strava. Tente sincronizar de novo.");
+    }
+
     // Log sync
     await admin.from("sync_logs").insert({
       user_id:              user.id,
@@ -258,16 +272,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const saved = imported + updated + activitiesImported;
+    if (saved > 0 && err instanceof StravaApiError) {
+      message = `Importação parcial. As atividades salvas foram mantidas. ${message}`;
+    }
+
     await admin.from("sync_logs").insert({
       user_id:             user.id,
       source:              "strava",
-      status:              "error",
+      status:              saved > 0 ? "partial" : "error",
       message,
-      activities_imported: 0,
-      activities_updated:  0,
-      activities_ignored:  0,
-    }).catch(() => {});
+      activities_imported: imported + activitiesImported,
+      activities_updated:  updated,
+      activities_ignored:  ignored,
+    });
 
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ error: message, imported, updated, ignored, activitiesImported }, { status });
   }
 }

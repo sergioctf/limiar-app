@@ -315,6 +315,8 @@ export function sessionAdvice(
   readiness: Readiness,
   day: WeeklyPlanDay | null,
   done: {
+    /** Explicit outcome from dayStatus, when available. */
+    sessionDone?: boolean;
     /** Kilometres already run today. */
     doneKm?: number;
     /** A strength session already logged today. */
@@ -338,11 +340,11 @@ export function sessionAdvice(
    */
   const ranToday = (done.doneKm ?? 0) > 0;
   const sessionDone = day != null && day.type !== "rest"
-    && (day.type === "strength" ? Boolean(done.strengthDone) : ranToday);
+    && (done.sessionDone ?? (day.type === "strength" ? Boolean(done.strengthDone) : ranToday));
   if (sessionDone) {
-    const what = day!.type === "strength"
-      ? `${day!.label}: concluída`
-      : `${day!.label}: ${(done.doneKm ?? 0).toFixed(1).replace(".", ",")} km concluídos`;
+    const what = !ranToday
+      ? `${day!.label}: registro encontrado`
+      : `${day!.label}: ${(done.doneKm ?? 0).toFixed(1).replace(".", ",")} km registrados`;
     const restOfDay = v === "baixa"
       ? " Recuperação baixa: capriche no sono e na comida hoje."
       : v === "moderada"

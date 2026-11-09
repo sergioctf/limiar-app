@@ -163,7 +163,7 @@ export function ChallengesCard({ stats }: Props) {
         <div className="mt-3 pt-3 border-t border-surface-700/50 flex items-start gap-1.5">
           {myRank === 1 ? (
             <>
-              <Flame className="w-3.5 h-3.5 text-orange-400 shrink-0 mt-0.5" />
+              <Flame className="w-3.5 h-3.5 text-brand-400 shrink-0 mt-0.5" />
               <p className="text-[11px] text-surface-400">
                 Você está <span className="font-semibold text-brand-300">em primeiro</span>
                 {remaining > 0 && " — segure a liderança até o fim."}

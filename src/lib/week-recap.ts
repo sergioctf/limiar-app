@@ -149,6 +149,8 @@ function howItWent(input: WeekRecapInput): RecapSection {
     if (adapted > 0) parts.push(plural(adapted, "adaptada", "adaptadas"));
     if (partial > 0) parts.push(plural(partial, "encurtada", "encurtadas"));
     if (missed > 0) parts.push(plural(missed, "não feita", "não feitas"));
+    const pending = runDays.filter(d => d.status === "unresolved").length;
+    if (pending > 0) parts.push(`${pending} com vínculo a confirmar`);
     lines.push(`Sessões de corrida: ${parts.join(" · ")}.`);
   }
 
@@ -160,13 +162,15 @@ function howItWent(input: WeekRecapInput): RecapSection {
       quality.status === "adapted" ? `${what} você adaptou — conta como feito, não como falta.`
         : quality.status === "done" ? `${what} saiu como previsto.`
           : quality.status === "partial" ? `${what} saiu encurtado.`
+            : quality.status === "unresolved" ? `${what} ainda precisa ser vinculado a um registro.`
             : `${what} ficou de fora.`,
     );
   }
 
   if (ranDays.length > 1) {
-    const longest = ranDays.reduce((best, d) => (d.actualKm > best.actualKm ? d : best), ranDays[0]);
-    lines.push(`Maior corrida: ${km(longest.actualKm)} ${onDay(longest.planned)}.`);
+    const distanceOf = (d: typeof ranDays[number]) => d.longestRunKm ?? d.actualKm;
+    const longest = ranDays.reduce((best, d) => distanceOf(d) > distanceOf(best) ? d : best, ranDays[0]);
+    lines.push(`Maior corrida: ${km(distanceOf(longest))} ${onDay(longest.planned)}.`);
   }
 
   const strengthDays = days.filter(d => d.planned.type === "strength");

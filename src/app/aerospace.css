@@ -1,0 +1,180 @@
+
+/* Material and motion for the product's signature surfaces. */
+.limiar-wordmark {
+  color: rgb(var(--color-surface-100));
+  font-size: .88rem;
+  font-weight: 650;
+  letter-spacing: .23em;
+}
+.limiar-shell {
+  background:
+    radial-gradient(ellipse 390px 320px at 100% 0%, var(--chrome-light), transparent 78%),
+    radial-gradient(ellipse 450px 255px at 38% -60px, transparent 77%, var(--chrome-light) 80%, var(--chrome-edge) 80.5%, transparent 82%);
+}
+.limiar-dock {
+  background: rgb(var(--color-surface-800) / .94);
+  border: 1px solid var(--chrome-edge);
+  border-bottom: 0;
+  border-radius: 1.5rem 1.5rem 0 0;
+  backdrop-filter: blur(18px);
+  box-shadow: 0 -8px 40px rgb(0 0 0 / .12);
+}
+.limiar-dock-active { position: relative; }
+.limiar-dock-active svg { filter: drop-shadow(0 0 7px var(--chrome-light)); }
+.limiar-dock-active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 1.45rem;
+  height: 2px;
+  border-radius: 1rem;
+  background: rgb(var(--color-brand-400));
+}
+.limiar-segments {
+  border-radius: 999px;
+  border: 1px solid var(--chrome-edge);
+  background: rgb(var(--color-surface-800));
+}
+.limiar-segment-active {
+  background: linear-gradient(155deg, var(--chrome-light), rgb(var(--color-surface-700) / .9));
+  box-shadow: inset 0 0 0 1px var(--chrome-edge);
+}
+.limiar-feature {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 100% -20%, var(--chrome-light), transparent 66%),
+    linear-gradient(145deg, rgb(var(--color-surface-700) / .60), rgb(var(--color-surface-800)) 70%);
+  border: 1px solid var(--chrome-edge);
+  border-radius: 1.5rem;
+  box-shadow: var(--shadow-card), inset 0 1px rgb(255 255 255 / .08);
+}
+.limiar-feature::before {
+  position: absolute;
+  content: "";
+  inset: 0 20% auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--chrome-edge), transparent);
+  pointer-events: none;
+}
+.limiar-kicker {
+  color: rgb(var(--color-brand-400));
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.limiar-enter { animation: limiar-enter 360ms var(--ease-limiar) both; }
+@keyframes limiar-enter {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid rgb(var(--color-brand-400));
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+.limiar-onboarding[open] {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  background-image: radial-gradient(ellipse 440px 320px at 50% 14%, var(--chrome-light), transparent 77%);
+}
+.limiar-onboarding::backdrop { background: rgb(var(--color-surface-900)); }
+.limiar-onboarding-art {
+  aspect-ratio: 3 / 2;
+  max-height: 32dvh;
+  margin-inline: auto;
+  border-radius: 1.5rem;
+  background: #08070d url('/brand/onboarding-flight.jpg') center / cover no-repeat;
+  border: 1px solid var(--chrome-edge);
+}
+.chrome-ribbon { --ribbon-speed: 9s; }
+.chrome-ribbon[data-state="thinking"] { filter: drop-shadow(0 0 8px rgb(139 92 246 / .46)); }
+.chrome-ribbon[data-state="listening"] { filter: drop-shadow(0 0 10px rgb(177 138 255 / .55)); }
+.chrome-ribbon[data-state="success"] :is(.chrome-ribbon-body, .chrome-ribbon-light) { animation-play-state: paused; }
+.chrome-ribbon-body {
+  transform-origin: center;
+  animation: ribbon-drift var(--ribbon-speed) ease-in-out infinite;
+}
+.chrome-ribbon-light {
+  stroke-dasharray: 12 88;
+  animation: ribbon-sweep var(--ribbon-speed) linear infinite;
+}
+@keyframes ribbon-drift {
+  0%, 100% { transform: rotate(-2deg) skewY(-2deg) scaleY(.92); }
+  50% { transform: rotate(2deg) skewY(2deg) scaleY(1.06); }
+}
+@keyframes ribbon-sweep {
+  from { stroke-dashoffset: 106; opacity: .2; }
+  35%, 80% { opacity: .9; }
+  to { stroke-dashoffset: -6; opacity: .2; }
+}
+.limi-orb {
+  filter: drop-shadow(0 0 12px rgb(139 92 246 / .35));
+  --core-scale: .94;
+}
+.limi-orb-shell, .limi-orb-core, .limi-orb-plate { transform-origin: 100px 100px; }
+.limi-orb-shell { animation: limi-orbit 11s ease-in-out infinite; }
+.limi-orb-core {
+  transform: scale(var(--core-scale));
+  transition: transform 420ms var(--ease-limiar), opacity 420ms var(--ease-limiar);
+}
+.limi-orb-plate { transition: transform 420ms var(--ease-limiar) var(--plate-delay); }
+.limi-orb:is([data-state="listening"], [data-state="thinking"], [data-state="speaking"]) { --core-scale: 1.08; }
+.limi-orb:is([data-state="listening"], [data-state="thinking"], [data-state="speaking"]) .limi-orb-plate {
+  transform: translate(var(--plate-shift));
+}
+.limi-orb[data-state="thinking"] .limi-orb-core { animation: limi-core 2s ease-in-out infinite; }
+.limi-orb[data-state="success"] .limi-orb-core { animation: limi-core .7s ease-out 1; }
+.limi-orb[data-still] .limi-orb-shell { animation: none; }
+@keyframes limi-orbit {
+  0%, 100% { transform: rotate(-7deg); }
+  50% { transform: rotate(7deg); }
+}
+@keyframes limi-core { 50% { opacity: .63; } }
+.limiar-movement-fill {
+  background: linear-gradient(0deg, #6d28d9, #b18aff);
+  box-shadow: inset 0 1px rgb(255 255 255 / .35);
+  animation: limiar-bar 500ms var(--ease-limiar) both;
+  transform-origin: bottom;
+}
+@keyframes limiar-bar { from { transform: scaleY(.1); } to { transform: scaleY(1); } }
+.limiar-orb-button {
+  border: 1px solid rgb(201 208 230 / .65);
+  background: radial-gradient(circle at 34% 17%, #4b386d, #161021 43%, #08070d 82%);
+  box-shadow: inset 0 0 0 2px #5d447c, 0 6px 18px rgb(8 7 13 / .6), 0 0 17px rgb(139 92 246 / .31);
+}
+.limiar-ai-stage {
+  background: radial-gradient(ellipse 145px 130px at 50% 32%, var(--chrome-light), transparent 92%);
+}
+.limiar-voice-wave {
+  --voice-level: .28;
+  width: 2.2rem;
+  height: 1.6rem;
+  border-radius: .35rem;
+  background: repeating-linear-gradient(90deg, #b18aff 0 2px, transparent 2px 4px);
+  transform: scaleY(var(--voice-level));
+  transform-origin: center;
+}
+.limiar-entry-dialog {
+  position: fixed;
+  inset: auto 0 0;
+  margin: 0 auto;
+  overscroll-behavior: contain;
+  animation: limiar-enter 360ms var(--ease-limiar) both;
+}
+.limiar-entry-dialog::backdrop { background: rgb(8 7 13 / .67); backdrop-filter: blur(5px); }
+@media (min-width: 640px) {
+  .limiar-entry-dialog { inset: 0; margin: auto; }
+}

@@ -89,7 +89,7 @@ describe("what the API accepts", () => {
   it("accepts a reason only from the question that was asked", () => {
     expect(validFeedbackInput({ ...base, effort: 3, context: "sleep" })).toBe(false);
     expect(validFeedbackInput({ ...base, effort: 5, context: "sleep" })).toBe(true);
-    expect(validFeedbackInput({ ...base, effort: 5, context: "schedule" })).toBe(false);
+    expect(validFeedbackInput({ ...base, effort: 5, context: "schedule" })).toBe(true);
   });
   it("requires the reduce answer after 'too heavy', and refuses it anywhere else", () => {
     expect(validFeedbackInput({ ...base, effort: 5, context: "session_too_hard" })).toBe(false);

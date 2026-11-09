@@ -4,11 +4,13 @@ import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { AppShell }     from "@/components/layout/AppShell";
 import { CoachContent } from "@/components/coach/CoachContent";
 import { computeAdherenceHistory } from "@/lib/plan-adherence";
+import { loadSessionActivityLinks } from "@/lib/session-activity-link-db";
 import { loadActiveMacroPlan } from "@/lib/macro-plan";
+import { normalizeSports } from "@/lib/sports";
 import { normalizePrefs } from "@/lib/workout-builder";
 import type { PerformanceTest } from "@/types";
 
-export default async function CoachPage() {
+export default async function CoachPage({ searchParams }: { searchParams?: { week?: string; day?: string } }) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth");
@@ -40,7 +42,7 @@ export default async function CoachPage() {
   windowStart.setDate(windowStart.getDate() - 91);
   const sinceStr = localDateStr(windowStart);
 
-  const [{ data: reports }, tests, { data: recentRuns }, { data: recentActivities }] = await Promise.all([
+  const [{ data: reports }, tests, { data: recentRuns }, { data: recentActivities }, links] = await Promise.all([
     admin
       .from("coach_reports")
       .select("*")
@@ -61,6 +63,7 @@ export default async function CoachPage() {
       .eq("user_id", user.id)
       .gte("date", sinceStr)
       .is("deleted_at", null),
+    loadSessionActivityLinks(supabase, user.id, sinceStr),
   ]);
 
   type RunRow = {
@@ -77,7 +80,7 @@ export default async function CoachPage() {
 
   const weeklyReports = ((reports ?? []) as Array<{ period_type: string; period_start: string | null; full_report: string | null }>)
     .filter(r => r.period_type === "week");
-  const adherenceHistory = computeAdherenceHistory(weeklyReports, runRows, activityRows, 4);
+  const adherenceHistory = computeAdherenceHistory(weeklyReports, runRows, activityRows, 4, links);
 
   /*
     O que foi feito nesta semana e na passada.
@@ -97,7 +100,7 @@ export default async function CoachPage() {
 
   // Em que unidade este atleta lê o plano — km ou minutos (`src/lib/measure.ts`).
   const { data: perfil } = await admin
-    .from("profiles").select("training_prefs").eq("id", user.id).maybeSingle();
+    .from("profiles").select("training_prefs, sports").eq("id", user.id).maybeSingle();
   const { measureBy } = normalizePrefs((perfil as { training_prefs?: unknown } | null)?.training_prefs);
   const weeklyActualKm: Record<string, number> = {};
   for (const r of runRows) {
@@ -117,7 +120,11 @@ export default async function CoachPage() {
         weeklyActualKm={weeklyActualKm}
         doneRuns={doneRuns}
         doneActivities={doneActivities}
+        sessionLinks={links}
         measureBy={measureBy}
+        runsEnabled={normalizeSports(perfil?.sports).includes("corrida")}
+        requestedWeek={searchParams?.week}
+        requestedDay={searchParams?.day}
       />
     </AppShell>
   );

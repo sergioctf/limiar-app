@@ -32,6 +32,9 @@ export async function POST(request: NextRequest) {
 
   const todayKey = dayKeyOf(inputs.today);
 
+  if (action !== "undo" && inputs.recovery.sessionUnresolved) {
+    return NextResponse.json({ error: "Confirme primeiro qual atividade corresponde ao treino de hoje." }, { status: 409 });
+  }
   if (action !== "undo" && inputs.recovery.sessionDone) {
     return NextResponse.json({ error: "O treino de hoje já foi feito." }, { status: 409 });
   }

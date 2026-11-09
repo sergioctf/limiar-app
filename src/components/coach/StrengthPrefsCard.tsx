@@ -290,7 +290,7 @@ export function StrengthPrefsCard() {
                         return (
                           <button key={c.key} onClick={() => setCardio(d.key, { machine: c.key })}
                             className={`rounded-md min-h-[44px] py-1 px-2 text-[10px] font-semibold transition-colors ${
-                              on ? "bg-orange-500 text-white" : "bg-surface-800 text-surface-500 hover:text-surface-300"
+                              on ? "bg-brand-500 text-white" : "bg-surface-800 text-surface-500 hover:text-surface-300"
                             }`}>{c.label}</button>
                         );
                       })}

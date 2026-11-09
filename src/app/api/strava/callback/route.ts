@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { STRAVA_OAUTH_COOKIE, readStravaAttempt } from "@/lib/strava-oauth";
 
 export async function GET(request: NextRequest) {
   const supabase = createClient();
@@ -10,9 +11,19 @@ export async function GET(request: NextRequest) {
   const code  = searchParams.get("code");
   const error = searchParams.get("error");
 
-  if (error || !code) {
-    return NextResponse.redirect(new URL("/settings?strava_error=access_denied", request.url));
+  const attempt = readStravaAttempt(request.cookies.get(STRAVA_OAUTH_COOKIE)?.value, user.id);
+  function back(flag: string, value: string) {
+    const url = new URL(attempt?.from ?? "/settings", request.url);
+    url.searchParams.set(flag, value);
+    const response = NextResponse.redirect(url);
+    response.cookies.delete(STRAVA_OAUTH_COOKIE);
+    return response;
   }
+
+  if (!attempt || attempt.state !== searchParams.get("state")) {
+    return back("strava_error", "invalid_state");
+  }
+  if (error || !code) return back("strava_error", "access_denied");
 
   try {
     // Exchange code for tokens
@@ -30,10 +41,13 @@ export async function GET(request: NextRequest) {
     if (!tokenRes.ok) throw new Error("Token exchange failed");
 
     const tokenData = await tokenRes.json();
+    if (!tokenData.athlete?.id || !tokenData.access_token || !tokenData.refresh_token) {
+      throw new Error("Incomplete Strava connection");
+    }
     const admin = createAdminClient();
 
     // Upsert connection (admin bypasses RLS for insert on behalf of user)
-    await admin.from("strava_connections").upsert({
+    const { error: writeError } = await admin.from("strava_connections").upsert({
       user_id:       user.id,
       athlete_id:    tokenData.athlete?.id,
       access_token:  tokenData.access_token,
@@ -43,9 +57,10 @@ export async function GET(request: NextRequest) {
       updated_at:    new Date().toISOString(),
     }, { onConflict: "user_id" });
 
-    return NextResponse.redirect(new URL("/settings?strava_connected=1", `${request.nextUrl.origin}/`));
+    if (writeError) throw new Error("Could not persist Strava connection");
+    return back("strava_connected", "1");
   } catch (err) {
     console.error("Strava callback error:", err);
-    return NextResponse.redirect(new URL("/settings?strava_error=connection_failed", request.url));
+    return back("strava_error", "connection_failed");
   }
 }

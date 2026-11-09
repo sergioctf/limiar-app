@@ -5,9 +5,9 @@
  */
 export const runtime = "edge";
 
-export async function GET(): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   return Response.redirect(
-    new URL("/limiar_icone_app.png", "https://limiar-app.vercel.app"),
+    new URL("/limiar_icone_app.png", request.url),
     301
   );
 }

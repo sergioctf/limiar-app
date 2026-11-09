@@ -71,7 +71,7 @@ export function LoadRecoveryChart({ history }: { history: DayRecovery[] }) {
             />
             <Bar yAxisId="load" dataKey="load" radius={[5, 5, 0, 0]} maxBarSize={18} animationDuration={700}>
               {data.map(d => (
-                <Cell key={d.date} fill={d.isToday ? "#f97316" : "#475569"} fillOpacity={d.isToday ? 0.9 : 0.55} />
+                <Cell key={d.date} fill={d.isToday ? "#8b5cf6" : "#475569"} fillOpacity={d.isToday ? 0.9 : 0.55} />
               ))}
             </Bar>
             <Line

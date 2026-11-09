@@ -241,15 +241,15 @@ export function FriendsContent({ myUsername, myName }: Props) {
         </div>
       )}
 
+      <FriendsFeed />
+
       {/* Challenges (needs at least one friend) */}
       {!loading && <ChallengesCard stats={stats} />}
 
-      {/* Leaderboard */}
-      <div className="card p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Trophy className="w-4 h-4 text-brand-400" />
-          <h2 className="section-title">Ranking</h2>
-        </div>
+      <details className="card px-4 pb-3">
+        <summary className="flex min-h-[52px] cursor-pointer items-center gap-2 font-semibold text-surface-100">
+          <Trophy className="w-4 h-4 text-brand-400" aria-hidden /> Ranking
+        </summary>
 
         {/* Metric pills */}
         <div className="flex gap-1.5 flex-wrap mb-3">
@@ -304,10 +304,7 @@ export function FriendsContent({ myUsername, myName }: Props) {
             })}
           </div>
         )}
-      </div>
-
-      {/* Activity feed with kudos */}
-      <FriendsFeed />
+      </details>
 
       {/*
         Adding people and chasing pending invitations is administration, not

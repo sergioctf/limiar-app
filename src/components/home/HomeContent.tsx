@@ -37,9 +37,8 @@ import { AutoWellnessSync } from "@/components/dashboard/AutoWellnessSync";
 import { OvertrainingAlert } from "@/components/dashboard/OvertrainingAlert";
 import { NotificationNudge } from "@/components/dashboard/NotificationNudge";
 import { CalorieDetailModal } from "@/components/dashboard/CalorieDetailModal";
-import { SPORTS } from "@/lib/sports";
 import { sessionTone } from "@/lib/session-colors";
-import { formatMinutes, type MovementDay, type WeekMovement } from "@/lib/week-movement";
+import { formatMinutes, type WeekMovement } from "@/lib/week-movement";
 import type { RecoveryToday } from "@/lib/recovery-today";
 import type { CalorieDay } from "@/lib/calorie-breakdown";
 import type { OvertrainingAssessment } from "@/lib/overtraining";
@@ -58,35 +57,9 @@ function greeting(): string {
 
 export interface HomeAttention { text: string; href: string; action: string }
 
-/** One circle per session: filled when done, outlined when still to come, dashed when it did not happen. */
-function DayMarks({ day }: { day: MovementDay }) {
-  const marks = [
-    ...day.done.map(x => ({ sport: x.sport, state: "done" as const })),
-    ...day.missed.map(x => ({ sport: x.sport, state: "missed" as const })),
-    ...day.upcoming.map(x => ({ sport: x.sport, state: "upcoming" as const })),
-  ];
-  if (marks.length === 0) return <span className="w-7 h-7 flex items-center justify-center text-surface-700">·</span>;
-  return (
-    <>
-      {marks.map((m, i) => (
-        <span
-          key={i}
-          className={`w-7 h-7 rounded-full flex items-center justify-center ${
-            m.state === "done" ? "bg-brand-500/15 text-brand-400"
-              : m.state === "missed" ? "border border-dashed border-amber-500/60 text-amber-400/80"
-                : "border border-surface-600 text-surface-500"
-          }`}
-        >
-          <SportGlyph sport={m.sport} className="w-3.5 h-3.5" />
-        </span>
-      ))}
-    </>
-  );
-}
-
 export function HomeContent({
   dateLabel, today, recovery, healthConnected = true, week, tomorrow, attention, refreshKey,
-  firstName, userName, username, isNewUser, overtraining, calorieDay, lastSyncAt, history,
+  firstName, userName, username, isNewUser, needsOnboarding, overtraining, calorieDay, lastSyncAt, history,
 }: {
   dateLabel: string;
   today: Today;
@@ -101,6 +74,7 @@ export function HomeContent({
   userName: string | null;
   username: string | null;
   isNewUser: boolean;
+  needsOnboarding: boolean;
   overtraining: OvertrainingAssessment | null;
   /** The week's workouts, measured and estimated, for "Calorias" on tap. */
   calorieDay: CalorieDay | null;
@@ -119,10 +93,10 @@ export function HomeContent({
   const [calorieDetail, setCalorieDetail] = useState(false);
   const day = week.days[selected];
   const status = today.status;
-  const mainPending = today.state === "planned" && !!status && !status.sessions[0]?.done;
+  const mainPending = today.state === "planned" && !!status && !status.sessions[0]?.done && !status.sessions[0]?.unresolved;
   const runPending = mainPending && today.session != null && (today.session.sport ?? "corrida") === "corrida"
     && today.session.type !== "strength";
-  const doneRun = status?.done.find(d => d.kind === "run" && d.id);
+  const doneActivity = status?.done.find(d => d.planned && d.id) ?? status?.done.find(d => d.id);
   const swapped = today.session?.swap ?? null;
   /*
    * The overload alert takes the attention slot first — when there is load in it.
@@ -133,27 +107,8 @@ export function HomeContent({
   const overtrained = !!overtraining && overtraining.level !== "ok"
     && overtraining.signals.some(s => LOAD_SIGNALS.has(s.id));
 
-  /*
-   * The tiles are whatever the week actually has.
-   *
-   * They used to be running and lifting, hardcoded, plus anything else that was
-   * done — which showed a swimmer a "Corrida 0" every Monday and an athlete who
-   * only lifts a sport they never practise. Now: every sport with a session
-   * registered, plus every sport the plan asked for this week even when none of
-   * it has happened yet, so a planned sport shows its zero and an unplanned one
-   * does not exist.
-   */
-  const tiles = [...week.bySport];
-  for (const d of week.days) {
-    for (const p of [...d.upcoming, ...d.missed]) {
-      if (!p.sport || tiles.some(t => t.sport === p.sport)) continue;
-      const meta = SPORTS[p.sport];
-      tiles.push({
-        sport: p.sport, label: meta?.label ?? p.label, emoji: meta?.emoji ?? "",
-        sessions: 0, minutes: 0, km: meta?.unit === "distance" ? 0 : null,
-      });
-    }
-  }
+  const tiles = week.bySport;
+  const maxDayMinutes = Math.max(1, ...week.days.map(d => d.done.reduce((sum, item) => sum + item.minutes, 0)));
 
   /*
    * The block about the body only exists when it has something to say: a score,
@@ -177,10 +132,9 @@ export function HomeContent({
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto pb-6 animate-fade-in">
-      <OnboardingGate isNewUser={isNewUser} />
-      <AutoStravaSync />
+      <OnboardingGate needsSetup={needsOnboarding} />
+      {!needsOnboarding && <AutoStravaSync />}
       <AutoWellnessSync />
-      <SetupChecklist name={userName} username={username} />
       {calorieDetail && calorieDay && (
         <CalorieDetailModal day={calorieDay} label="Esta semana" onClose={() => setCalorieDetail(false)} />
       )}
@@ -188,7 +142,7 @@ export function HomeContent({
       {/* Quiet header: the greeting is not the information. */}
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xl font-bold text-surface-100">{greeting()}{firstName ? `, ${firstName}` : ""}</p>
+          <h1 suppressHydrationWarning className="text-[clamp(1.65rem,7vw,2.25rem)] font-semibold leading-tight tracking-tight text-surface-100">{greeting()}{firstName ? `, ${firstName}` : ""}</h1>
           <p className="text-xs text-surface-500 mt-0.5 first-letter:uppercase">{dateLabel}</p>
           {/* Quem vai correr decide roupa e hora por isto (Sérgio, 20/09). */}
           <div className="mt-1.5"><WeatherNow /></div>
@@ -198,26 +152,11 @@ export function HomeContent({
         </Link>
       </div>
 
-      {/* ── What deserves attention, before anything else ─────────────────── */}
-      <NotificationNudge />
-      {overtrained ? (
-        <Section title="Merece atenção">
-          <OvertrainingAlert assessment={overtraining!} />
-        </Section>
-      ) : attention && (
-        <Section title="Merece atenção">
-          <Link href={attention.href} className="flex items-center justify-between gap-3 rounded-2xl border border-surface-700 px-4 py-3 min-h-[56px] hover:border-surface-600">
-            <span className="text-sm text-surface-200">{attention.text}</span>
-            <span className="shrink-0 inline-flex items-center gap-1 text-sm text-brand-400">{attention.action} <ArrowRight className="w-4 h-4" /></span>
-          </Link>
-        </Section>
-      )}
-
-      <EntryPrompt refreshKey={refreshKey} />
+      {!needsOnboarding && <EntryPrompt refreshKey={refreshKey} />}
 
       {/* ── 1. Treino de hoje ─────────────────────────────────────────────── */}
       <Section title="Treino de hoje">
-        <Card density="roomy">
+        <div className="limiar-feature p-4 sm:p-6">
           <div className="space-y-4">
             {swapped && (
               <p className="text-xs font-medium text-surface-500">
@@ -231,8 +170,8 @@ export function HomeContent({
 
             {today.state === "no_plan" ? (
               <div className="space-y-3">
-                <p className="text-2xl font-black text-surface-100">Sem plano para hoje</p>
-                <Link href="/coach" className="btn-primary w-full">Gerar plano da semana <ArrowRight className="w-4 h-4" /></Link>
+                <p className="text-2xl font-semibold text-surface-100">{doneActivity ? "Atividade registrada" : "Sem plano para hoje"}</p>
+                {!doneActivity && <Link href="/coach" className="btn-primary w-full">Gerar plano da semana <ArrowRight className="w-4 h-4" /></Link>}
               </div>
             ) : today.state === "rest" ? (
               <div>
@@ -268,7 +207,7 @@ export function HomeContent({
                     <span className={`shrink-0 mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
                       s.done ? "bg-green-500/15 text-green-300" : "bg-surface-700/60 text-surface-400"
                     }`}>
-                      {s.done ? <><Check className="w-3 h-3" /> feito</> : "previsto"}
+                      {s.done ? <><Check className="w-3 h-3" /> feito</> : s.unresolved ? "a confirmar" : "previsto"}
                     </span>
                   </li>
                   );
@@ -283,7 +222,7 @@ export function HomeContent({
             {/* One main action; adapting is the second one. */}
             {today.state === "planned" && (
               <div className="space-y-2">
-                <Link href="/coach" className="btn-primary w-full">Ver treino <ArrowRight className="w-4 h-4" /></Link>
+                <Link href="/coach" className="btn-primary w-full">{status?.sessions.some(s => s.unresolved) ? "Vincular atividade" : "Ver treino"} <ArrowRight className="w-4 h-4" /></Link>
                 {runPending && today.session && <AdaptSessionControl day={today.session} />}
               </div>
             )}
@@ -295,13 +234,13 @@ export function HomeContent({
                 {status.done.map((d, i) => (
                   <p key={`${d.label}-${i}`} className="flex items-center gap-2 text-sm text-surface-200">
                     <SportGlyph sport={d.sport} className="w-3.5 h-3.5 text-brand-400" />
-                    <span>{d.label}</span>
-                    <span className="text-surface-500">· {d.km != null ? `${num(d.km)} km · ` : ""}{formatMinutes(d.minutes)}{d.kcal ? ` · ${d.kcal} kcal` : ""}{d.planned ? "" : " · fora do plano"}</span>
+                    <span>{d.recordName || d.label}</span>
+                    <span className="text-surface-500">· {d.km != null ? `${num(d.km)} km · ` : ""}{formatMinutes(d.minutes)}{d.kcal ? ` · ${d.kcal} kcal` : ""}{d.planned ? "" : status.sessions.some(s => s.unresolved && s.sport === d.sport) ? " · vínculo a confirmar" : " · fora do plano"}</span>
                   </p>
                 ))}
-                {doneRun?.id && (
-                  <Link href={`/runs/${doneRun.id}`} className="inline-flex items-center gap-1 min-h-[44px] text-sm text-brand-400">
-                    Ver corrida e feedback <ArrowRight className="w-3.5 h-3.5" />
+                {today.state !== "planned" && doneActivity?.id && (
+                  <Link href={doneActivity.kind === "run" ? `/runs/${doneActivity.id}` : `/activities/${doneActivity.id}`} className="btn-primary mt-2 w-full">
+                    Ver atividade <ArrowRight className="w-4 h-4" />
                   </Link>
                 )}
               </div>
@@ -321,7 +260,7 @@ export function HomeContent({
               </Link>
             )}
           </div>
-        </Card>
+        </div>
       </Section>
 
       {/*
@@ -377,100 +316,60 @@ export function HomeContent({
         </Section>
       )}
 
-      {/*
-        ── 3. Minha semana — every sport, done and not done, numbers big ──
+      {overtrained ? (
+        <Section title="Merece atenção">
+          <OvertrainingAlert assessment={overtraining!} />
+        </Section>
+      ) : attention && (
+        <Section title="Merece atenção">
+          <Link href={attention.href} className="flex items-center justify-between gap-3 rounded-2xl border border-surface-700 px-4 py-3 min-h-[56px] hover:border-surface-600">
+            <span className="text-sm text-surface-200">{attention.text}</span>
+            <span className="shrink-0 inline-flex items-center gap-1 text-sm text-brand-400">{attention.action} <ArrowRight className="w-4 h-4" /></span>
+          </Link>
+        </Section>
+      )}
 
-        Escondida enquanto não há nenhuma corrida nem atividade. Um anel de
-        zeros e "0 km esta semana" não é informação: é a tela ocupada avisando
-        que você ainda não fez nada. Quem acabou de entrar tem uma coisa para
-        fazer, e ela está no card de configuração (Sérgio, 01/10).
-      */}
-      {!isNewUser && (
       <Section
-        title="Minha semana"
-        action={<Link href="/runs" className="text-xs text-surface-500 hover:text-surface-300">Histórico</Link>}
+        title="Movimento na semana"
+        action={<Link href="/runs" className="inline-flex min-h-[44px] items-center gap-1 text-sm font-medium text-brand-400">Histórico <ArrowRight className="h-4 w-4" /></Link>}
       >
         <Card>
-          <div className="space-y-5">
-            {/*
-             * Um número, no meio (Sérgio, 20/09).
-             *
-             * Havia três formas de dizer a mesma semana aqui: o anel de
-             * sessões, os dias treinados e uma frase que repetia os dois. Três
-             * números lado a lado não são três informações — são um leitor
-             * decidindo em qual acreditar. Ficou o anel; o tempo vira legenda,
-             * porque é a única coisa que ele não diz.
-             */}
-            <div className="flex flex-col items-center gap-2 py-1">
-              <Ring
-                ratio={week.plannedSessions > 0 ? week.sessions / week.plannedSessions : week.sessions > 0 ? 1 : 0}
-                size={132}
-                thickness={12}
-                tone="brand"
-                label="sessões"
-              >
-                <span className="text-3xl font-black tabular-nums">{week.sessions}<span className="text-surface-500 text-lg font-bold">/{week.plannedSessions || week.sessions}</span></span>
-              </Ring>
-              {week.minutes > 0 && (
-                <p className="text-xs text-surface-500">{formatMinutes(week.minutes)} em atividade</p>
-              )}
+          <div className="space-y-4">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-2xl font-semibold tracking-tight tabular-nums text-surface-100">{week.sessions} {week.sessions === 1 ? "atividade" : "atividades"}</p>
+                <p className="text-sm text-surface-400">{week.minutes > 0 ? formatMinutes(week.minutes) + " em movimento" : "Seus registros aparecem aqui."}</p>
+              </div>
+              <Link href="/coach" className="btn-ghost shrink-0 !px-2 text-brand-400">Ver plano</Link>
             </div>
 
-            {/* The week, day by day: done, planned, and planned but not done. */}
-            <div>
-              <div className="grid grid-cols-7 gap-1" role="tablist" aria-label="Dias da semana">
-                {week.days.map((d, i) => (
-                  <button
-                    key={d.date}
-                    type="button"
-                    role="tab"
-                    aria-selected={i === selected}
+            <div className="grid grid-cols-7 gap-1" role="group" aria-label="Movimento por dia">
+              {week.days.map((d, i) => {
+                const minutes = d.done.reduce((sum, item) => sum + item.minutes, 0);
+                return (
+                  <button key={d.date} type="button" aria-pressed={i === selected}
+                    aria-label={`${d.short}, ${d.done.length} ${d.done.length === 1 ? "atividade registrada" : "atividades registradas"}`}
                     onClick={() => setSelected(i)}
-                    className={`min-h-[76px] rounded-xl flex flex-col items-center justify-start gap-1 pt-1.5 pb-1 transition-colors ${
-                      i === selected ? "bg-surface-700/70" : "hover:bg-surface-700/40"
-                    }`}
-                  >
-                    <span className={`text-[10px] uppercase ${d.isToday ? "text-brand-400 font-bold" : "text-surface-500"}`}>{d.short}</span>
-                    <span className="flex flex-col items-center gap-1"><DayMarks day={d} /></span>
+                    className={`flex min-w-0 min-h-[84px] flex-col items-center justify-end gap-2 rounded-xl px-1 py-2 transition-colors ${i === selected ? "bg-brand-500/10 text-brand-400" : "text-surface-500 hover:bg-surface-700/40"}`}>
+                    <span className="flex h-11 w-4 max-w-full items-end overflow-hidden rounded-full bg-surface-700/70" aria-hidden>
+                      {d.done.length > 0 && <span className="limiar-movement-fill w-full rounded-full" style={{ height: `${Math.max(10, minutes / maxDayMinutes * 100)}%` }} />}
+                    </span>
+                    <span className="text-[10px] font-bold">{d.short}</span>
                   </button>
-                ))}
-              </div>
-              <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-2 text-[10px] text-surface-500">
-                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-brand-500/40" /> feito</span>
-                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full border border-surface-500" /> previsto</span>
-                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full border border-dashed border-amber-500/70" /> não feito</span>
-              </div>
+                );
+              })}
             </div>
 
-            {/* The selected day, right below — no second list to scroll to. */}
-            <div className="rounded-xl bg-surface-800/50 px-3 py-2 space-y-1.5 min-h-[44px]">
-              {day.done.length === 0 && day.upcoming.length === 0 && day.missed.length === 0 && (
-                <p className="text-xs text-surface-500">{day.isFuture ? "Nada previsto." : "Nenhuma atividade registrada."}</p>
-              )}
-              {day.done.map((x, k) => (
-                <p key={`dd${k}`} className="flex items-center gap-2 text-sm text-surface-200">
-                  <SportGlyph sport={x.sport} className="w-3.5 h-3.5 text-brand-400" />
-                  <span>{x.label}</span>
-                  <span className="text-surface-500">· {x.km != null ? `${num(x.km)} km · ` : ""}{formatMinutes(x.minutes)}{x.planned ? "" : " · fora do plano"}</span>
-                  {x.kind === "run" && x.id && <Link href={`/runs/${x.id}`} className="ml-auto text-xs text-brand-400">ver</Link>}
-                </p>
-              ))}
-              {day.missed.map((x, k) => (
-                <p key={`mm${k}`} className="flex items-center gap-2 text-sm text-surface-400">
-                  <SportGlyph sport={x.sport} className="w-3.5 h-3.5 text-amber-400/80" />
-                  <span>{x.label}{x.detail ? ` · ${x.detail}` : ""}</span>
-                  <span className="text-[11px] text-amber-400/80">não feito</span>
-                </p>
-              ))}
-              {day.upcoming.map((x, k) => (
-                <p key={`uu${k}`} className="flex items-center gap-2 text-sm text-surface-500">
-                  <SportGlyph sport={x.sport} className="w-3.5 h-3.5" />
-                  <span>{x.label}{x.detail ? ` · ${x.detail}` : ""}</span>
-                  <span className="text-[11px]">previsto</span>
-                </p>
+            <div className="space-y-1 rounded-xl bg-surface-900/45 px-3 py-2" aria-live="polite">
+              {day.done.length === 0 && <p className="text-sm text-surface-500">Nenhuma atividade registrada neste dia.</p>}
+              {day.done.map((x, i) => (
+                <div key={x.id ?? i} className="flex items-center gap-2 min-h-[44px] text-sm text-surface-200">
+                  <SportGlyph sport={x.sport} className="w-4 h-4 shrink-0 text-brand-400" />
+                  <span className="min-w-0 flex-1">{x.label}<span className="block text-xs text-surface-500">{x.km != null ? `${num(x.km)} km · ` : ""}{formatMinutes(x.minutes)}</span></span>
+                  {x.id && <Link aria-label={`Ver ${x.label}`} href={x.kind === "run" ? `/runs/${x.id}` : `/activities/${x.id}`} className="inline-flex min-w-[44px] min-h-[44px] items-center justify-center text-brand-400"><ArrowRight className="w-4 h-4" /></Link>}
+                </div>
               ))}
             </div>
-
             {/* Every sport, big; calories beside them. */}
             <div className="grid grid-cols-3 gap-2">
               {tiles.map(t => (
@@ -510,11 +409,18 @@ export function HomeContent({
           </div>
         </Card>
       </Section>
-      )}
+
+      <NotificationNudge />
+      {!needsOnboarding && <SetupChecklist name={userName} username={username} />}
 
       {/* O histórico — números da vida toda, recordes, conquistas — só existe
           depois de existir histórico. */}
-      {!isNewUser && history}
+      {!isNewUser && history && (
+        <details className="card px-4">
+          <summary className="flex min-h-[48px] cursor-pointer items-center text-sm font-medium text-surface-200">Seu progresso e recordes</summary>
+          <div className="pb-4">{history}</div>
+        </details>
+      )}
 
       {lastSyncAt && (
         <p className="text-center text-[11px] text-surface-600">

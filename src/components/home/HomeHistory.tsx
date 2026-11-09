@@ -25,12 +25,13 @@ import type { TestStatus } from "@/lib/test-status";
 import type { Goal, PerformanceTest, Run } from "@/types";
 
 export function HomeHistory({
-  runs, goals, latestTest, testStatus, activities,
+  runs, goals, latestTest, testStatus, activities, runsEnabled = true,
 }: {
   runs: Run[];
   goals: Goal[];
   latestTest: PerformanceTest | null;
   testStatus: TestStatus;
+  runsEnabled?: boolean;
   activities: Array<{ date: string; sport_type: string; duration_seconds: number | null; avg_hr: number | null }>;
 }) {
   const recentFirst = useMemo(() => [...runs].sort((a, b) => b.date.localeCompare(a.date)), [runs]);
@@ -60,7 +61,7 @@ export function HomeHistory({
   return (
     <div className="space-y-5 border-t border-surface-800 pt-6">
       {/* O teste é o que calibra todo o resto; por isso abre este bloco. */}
-      <TestCountdown status={testStatus} />
+      {runsEnabled && <TestCountdown status={testStatus} />}
 
       {runs.length > 0 && (
         <>

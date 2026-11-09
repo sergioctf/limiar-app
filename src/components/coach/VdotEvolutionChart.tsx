@@ -76,8 +76,8 @@ export function VdotEvolutionChart({ tests }: Props) {
         <AreaChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
           <defs>
             <linearGradient id="vdotGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%"  stopColor="#f97316" stopOpacity={0.25} />
-              <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+              <stop offset="5%"  stopColor="#8b5cf6" stopOpacity={0.25} />
+              <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(71,85,105,0.3)" vertical={false} />
@@ -95,10 +95,10 @@ export function VdotEvolutionChart({ tests }: Props) {
           <Tooltip content={<CustomTooltip />} />
           <Area
             type="monotone" dataKey="vdotDisplay" name="vdot"
-            stroke="#f97316" strokeWidth={2.5}
+            stroke="#8b5cf6" strokeWidth={2.5}
             fill="url(#vdotGrad)"
-            dot={{ r: 4, fill: "#f97316", strokeWidth: 0 }}
-            activeDot={{ r: 5, fill: "#fb923c" }}
+            dot={{ r: 4, fill: "#8b5cf6", strokeWidth: 0 }}
+            activeDot={{ r: 5, fill: "#b18aff" }}
           />
         </AreaChart>
       </ResponsiveContainer>

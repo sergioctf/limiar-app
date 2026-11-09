@@ -18,7 +18,9 @@
  * relida depois.
  */
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Sparkles, Trash2 } from "lucide-react";
+import { ArrowRight, ArrowUp, Sparkles, Trash2 } from "lucide-react";
+import { LimiOrb, type OrbState } from "@/components/brand/LimiOrb";
+import { VoiceInput } from "@/components/ai/VoiceInput";
 import { answerSuggestion, longDate, type AthleteBrief, type Suggestion } from "@/lib/ai-brief";
 
 export interface AiMessage {
@@ -44,10 +46,24 @@ export function AiContent({
   const [question, setQuestion] = useState("");
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [voiceState, setVoiceState] = useState<OrbState>("idle");
+  const [received, setReceived] = useState(false);
+  const composer = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   // Uma conversa rola para a última coisa dita, não para o começo do histórico.
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages, thinking]);
+  useEffect(() => {
+    if (!messages.length) return;
+    endRef.current?.scrollIntoView({
+      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      block: "end",
+    });
+  }, [messages, thinking]);
+  useEffect(() => {
+    if (!received) return;
+    const timer = setTimeout(() => setReceived(false), 720);
+    return () => clearTimeout(timer);
+  }, [received]);
 
   /*
    * Chegou por um aviso ("Como foi a semana passada…"): a resposta já aparece,
@@ -88,6 +104,7 @@ export function AiContent({
     setError(null);
     setQuestion("");
     add({ role: "user", content: q, date: brief.date });
+    setReceived(false);
     setThinking(true);
     try {
       const res = await fetch("/api/ia/perguntar", {
@@ -98,11 +115,14 @@ export function AiContent({
       const data = await res.json();
       if (!res.ok || !data.answer) {
         setError(data.error ?? "Não consegui responder agora.");
+        setQuestion(current => current || q);
       } else {
         add({ role: "assistant", content: data.answer, date: brief.date });
+        setReceived(true);
       }
     } catch {
-      setError("Sem conexão com o treinador agora.");
+      setError("Sem conexão com a Limi IA agora.");
+      setQuestion(current => current || q);
     } finally {
       setThinking(false);
     }
@@ -114,16 +134,20 @@ export function AiContent({
     if (res.ok) setMessages([]);
   }
 
+  const quickRead = (s: Suggestion) => (
+    <button key={s.id} type="button" onClick={() => askSuggestion(s)}
+      className="limiar-feature flex min-h-[60px] items-center justify-between gap-2 px-3 py-2 text-left text-sm font-medium
+                 text-surface-200 transition-colors hover:border-brand-500/50 hover:text-surface-100 active:scale-[0.98]">
+      {s.label}<ArrowRight className="h-4 w-4 shrink-0 text-brand-400" aria-hidden />
+    </button>
+  );
+
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4 pb-4">
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="flex items-center gap-2 text-xl font-bold text-surface-100">
-            <Sparkles className="h-5 w-5 text-brand-400" /> Seu treinador
-          </h1>
-          <p className="mt-0.5 text-xs text-surface-500">
-            Ele enxerga seus treinos, sua recuperação, sua carga e suas provas — e responde só com o que tem.
-          </p>
+          <h1 className="text-3xl font-semibold tracking-tight text-surface-100">Limi <span className="text-brand-400">IA</span></h1>
+          <p className="mt-1 text-sm text-surface-500">Seus treinos, seu plano e sua recuperação em uma conversa.</p>
         </div>
         {messages.length > 0 && (
           <button
@@ -138,13 +162,12 @@ export function AiContent({
       </header>
 
       {messages.length === 0 ? (
-        <div className="rounded-2xl border border-surface-700 bg-surface-800 p-5">
-          <p className="text-lg font-semibold text-surface-100">
-            {firstName ? `${firstName}, o que você quer saber?` : "O que você quer saber?"}
+        <div className="limiar-ai-stage flex flex-col items-center px-4 pb-4 text-center">
+          <LimiOrb className="h-40 w-40 sm:h-48 sm:w-48" state={voiceState} />
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-surface-100">
+            {firstName ? `Olá, ${firstName}.` : "Olá, atleta."}
           </p>
-          <p className="mt-1 text-sm text-surface-400">
-            Pergunte do seu jeito, ou toque em uma das leituras abaixo.
-          </p>
+          <p className="mt-1 max-w-sm text-sm text-surface-400">O que você quer entender sobre seu treino?</p>
         </div>
       ) : (
         <Thread messages={messages} thinking={thinking} />
@@ -153,42 +176,47 @@ export function AiContent({
       <div ref={endRef} />
 
       {error && (
-        <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200/90">{error}</p>
+        <p role="alert" className="rounded-xl border border-surface-600 bg-surface-800 px-3 py-2 text-sm text-surface-200">{error}</p>
       )}
 
       {/* As leituras prontas. Respondem sem custo e sem espera. */}
       {suggestions.length > 0 && (
         <div>
           <p className="mb-2 text-[11px] uppercase tracking-wider text-surface-500">Leituras rápidas</p>
-          <div className="flex flex-wrap gap-2">
-            {suggestions.map(s => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => askSuggestion(s)}
-                className="min-h-[40px] rounded-full border border-surface-700 bg-surface-800 px-3.5 text-sm
-                           text-surface-200 transition-colors hover:border-brand-500/50 hover:text-surface-100 active:scale-95"
-              >
-                {s.label}
-              </button>
-            ))}
+          <div className="grid grid-cols-2 gap-2">
+            {suggestions.slice(0, 4).map(quickRead)}
           </div>
+          {suggestions.length > 4 && (
+            <details className="mt-1">
+              <summary className="flex min-h-[44px] cursor-pointer items-center text-sm text-brand-400">Mais leituras</summary>
+              <div className="grid grid-cols-2 gap-2">{suggestions.slice(4).map(quickRead)}</div>
+            </details>
+          )}
         </div>
       )}
 
       {/* O campo aberto. */}
       <form
         onSubmit={e => { e.preventDefault(); ask(question); }}
-        className="sticky bottom-0 flex items-end gap-2 bg-surface-900/80 pt-2 backdrop-blur"
+        className="limiar-feature space-y-2 p-2"
       >
+        {messages.length > 0 && (thinking || received || voiceState !== "idle") && (
+          <div className="flex items-center gap-2 px-2 text-xs text-surface-400" role="status">
+            <LimiOrb className="h-9 w-9" state={thinking ? "thinking" : received ? "success" : voiceState} />
+            {thinking ? "Analisando seu treino…" : received ? "Resposta pronta" : voiceState === "listening" ? "Ouvindo…" : "Transcrevendo…"}
+          </div>
+        )}
+        <div className="flex items-end gap-2">
         <textarea
+          ref={composer}
           value={question}
+          aria-label="Pergunte à Limi IA"
           onChange={e => setQuestion(e.target.value)}
           onKeyDown={e => {
-            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(question); }
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); ask(question); }
           }}
           rows={1}
-          placeholder="Pergunte qualquer coisa sobre seu treino"
+          placeholder="Pergunte à Limi IA…"
           className="min-h-[48px] max-h-40 flex-1 resize-none rounded-2xl border border-surface-700 bg-surface-800
                      px-4 py-3 text-sm text-surface-100 placeholder:text-surface-500
                      focus:border-brand-500/60 focus:outline-none"
@@ -197,11 +225,20 @@ export function AiContent({
           type="submit"
           disabled={!question.trim() || thinking}
           aria-label="Perguntar"
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-500 text-white
-                     transition-transform hover:bg-brand-400 active:scale-95 disabled:opacity-40 disabled:active:scale-100"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white
+                     transition-transform hover:bg-brand-700 active:scale-95 disabled:opacity-40 disabled:active:scale-100"
         >
           <ArrowUp className="h-5 w-5" />
         </button>
+        </div>
+        <VoiceInput
+          disabled={thinking}
+          onState={state => setVoiceState(state === "listening" || state === "thinking" ? state : "idle")}
+          onText={text => {
+            setQuestion(current => [current.trim(), text].filter(Boolean).join(" "));
+            composer.current?.focus();
+          }}
+        />
       </form>
     </div>
   );

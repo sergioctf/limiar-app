@@ -49,9 +49,9 @@ export function RunFeedbackCard({ runId }: { runId: string }) {
   if (!item) return null;
 
   return (
-    <section className="card p-4 sm:p-5" aria-label="Check-in pós-treino">
+    <section className="card p-4 sm:p-5" aria-label="Seu feedback do treino">
       <RunFeedbackForm
-        key={`${item.run.id}:${item.feedback?.status ?? "new"}:${item.feedback?.context ?? ""}`}
+        key={item.run.id}
         item={item}
         lightened={lightened}
         onSaved={({ feedback, lightened: changed }) => {

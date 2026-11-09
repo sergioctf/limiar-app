@@ -93,10 +93,11 @@ async function handler(request: NextRequest) {
   }
 
   // ── 2. The catch-up ───────────────────────────────────────────────────────
-  const { data: connections } = await admin
+  const { data: connections, error: connectionsError } = await admin
     .from("strava_connections")
     .select("user_id, athlete_id, access_token, refresh_token, expires_at")
     .limit(500);
+  if (connectionsError) return NextResponse.json({ error: "Falha ao consultar conexões." }, { status: 503 });
 
   const since = Math.floor(Date.now() / 1000) - LOOKBACK_DAYS * 86400;
   const imported: Record<string, number> = {};
@@ -111,7 +112,7 @@ async function handler(request: NextRequest) {
       // Expiry is checked with a minute of slack: a token that dies mid-request
       // fails the whole athlete's catch-up for an hour.
       if (!token || (conn.expires_at ?? 0) <= Math.floor(Date.now() / 1000) + 60) {
-        if (!conn.refresh_token) continue;
+        if (!conn.refresh_token) throw new Error("Conexão sem token de renovação.");
         const fresh = await refreshStravaToken(conn.refresh_token);
         token = fresh.access_token;
         await admin.from("strava_connections").update({
@@ -190,7 +191,8 @@ async function handler(request: NextRequest) {
             };
           });
           const { error } = await admin.from("activities").insert(rows);
-          if (!error) {
+          if (error) throw error;
+          {
             importedActivities[conn.user_id] = rows.length;
             // The safety net catches up on three days at once; only what
             // happened today is worth a friend's attention, and that filter
@@ -225,7 +227,8 @@ async function handler(request: NextRequest) {
       const withCalories = await enrichActivitiesWithCalories(token, missing);
       const rows = withCalories.map(a => stravaActivityToRun(a, conn.user_id));
       const { error } = await admin.from("runs").insert(rows);
-      if (!error) {
+      if (error) throw error;
+      {
         imported[conn.user_id] = rows.length;
         for (const r of rows) {
           await notifyFriendsOfWorkout(admin, conn.user_id, workoutOf("Run", {
@@ -247,6 +250,7 @@ async function handler(request: NextRequest) {
     ok: true,
     ...results,
     athletes: (connections ?? []).length,
+    failures: Object.values(imported).filter(count => count < 0).length,
     imported,
     importedActivities,
     backfilled,

@@ -59,7 +59,12 @@ export async function PUT(request: NextRequest) {
     }
   } catch { /* column may not exist yet */ }
 
-  const merged = { ...stored, ...(body ?? {}) };
+  const { onboardingSports, onboardingEquipment, ...fields } = body ?? {};
+  if (onboardingSports !== undefined && (!Array.isArray(onboardingSports)
+    || !onboardingSports.length || onboardingSports.some(s => s !== "corrida" && s !== "musculacao"))) {
+    return NextResponse.json({ error: "Escolha corrida, musculação ou as duas." }, { status: 400 });
+  }
+  const merged = { ...stored, ...fields };
 
   /*
     Recusar semana sem dia de corrida — mas só para quem está mexendo neles.
@@ -87,10 +92,18 @@ export async function PUT(request: NextRequest) {
   // The day chips and the detailed muscle config must describe the same week.
   // Ticking a day here creates a real strength day; unticking removes it.
   const update: Record<string, unknown> = { training_prefs: prefs };
+  if (onboardingSports) update.sports = Array.from(new Set(onboardingSports));
   try {
-    const { data } = await supabase
+    const { data, error: strengthError } = await supabase
       .from("profiles").select("strength_prefs").eq("id", user.id).single();
-    if (data?.strength_prefs) {
+    if (onboardingSports?.includes("musculacao")) {
+      if (strengthError) return NextResponse.json({ error: "Não foi possível consultar sua rotina de força." }, { status: 503 });
+      const current = normalizeStrengthPrefs(data?.strength_prefs ?? {
+        goal: "saude", experience: "iniciante", sessionMinutes: 35,
+      });
+      const equipment = onboardingEquipment === "casa" ? "peso_corporal" : "academia";
+      update.strength_prefs = syncStrengthDays({ ...current, equipment: [equipment] }, prefs.strengthDays);
+    } else if (data?.strength_prefs) {
       const current = normalizeStrengthPrefs(data.strength_prefs);
       const synced = syncStrengthDays(current, prefs.strengthDays);
       if (synced !== current) update.strength_prefs = synced;

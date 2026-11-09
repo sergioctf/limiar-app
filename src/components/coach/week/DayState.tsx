@@ -12,6 +12,7 @@ import type { DayProgress } from "@/lib/day-progress";
 
 const ICONS = {
   done:    <Check className="h-3 w-3" />,
+  unresolved: <CircleDashed className="h-3 w-3" />,
   partial: <CircleDashed className="h-3 w-3" />,
   missed:  <MinusCircle className="h-3 w-3" />,
   extra:   <Plus className="h-3 w-3" />,
@@ -20,6 +21,7 @@ const ICONS = {
 const TONES: Record<string, string> = {
   done:    "text-green-400",
   partial: "text-yellow-400",
+  unresolved: "text-brand-400",
   missed:  "text-surface-500",
   extra:   "text-cyan-400",
 };

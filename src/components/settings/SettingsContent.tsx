@@ -11,6 +11,7 @@ import {
   User, LogOut, Clock, Check, AlertCircle, Loader2, Bell, Smartphone, Edit2,
   Dumbbell, Footprints
 } from "lucide-react";
+import { clearPrivateDeviceData } from "@/lib/device-data";
 import { createClient } from "@/lib/supabase/client";
 import { PushNotificationButton } from "@/components/PushNotificationButton";
 import { NotificationPrefsCard } from "@/components/settings/NotificationPrefsCard";
@@ -27,8 +28,6 @@ import type { SyncLog } from "@/types";
 
 interface StravaConn {
   athlete_id: number;
-  scope: string;
-  updated_at: string;
 }
 
 interface Props {
@@ -36,6 +35,7 @@ interface Props {
   userName: string;
   userUsername?: string | null;
   stravaConnection: StravaConn | null;
+  stravaConnectionError?: boolean;
   syncLogs: SyncLog[];
   stravaRunsCount: number;
   /** Unlocks the invite manager — checked server-side. */
@@ -44,16 +44,17 @@ interface Props {
 
 export function SettingsContent({
   userEmail, userName, userUsername, stravaConnection, syncLogs, stravaRunsCount,
-  isAdmin = false,
+  isAdmin = false, stravaConnectionError = false,
 }: Props) {
   const [syncing, setSyncing]     = useState(false);
-  const [syncResult, setSyncResult] = useState<{ imported: number; updated: number; ignored: number } | null>(null);
+  const [syncResult, setSyncResult] = useState<{ imported: number; updated: number; ignored: number; activitiesImported: number } | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [displayName, setDisplayName] = useState(userName);
 
   const supabase = createClient();
+  const lastImport = syncLogs.find(log => log.source === "strava" && log.status === "success");
 
   async function handleSync() {
     setSyncing(true);
@@ -79,7 +80,8 @@ export function SettingsContent({
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut();
+    await clearPrivateDeviceData();
+    await supabase.auth.signOut({ scope: "local" });
     window.location.href = "/auth";
   }
 
@@ -146,15 +148,20 @@ export function SettingsContent({
       {/* Strava integration */}
       <div className="card p-5">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-9 h-9 rounded-xl bg-orange-500/20 flex items-center justify-center">
-            <Activity className="w-4.5 h-4.5 text-orange-400" />
+          <div className="w-9 h-9 rounded-xl bg-brand-500/20 flex items-center justify-center">
+            <Activity className="w-4.5 h-4.5 text-brand-400" />
           </div>
           <div>
             <h2 className="section-title">Integração Strava</h2>
-            <p className="text-xs text-surface-500">Importação automática de corridas</p>
+            <p className="text-xs text-surface-500">Importação automática de atividades</p>
           </div>
         </div>
 
+        {stravaConnectionError && (
+          <p role="alert" className="mb-3 text-sm text-red-400">
+            A conexão com o Strava não foi concluída. Tente novamente.
+          </p>
+        )}
         {stravaConnection ? (
           <div className="space-y-4">
             {/* Status */}
@@ -169,9 +176,11 @@ export function SettingsContent({
                   <span className="text-surface-300 font-mono">{stravaConnection.athlete_id}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-surface-500">Último sync</span>
+                  <span className="text-surface-500">Última importação manual</span>
                   <span className="text-surface-300">
-                    {new Date(stravaConnection.updated_at).toLocaleDateString("pt-BR")}
+                    {syncResult ? "Agora" : lastImport
+                      ? new Date(lastImport.created_at).toLocaleDateString("pt-BR")
+                      : "Sem registro recente"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -189,7 +198,7 @@ export function SettingsContent({
                   <span className="text-sm font-semibold text-brand-400">Sync concluído</span>
                 </div>
                 <div className="flex gap-4 text-xs text-surface-400">
-                  <span>+{syncResult.imported} novas</span>
+                  <span>+{syncResult.imported + syncResult.activitiesImported} novas</span>
                   <span>{syncResult.updated} atualizadas</span>
                   <span>{syncResult.ignored} ignoradas</span>
                 </div>
