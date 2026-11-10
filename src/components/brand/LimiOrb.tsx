@@ -1,4 +1,7 @@
-import { useId } from "react";
+"use client";
+
+import { useCallback, useId, useState } from "react";
+import { OrbCanvas } from "./OrbCanvas";
 
 export type OrbState = "idle" | "listening" | "thinking" | "speaking" | "success";
 
@@ -42,7 +45,48 @@ const PLATES = [
     shift: "-14px, 4px",  axis: [24, 66, 82, 146], lit: .6 },
 ];
 
-export function LimiOrb({ state = "idle", className = "", still = false }: {
+/**
+ * A esfera da Limi IA.
+ *
+ * Por padrão ela é **metal líquido de verdade**: um campo de distância
+ * raymarchado num shader, onde as pétalas se afastam e a superfície estica
+ * entre elas em vez de partir. O porquê e o como estão em `orb-shader.ts`.
+ *
+ * O desenho em SVG continua aqui como rede de segurança, para aparelho sem
+ * WebGL. Ele não é bonito como o shader — é honesto: ninguém fica sem esfera.
+ */
+/**
+ * O metal líquido ainda não está pronto para o atleta ver.
+ *
+ * O shader funciona — pétalas de verdade, que se afastam e esticam, em 3D, a
+ * 60 fps e sem dependência nenhuma. Mas o **material** ainda não é cromo: sai
+ * um lavanda pálido, porque o ambiente que ele reflete é procedural e simples
+ * demais. Cromo convincente reflete um estúdio real, com faixas de luz duras
+ * e um horizonte preto.
+ *
+ * Enquanto esse ambiente não existir, o desenho em SVG é mais bonito — e o
+ * app não deve piorar por causa de uma obra em andamento. Virar esta chave é
+ * a última linha a mudar quando o material ficar pronto.
+ */
+const METAL_LIQUIDO = false;
+
+export function LimiOrb(props: { state?: OrbState; className?: string; still?: boolean }) {
+  const [semWebGL, setSemWebGL] = useState(false);
+  const falhou = useCallback(() => setSemWebGL(true), []);
+
+  if (!METAL_LIQUIDO || semWebGL) return <OrbFallback {...props} />;
+  return (
+    <OrbCanvas
+      state={props.state}
+      still={props.still}
+      className={props.className}
+      onFail={falhou}
+    />
+  );
+}
+
+/** O desenho antigo, para quem não tem WebGL. */
+function OrbFallback({ state = "idle", className = "", still = false }: {
   state?: OrbState;
   className?: string;
   still?: boolean;
