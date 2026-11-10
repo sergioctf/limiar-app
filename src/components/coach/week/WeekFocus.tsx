@@ -19,7 +19,13 @@ export function WeekFocus({ plan }: { plan: WeeklyPlanData }) {
   return (
     <details className="limiar-feature group">
       <summary className="relative flex min-h-[108px] cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 sm:px-5">
-        <ChromeRibbon className="pointer-events-none absolute -right-16 top-0 -z-10 h-full w-64 opacity-45" />
+        {/*
+          A fita estava a 45% de opacidade, e metal a 45% não é metal: é véu.
+          O próprio gradiente já termina em quase-preto nas duas pontas, então
+          ele se funde ao card sozinho — a opacidade só roubava o estouro
+          especular, que é justamente o que faz a superfície parecer polida.
+        */}
+        <ChromeRibbon className="pointer-events-none absolute -right-10 top-0 -z-10 h-full w-72 opacity-90" />
         <span className="min-w-0">
           <span className="limiar-kicker block">Foco da semana</span>
           <span className="mt-1 block text-2xl font-semibold tracking-tight text-surface-100">{title}</span>
